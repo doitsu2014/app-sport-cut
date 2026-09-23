@@ -1,5 +1,6 @@
 import '../../../bridge/sportcut_engine.dart';
 import '../data/video_file_picker.dart';
+import 'import_cancel_token.dart';
 import 'match_record.dart';
 
 /// The library operations the presentation layer needs.
@@ -11,8 +12,18 @@ abstract interface class MatchLibrary {
   /// Every stored match, newest first.
   Future<List<MatchRecord>> listMatches();
 
-  /// Create a match from a chosen recording, referencing it in place.
-  Future<MatchRecord> importVideo(PickedVideo video, {String? title});
+  /// Create a match from a chosen recording, taking custody of it.
+  ///
+  /// The picked file is copied into app-owned storage and it is that copy the
+  /// match records; the file the user selected is never modified.
+  Future<MatchRecord> importVideo(
+    PickedVideo video, {
+    String? title,
+    ImportCancelToken? cancelToken,
+  });
+
+  /// Whether this match's stored recording can still be read.
+  bool isRecordingAvailable(MatchRecord match);
 
   /// Produce this match's derived artifacts.
   Future<MediaImportResultDto> generateArtifacts(
@@ -20,9 +31,12 @@ abstract interface class MatchLibrary {
     double samplingRate,
   });
 
-  /// Delete a match, optionally removing its derived artifacts.
+  /// Delete a match, optionally removing its derived artifacts and the
+  /// app-owned copy of its recording. The file the user selected is never
+  /// deleted.
   Future<void> deleteMatch(
     MatchRecord match, {
     bool deleteArtifacts,
+    bool deleteRecording,
   });
 }

@@ -1,16 +1,18 @@
 import 'dart:io';
 
 import '../../../bridge/sportcut_engine.dart';
+import '../domain/import_cancel_token.dart';
 import '../domain/match_import_exception.dart';
 import '../domain/match_library.dart';
 import '../domain/match_record.dart';
 import 'match_catalog.dart';
 import 'match_paths.dart';
 import 'media_engine.dart';
+import 'recording_store.dart';
 import 'video_file_picker.dart';
 
-/// Reads and writes matches: the catalog, the original recording reference, and
-/// the engine artifacts that belong to a match.
+/// Reads and writes matches: the catalog, the app-owned recording, and the
+/// engine artifacts that belong to a match.
 class MatchRepository implements MatchLibrary {
   /// Build a repository.
   MatchRepository({
@@ -22,12 +24,14 @@ class MatchRepository implements MatchLibrary {
   })  : _catalog = catalog,
         _engine = engine,
         _paths = paths,
+        _recordings = RecordingStore(paths),
         _clock = clock ?? DateTime.now,
         _idGenerator = idGenerator ?? _defaultIdGenerator;
 
   final MatchCatalog _catalog;
   final MediaEngine _engine;
   final MatchPaths _paths;
+  final RecordingStore _recordings;
   final DateTime Function() _clock;
   final String Function() _idGenerator;
 
@@ -47,32 +51,35 @@ class MatchRepository implements MatchLibrary {
 
   /// Create a match from a chosen recording.
   ///
-  /// The original file is referenced in place: nothing is copied. Metadata is
-  /// read through the engine, and the catalog record is written only after that
-  /// succeeds, so a denied permission, a missing file, or an unsupported codec
-  /// leaves no partial record behind.
+  /// The order is deliberate: the picked file is checked, probed, and only then
+  /// copied, so an unreadable file or an unsupported codec is rejected before
+  /// gigabytes are duplicated. The match then records the app-owned copy — the
+  /// picked path belongs to a directory the platform may purge — and the file
+  /// the user selected is left exactly where it was.
+  ///
+  /// If the catalog write fails the copy is removed, so nothing partial is left
+  /// behind: no record without a recording, and no recording without a record.
   @override
   Future<MatchRecord> importVideo(
     PickedVideo video, {
     String? title,
+    ImportCancelToken? cancelToken,
   }) async {
     await _ensureReadable(video.path);
-
-    final MediaMetadataDto metadata;
-    try {
-      metadata = await _engine.probe(video.path);
-    } on Exception catch (error) {
-      throw MatchImportException(
-        'This recording could not be read: $error',
-        cause: error,
-      );
-    }
+    final metadata = await _probe(video.path);
 
     final id = _idGenerator();
+    _throwIfCancelled(cancelToken);
+    final stored = await _recordings.takeCustody(
+      matchId: id,
+      video: video,
+      cancelToken: cancelToken,
+    );
+
     final match = MatchRecord(
       id: id,
       title: _titleFor(title, video),
-      videoPath: video.path,
+      videoPath: stored.path,
       durationSeconds: metadata.durationSeconds,
       createdAt: _clock(),
       matchDir: _paths.matchDir(id),
@@ -80,18 +87,27 @@ class MatchRepository implements MatchLibrary {
       videoHeight: metadata.height,
       frameRate: metadata.frameRate,
       hasAudio: metadata.hasAudio,
+      originalPath: video.path,
+      sourceBytes: stored.bytes,
     );
 
     try {
       await _catalog.insertMatch(match);
     } on Exception catch (error) {
+      await _recordings.remove(id);
       throw MatchImportException(
         'The match could not be saved to the library: $error',
+        kind: MatchImportKind.catalog,
         cause: error,
       );
     }
     return match;
   }
+
+  /// Whether this match's stored recording can still be read.
+  @override
+  bool isRecordingAvailable(MatchRecord match) =>
+      RecordingStore.isAvailable(match.videoPath);
 
   /// Produce this match's derived artifacts (proxy, analysis audio, frames).
   @override
@@ -109,6 +125,7 @@ class MatchRepository implements MatchLibrary {
     } on Exception catch (error) {
       throw MatchImportException(
         'Analysis files could not be produced for ${match.title}: $error',
+        kind: MatchImportKind.storage,
         cause: error,
       );
     }
@@ -128,13 +145,20 @@ class MatchRepository implements MatchLibrary {
   /// Delete a match.
   ///
   /// The catalog records always go. Derived artifacts are removed only when
-  /// [deleteArtifacts] is true; the original recording is never touched.
+  /// [deleteArtifacts] is true, and the app-owned recording only when
+  /// [deleteRecording] is true. The file the user originally selected is never
+  /// touched: it is not the application's to delete.
   @override
   Future<void> deleteMatch(
     MatchRecord match, {
     bool deleteArtifacts = false,
+    bool deleteRecording = false,
   }) async {
     await _catalog.deleteMatch(match.id);
+
+    if (deleteRecording) {
+      await _recordings.remove(match.id);
+    }
 
     if (!deleteArtifacts) {
       return;
@@ -148,7 +172,10 @@ class MatchRepository implements MatchLibrary {
   Future<void> _ensureReadable(String path) async {
     final file = File(path);
     if (!file.existsSync()) {
-      throw MatchImportException('That file is no longer available: $path');
+      throw MatchImportException(
+        'That file is no longer available: $path',
+        kind: MatchImportKind.unreadable,
+      );
     }
     try {
       final handle = await file.open();
@@ -157,7 +184,29 @@ class MatchRepository implements MatchLibrary {
       throw MatchImportException(
         'That file could not be opened. Access may have been denied: '
         '${error.message}',
+        kind: MatchImportKind.unreadable,
         cause: error,
+      );
+    }
+  }
+
+  Future<MediaMetadataDto> _probe(String path) async {
+    try {
+      return await _engine.probe(path);
+    } on Exception catch (error) {
+      throw MatchImportException(
+        'This recording could not be read: $error',
+        kind: MatchImportKind.unsupported,
+        cause: error,
+      );
+    }
+  }
+
+  static void _throwIfCancelled(ImportCancelToken? cancelToken) {
+    if (cancelToken?.isCancelled ?? false) {
+      throw MatchImportException(
+        'Import cancelled.',
+        kind: MatchImportKind.cancelled,
       );
     }
   }

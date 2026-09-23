@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:sportcut/src/bridge/sportcut_engine.dart';
 import 'package:sportcut/src/features/library/data/video_file_picker.dart';
+import 'package:sportcut/src/features/library/domain/import_cancel_token.dart';
 import 'package:sportcut/src/features/library/domain/match_library.dart';
 import 'package:sportcut/src/features/library/domain/match_record.dart';
 
@@ -32,6 +33,9 @@ class FakeMatchLibrary implements MatchLibrary {
   /// Value passed to the last [deleteMatch] call.
   bool? lastDeleteArtifacts;
 
+  /// Value passed to the last [deleteMatch] call.
+  bool? lastDeleteRecording;
+
   /// Match removed by the last [deleteMatch] call.
   MatchRecord? lastDeleted;
 
@@ -40,7 +44,11 @@ class FakeMatchLibrary implements MatchLibrary {
       List<MatchRecord>.unmodifiable(matches);
 
   @override
-  Future<MatchRecord> importVideo(PickedVideo video, {String? title}) async {
+  Future<MatchRecord> importVideo(
+    PickedVideo video, {
+    String? title,
+    ImportCancelToken? cancelToken,
+  }) async {
     importCalls += 1;
     final error = failure;
     if (error != null) {
@@ -59,10 +67,15 @@ class FakeMatchLibrary implements MatchLibrary {
       videoHeight: 1080,
       frameRate: 30,
       hasAudio: true,
+      originalPath: video.path,
+      sourceBytes: 512,
     );
     matches.insert(0, match);
     return match;
   }
+
+  @override
+  bool isRecordingAvailable(MatchRecord match) => File(match.videoPath).existsSync();
 
   @override
   Future<MediaImportResultDto> generateArtifacts(
@@ -124,8 +137,10 @@ class FakeMatchLibrary implements MatchLibrary {
   Future<void> deleteMatch(
     MatchRecord match, {
     bool deleteArtifacts = false,
+    bool deleteRecording = false,
   }) async {
     lastDeleteArtifacts = deleteArtifacts;
+    lastDeleteRecording = deleteRecording;
     lastDeleted = match;
     matches.removeWhere((stored) => stored.id == match.id);
     if (deleteArtifacts) {

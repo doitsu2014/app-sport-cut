@@ -18,6 +18,17 @@
 	-->
 	<key>com.apple.security.app-sandbox</key>
 	<false/>
+	<!--
+	  Required by the file picker's macOS implementation, which refuses to open
+	  NSOpenPanel unless the app is signed with this entitlement. It checks the
+	  entitlement itself rather than the sandbox, so an unsandboxed development
+	  build needs it too — without it, choosing a recording fails with
+	  "Either the Read-Only or Read-Write entitlement is required for this
+	  action." Read-only is enough: the recording is read and copied into
+	  app-owned storage, never modified.
+	-->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
 	<key>com.apple.security.network.server</key>

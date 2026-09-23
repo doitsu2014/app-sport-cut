@@ -119,10 +119,12 @@ void main() {
     await versionOne.insertMatch(sampleMatch());
     await versionOne.close();
 
-    final versionTwo = <Migration>[
+    // The next version this build would ship, on top of every migration the
+    // product already has.
+    final nextVersion = <Migration>[
       ...MatchCatalog.defaultMigrations,
       Migration(
-        version: 2,
+        version: MatchCatalog.schemaVersion + 1,
         apply: (db) async {
           await db.execute('ALTER TABLE matches ADD COLUMN notes TEXT');
         },
@@ -132,7 +134,7 @@ void main() {
     final migrated = await MatchCatalog.open(
       factory: databaseFactoryFfi,
       path: databasePath,
-      migrations: versionTwo,
+      migrations: nextVersion,
     );
     final matches = await migrated.listMatches();
     final columns = await migrated.database.rawQuery(
@@ -147,6 +149,59 @@ void main() {
       contains('notes'),
       reason: 'the migration did not run',
     );
+  });
+
+  test('a match written before the recording origin was stored still loads',
+      () async {
+    // A catalog as version 1 wrote it: a match with no recorded origin and no
+    // copy size.
+    final versionOne = await MatchCatalog.open(
+      factory: databaseFactoryFfi,
+      path: databasePath,
+    );
+    await versionOne.insertMatch(sampleMatch());
+    await versionOne.close();
+
+    final migrated = await MatchCatalog.open(
+      factory: databaseFactoryFfi,
+      path: databasePath,
+    );
+    final matches = await migrated.listMatches();
+    final columns = await migrated.database.rawQuery(
+      'PRAGMA table_info(matches)',
+    );
+    await migrated.close();
+
+    expect(
+      columns.map((column) => column['name']),
+      containsAll(<String>['original_path', 'source_bytes']),
+      reason: 'the recording-origin columns were not added',
+    );
+    expect(matches, hasLength(1));
+    expect(matches.single.videoPath, '/Users/someone/Movies/match.mp4');
+    expect(matches.single.originalPath, isNull);
+    expect(matches.single.sourceBytes, isNull);
+  });
+
+  test('a match records where its recording came from and what it costs',
+      () async {
+    final catalog = await MatchCatalog.open(
+      factory: databaseFactoryFfi,
+      path: databasePath,
+    );
+    await catalog.insertMatch(
+      sampleMatch().copyWith(
+        videoPath: '/Users/someone/Documents/SportcutRecordings/match-1/match.mp4',
+        originalPath: '/tmp/purgeable/match.mp4',
+        sourceBytes: 734003200,
+      ),
+    );
+
+    final matches = await catalog.listMatches();
+    await catalog.close();
+
+    expect(matches.single.originalPath, '/tmp/purgeable/match.mp4');
+    expect(matches.single.sourceBytes, 734003200);
   });
 
   test('deleting a match removes its dependent records', () async {

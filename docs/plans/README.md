@@ -19,6 +19,20 @@ is the human-readable map of the milestones and the setup split.
 | M7 | Match library and local catalog | `8. Match library and catalog` | done |
 | M8 | Verification and documentation | `9. Verification and documentation` | in progress |
 
+## Imported recordings
+
+Import takes custody of the recording the user picks. The platform pickers hand
+back a file they made themselves in a directory the operating system is free to
+empty — `NSTemporaryDirectory()` on iOS, the app cache on Android — so the picked
+path is an input to a copy and never the value that is stored. The match records
+the app-owned copy under `SportcutRecordings/<matchId>`, beside (not inside) the
+engine's artifact directory, so deleting analysis files can never take the
+recording with it.
+
+The file the user selected is left exactly where it was: never written to,
+moved, renamed, or deleted. The library reports a recording that has gone
+missing rather than failing silently when it is played.
+
 ## Milestone order and the two tracks
 
 The product plan orders work starting at Flutter video import and playback. That

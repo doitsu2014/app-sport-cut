@@ -8,7 +8,7 @@ import '../data/match_repository.dart';
 import '../data/media_engine.dart';
 import '../data/video_file_picker.dart';
 import '../domain/match_library.dart';
-import '../domain/match_record.dart';
+import 'match_list_entry.dart';
 import 'playback_controller.dart';
 import 'video_player_playback_controller.dart';
 
@@ -42,10 +42,21 @@ final matchRepositoryProvider = FutureProvider<MatchLibrary>((ref) async {
   );
 });
 
-/// Every stored match, newest first.
-final matchListProvider = FutureProvider<List<MatchRecord>>((ref) async {
+/// Every stored match, newest first, with its recording's availability.
+///
+/// Availability is resolved here, once per list, rather than inside each row:
+/// a match whose recording has gone missing should be visible and explicable,
+/// not silently missing or failing later.
+final matchListProvider = FutureProvider<List<MatchListEntry>>((ref) async {
   final repository = await ref.watch(matchRepositoryProvider.future);
-  return repository.listMatches();
+  final matches = await repository.listMatches();
+  return <MatchListEntry>[
+    for (final match in matches)
+      MatchListEntry(
+        match: match,
+        recordingAvailable: repository.isRecordingAvailable(match),
+      ),
+  ];
 });
 
 /// Documents directory path, resolved once per process.

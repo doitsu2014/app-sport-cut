@@ -130,12 +130,17 @@ and/or `flutter test` in `app/` at that point (see "OpenSpec workflow" below).
 
 ### Data and storage ownership
 
-- The engine owns artifact files; the Flutter app owns the SQLite catalog.
+- The engine owns artifact files; the Flutter app owns the SQLite catalog and
+  the app-owned copy of each imported recording.
+- Import takes custody of a recording: the picked file is copied into
+  `SportcutRecordings/<matchId>` and that copy is what the match records, because
+  the platform pickers hand back a file they made in a directory they may purge
+  (`NSTemporaryDirectory()` on iOS, the app cache on Android). The file the user
+  selected is never copied, moved, renamed, or modified — it is not ours to
+  touch.
 - Given a match directory, the engine writes `manifest.json`,
   `checkpoints.json`, and the `proxy/`, `audio/`, `frames/`, `calibration/`,
   `tracks/` subdirectories. Keep that layout stable.
-- The original recording is referenced in place and is never copied, moved, or
-  modified.
 - Derived media belongs outside the repository. Never point an artifact root at
   the checkout; `.gitignore` rules there are only a backstop.
 - Tests and benchmarks generate their own fixtures with `ffmpeg` instead of

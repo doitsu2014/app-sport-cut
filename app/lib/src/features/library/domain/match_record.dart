@@ -16,15 +16,22 @@ class MatchRecord {
     this.videoHeight,
     this.frameRate,
     this.hasAudio = false,
+    this.originalPath,
+    this.sourceBytes,
   });
 
-  /// Stable identifier, also the match directory name.
+  /// Stable identifier, also the match and recording directory name.
   final String id;
 
   /// Title shown in the library.
   final String title;
 
-  /// Original recording, referenced in place.
+  /// The app-owned copy of the recording.
+  ///
+  /// The platform pickers hand back a temporary copy the operating system may
+  /// purge, so the bytes the user picked are copied into app-owned storage at
+  /// import and it is that copy, not the picked path, that the application
+  /// plays and analyzes.
   final String videoPath;
 
   /// Duration in seconds, read from the recording on import.
@@ -48,6 +55,15 @@ class MatchRecord {
   /// Whether the recording has an audio track.
   final bool hasAudio;
 
+  /// Where the recording came from, for support and diagnostics.
+  ///
+  /// Never read from to play or analyze a match: the file the user selected is
+  /// left entirely under the user's control and may already be gone.
+  final String? originalPath;
+
+  /// Size of the app-owned copy in bytes, when known.
+  final int? sourceBytes;
+
   /// This record with the given fields replaced.
   MatchRecord copyWith({
     String? id,
@@ -60,6 +76,8 @@ class MatchRecord {
     int? videoHeight,
     double? frameRate,
     bool? hasAudio,
+    String? originalPath,
+    int? sourceBytes,
   }) =>
       MatchRecord(
         id: id ?? this.id,
@@ -72,5 +90,7 @@ class MatchRecord {
         videoHeight: videoHeight ?? this.videoHeight,
         frameRate: frameRate ?? this.frameRate,
         hasAudio: hasAudio ?? this.hasAudio,
+        originalPath: originalPath ?? this.originalPath,
+        sourceBytes: sourceBytes ?? this.sourceBytes,
       );
 }

@@ -22,4 +22,32 @@ void main() {
     expect(formatPosition(Duration.zero), '0:00');
     expect(formatPosition(const Duration(seconds: 72)), '1:12');
   });
+
+  test('recording sizes read in decimal units', () {
+    expect(formatBytes(0), '0 B');
+    expect(formatBytes(999), '999 B');
+    expect(formatBytes(1024), '1.0 KB');
+    expect(formatBytes(734003200), '734 MB');
+    expect(formatBytes(1500000000), '1.5 GB');
+  });
+
+  test('media summaries name what is known and skip what is not', () {
+    expect(
+      formatMediaSummary(
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        hasAudio: true,
+        bytes: 734003200,
+      ),
+      '1920×1080 · 30 fps · audio · 734 MB',
+    );
+    expect(
+      formatMediaSummary(width: 1280, height: 720, frameRate: 29.97),
+      '1280×720 · 29.97 fps',
+    );
+    expect(formatMediaSummary(), '');
+    // A recording with no audio track says nothing about audio.
+    expect(formatMediaSummary(hasAudio: false, bytes: 1024), '1.0 KB');
+  });
 }

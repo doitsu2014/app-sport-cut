@@ -29,11 +29,12 @@ class MatchCatalog {
   final Database _database;
 
   /// Schema version written by this build.
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
 
   /// All migrations, in ascending version order.
   static const List<Migration> defaultMigrations = <Migration>[
     Migration(version: 1, apply: _createInitialSchema),
+    Migration(version: 2, apply: _addRecordingOrigin),
   ];
 
   /// Open (and migrate) the catalog.
@@ -216,6 +217,18 @@ class MatchCatalog {
     );
   }
 
+  /// Record where a match's recording came from, and what the app-owned copy
+  /// costs.
+  ///
+  /// Additive only, so an install written by version 1 keeps every match: the
+  /// rows it already has gain two null columns, and their `video_path` is left
+  /// exactly as stored. A match whose recording has since gone missing is
+  /// reported as unavailable by the library rather than repaired here.
+  static Future<void> _addRecordingOrigin(Database db) async {
+    await db.execute('ALTER TABLE matches ADD COLUMN original_path TEXT');
+    await db.execute('ALTER TABLE matches ADD COLUMN source_bytes INTEGER');
+  }
+
   static Map<String, Object?> _matchToRow(MatchRecord match) =>
       <String, Object?>{
         'id': match.id,
@@ -228,6 +241,8 @@ class MatchCatalog {
         'video_height': match.videoHeight,
         'frame_rate': match.frameRate,
         'has_audio': match.hasAudio ? 1 : 0,
+        'original_path': match.originalPath,
+        'source_bytes': match.sourceBytes,
       };
 
   static MatchRecord _matchFromRow(Map<String, Object?> row) => MatchRecord(
@@ -242,5 +257,7 @@ class MatchCatalog {
         videoHeight: (row['video_height'] as num?)?.toInt(),
         frameRate: (row['frame_rate'] as num?)?.toDouble(),
         hasAudio: (row['has_audio'] as int? ?? 0) == 1,
+        originalPath: row['original_path'] as String?,
+        sourceBytes: (row['source_bytes'] as num?)?.toInt(),
       );
 }

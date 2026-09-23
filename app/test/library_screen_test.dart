@@ -5,6 +5,7 @@
 /// SQLite-backed repository has its own tests in match_repository_test.dart.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -63,6 +64,12 @@ void main() {
         durationSeconds: 90,
         createdAt: DateTime(2026, 3, 2),
         matchDir: p.join(tempDir.path, 'matches', id),
+        videoWidth: 1920,
+        videoHeight: 1080,
+        frameRate: 30,
+        hasAudio: true,
+        originalPath: recording.path,
+        sourceBytes: 734003200,
       );
 
   testWidgets('an empty library offers to import a recording', (tester) async {
@@ -80,6 +87,77 @@ void main() {
     expect(find.text('club-final'), findsOneWidget);
     expect(find.textContaining('1:30'), findsOneWidget);
     expect(find.textContaining('2026-03-02'), findsOneWidget);
+    // The media metadata read at import is available with the match.
+    expect(find.textContaining('1920×1080'), findsOneWidget);
+    expect(find.textContaining('30 fps'), findsOneWidget);
+  });
+
+  testWidgets('an import in progress is visible and cannot be started twice',
+      (tester) async {
+    final gate = Completer<void>();
+    picker.gate = gate;
+    picker.result = PickedVideo(
+      path: recording.path,
+      displayName: 'club-final.mp4',
+    );
+    await pumpLibrary(tester);
+
+    await tester.tap(find.text('Import video'));
+    await tester.pump();
+
+    expect(find.text('Choosing a recording…'), findsOneWidget);
+    final importButton = tester.widget<FilledButton>(find.byType(FilledButton));
+    expect(importButton.onPressed, isNull,
+        reason: 'importing must be disabled while an import runs');
+    expect(picker.calls, 1);
+    expect(library.importCalls, 0);
+
+    // Asking again while the first import is in flight must not open the
+    // picker a second time.
+    await tester.tap(find.byTooltip('Import video'), warnIfMissed: false);
+    await tester.pump();
+    expect(picker.calls, 1);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(library.importCalls, 1);
+    expect(find.text('club-final'), findsOneWidget);
+  });
+
+  testWidgets('a picker failure is reported rather than thrown',
+      (tester) async {
+    picker.failure = MatchImportException(
+      'The video picker could not open: access denied',
+      kind: MatchImportKind.pickerFailed,
+    );
+    await pumpLibrary(tester);
+
+    await tester.tap(find.text('Import video'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('picker could not open'), findsOneWidget);
+    expect(library.importCalls, 0);
+    expect(find.text('No matches yet'), findsOneWidget);
+  });
+
+  testWidgets('a cancelled import is silent and stores nothing', (tester) async {
+    picker.result = PickedVideo(
+      path: recording.path,
+      displayName: 'club-final.mp4',
+    );
+    library.failure = MatchImportException(
+      'Import cancelled.',
+      kind: MatchImportKind.cancelled,
+    );
+    await pumpLibrary(tester);
+
+    await tester.tap(find.text('Import video'));
+    await tester.pumpAndSettle();
+
+    expect(library.importCalls, 1);
+    expect(find.textContaining('cancelled'), findsNothing);
+    expect(find.text('No matches yet'), findsOneWidget);
   });
 
   testWidgets('importing adds the chosen recording to the library',
@@ -116,6 +194,7 @@ void main() {
     picker.result = PickedVideo(path: p.join(tempDir.path, 'gone.mp4'));
     library.failure = MatchImportException(
       'That file is no longer available: ${p.join(tempDir.path, 'gone.mp4')}',
+      kind: MatchImportKind.unreadable,
     );
     await pumpLibrary(tester);
 
@@ -157,19 +236,67 @@ void main() {
 
     expect(find.text('Delete match?'), findsOneWidget);
     expect(find.text('Also delete analysis files'), findsOneWidget);
+    expect(find.text('Also delete the stored recording copy'), findsOneWidget);
     expect(find.textContaining('original recording is never deleted'),
         findsOneWidget);
 
-    await tester.tap(find.byType(CheckboxListTile));
+    await tester.tap(
+      find.widgetWithText(CheckboxListTile, 'Also delete analysis files'),
+    );
     await _settle(tester, 'toggling the checkbox');
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await _settle(tester, 'confirming the delete');
 
     expect(library.lastDeleteArtifacts, isTrue);
+    expect(library.lastDeleteRecording, isFalse,
+        reason: 'the stored recording copy is only removed when asked for');
     expect(library.matches, isEmpty);
     expect(matchDir.existsSync(), isFalse);
     expect(recording.existsSync(), isTrue);
     expect(find.text('No matches yet'), findsOneWidget);
+  });
+
+  testWidgets('the stored recording copy can be deleted with the match',
+      (tester) async {
+    library.matches.add(sampleMatch());
+    await pumpLibrary(tester);
+
+    await tester.tap(find.byTooltip('Match actions'));
+    await _settle(tester, 'opening the menu');
+    await tester.tap(find.text('Delete'));
+    await _settle(tester, 'opening the dialog');
+
+    await tester.tap(
+      find.widgetWithText(CheckboxListTile, 'Also delete the stored recording copy'),
+    );
+    await _settle(tester, 'toggling the checkbox');
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await _settle(tester, 'confirming the delete');
+
+    expect(library.lastDeleteRecording, isTrue);
+    expect(recording.existsSync(), isTrue,
+        reason: 'the file the user selected is never deleted');
+  });
+
+  testWidgets('a match whose recording has gone is listed as unavailable',
+      (tester) async {
+    library.matches.add(
+      sampleMatch().copyWith(videoPath: p.join(tempDir.path, 'purged.mp4')),
+    );
+    await pumpLibrary(tester);
+
+    expect(find.text('club-final'), findsOneWidget);
+    expect(find.text('Recording unavailable'), findsOneWidget);
+
+    await tester.tap(find.text('club-final'));
+    await _settle(tester, 'opening an unavailable match');
+
+    expect(find.textContaining('no longer available'), findsOneWidget);
+    expect(
+      find.byKey(const Key('fake-playback-surface')),
+      findsNothing,
+      reason: 'playback must not open onto a missing file',
+    );
   });
 
   testWidgets('cancelling the delete dialog keeps the match', (tester) async {

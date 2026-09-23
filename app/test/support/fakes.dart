@@ -1,6 +1,8 @@
 /// Shared test doubles for the client tests.
 library;
 
+import 'dart:async';
+
 import 'package:sportcut/src/bridge/sportcut_engine.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -110,12 +112,27 @@ class FakeVideoFilePicker implements VideoFilePicker {
   /// Result returned by [pickVideo]; `null` means the user cancelled.
   PickedVideo? result;
 
+  /// Error thrown instead of returning a result, when set.
+  Object? failure;
+
+  /// When set, [pickVideo] waits for this to complete before returning, so a
+  /// test can observe the library while a pick is still in flight.
+  Completer<void>? gate;
+
   /// Number of pick attempts.
   int calls = 0;
 
   @override
   Future<PickedVideo?> pickVideo() async {
     calls += 1;
+    final gate = this.gate;
+    if (gate != null) {
+      await gate.future;
+    }
+    final error = failure;
+    if (error != null) {
+      throw error;
+    }
     return result;
   }
 }

@@ -5,12 +5,16 @@ import '../../../app/router.dart';
 import '../domain/match_import_exception.dart';
 import '../domain/match_record.dart';
 import 'formatters.dart';
+import 'import_controller.dart';
 import 'library_providers.dart';
+import 'match_list_entry.dart';
 
 /// Match library: the home screen.
 ///
-/// Shows every stored match with its title, duration, and creation date; an
-/// empty library is a normal state that offers to import a recording.
+/// Shows every stored match with its title, duration, creation date, and the
+/// media metadata read when it was imported. An empty library is a normal state
+/// that offers to import a recording, and a match whose recording has gone
+/// missing stays listed and says so.
 class LibraryScreen extends ConsumerWidget {
   /// Build the library screen.
   const LibraryScreen({super.key});
@@ -18,63 +22,83 @@ class LibraryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final matches = ref.watch(matchListProvider);
+    final import = ref.watch(importControllerProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sportcut'),
         actions: <Widget>[
           IconButton(
-            onPressed: () => _import(context, ref),
+            onPressed: import.isRunning ? null : () => _import(context, ref),
             icon: const Icon(Icons.add),
             tooltip: 'Import video',
           ),
         ],
       ),
-      body: matches.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _LibraryError(
-          message: '$error',
-          onRetry: () => ref.invalidate(matchListProvider),
-        ),
-        data: (list) => list.isEmpty
-            ? _EmptyLibrary(onImport: () => _import(context, ref))
-            : _MatchList(
-                matches: list,
-                onOpen: (match) => _open(context, match),
-                onGenerate: (match) => _generateArtifacts(context, ref, match),
-                onDelete: (match) => _confirmDelete(context, ref, match),
+      body: Column(
+        children: <Widget>[
+          if (import.isRunning)
+            _ImportProgress(
+              description: import.description,
+              onCancel: () =>
+                  ref.read(importControllerProvider.notifier).cancel(),
+            ),
+          Expanded(
+            child: matches.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => _LibraryError(
+                message: '$error',
+                onRetry: () => ref.invalidate(matchListProvider),
               ),
+              data: (entries) => entries.isEmpty
+                  ? _EmptyLibrary(
+                      importRunning: import.isRunning,
+                      onImport: () => _import(context, ref),
+                    )
+                  : _MatchList(
+                      entries: entries,
+                      onOpen: (entry) => _open(context, entry),
+                      onGenerate: (entry) =>
+                          _generateArtifacts(context, ref, entry),
+                      onDelete: (entry) => _confirmDelete(context, ref, entry),
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Future<void> _import(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    try {
-      final picked = await ref.read(videoFilePickerProvider).pickVideo();
-      if (picked == null) {
-        return; // the user cancelled
-      }
-      final repository = await ref.read(matchRepositoryProvider.future);
-      final match = await repository.importVideo(picked);
-      ref.invalidate(matchListProvider);
-      messenger.showSnackBar(
-        SnackBar(content: Text('Imported ${match.title}')),
-      );
-    } on MatchImportException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    final outcome = await ref.read(importControllerProvider.notifier).start();
+    switch (outcome) {
+      case ImportSucceeded(:final match):
+        messenger.showSnackBar(
+          SnackBar(content: Text('Imported ${match.title}')),
+        );
+      case ImportFailed(:final problem):
+        messenger.showSnackBar(SnackBar(content: Text(problem.message)));
+      case ImportDeclined():
+        break; // the user cancelled, or an import was already running
     }
   }
 
   Future<void> _generateArtifacts(
     BuildContext context,
     WidgetRef ref,
-    MatchRecord match,
+    MatchListEntry entry,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    if (!entry.recordingAvailable) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(_unavailableMessage(entry.match))),
+      );
+      return;
+    }
     try {
       final repository = await ref.read(matchRepositoryProvider.future);
-      final result = await repository.generateArtifacts(match);
+      final result = await repository.generateArtifacts(entry.match);
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -87,36 +111,84 @@ class LibraryScreen extends ConsumerWidget {
     }
   }
 
-  void _open(BuildContext context, MatchRecord match) {
-    Navigator.of(context).pushNamed(AppRoutes.player, arguments: match);
+  void _open(BuildContext context, MatchListEntry entry) {
+    if (!entry.recordingAvailable) {
+      // Playback would open onto a missing file and fail without saying why.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_unavailableMessage(entry.match))),
+      );
+      return;
+    }
+    Navigator.of(context).pushNamed(AppRoutes.player, arguments: entry.match);
   }
+
+  static String _unavailableMessage(MatchRecord match) =>
+      'The recording for ${match.title} is no longer available on this device.';
 
   Future<void> _confirmDelete(
     BuildContext context,
     WidgetRef ref,
-    MatchRecord match,
+    MatchListEntry entry,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
     final choice = await showDialog<_DeleteChoice>(
       context: context,
-      builder: (dialogContext) => _DeleteMatchDialog(match: match),
+      builder: (dialogContext) => _DeleteMatchDialog(match: entry.match),
     );
     if (choice == null) {
       return;
     }
 
     final repository = await ref.read(matchRepositoryProvider.future);
-    await repository.deleteMatch(match, deleteArtifacts: choice.deleteArtifacts);
+    await repository.deleteMatch(
+      entry.match,
+      deleteArtifacts: choice.deleteArtifacts,
+      deleteRecording: choice.deleteRecording,
+    );
     ref.invalidate(matchListProvider);
 
-    messenger.showSnackBar(SnackBar(content: Text('Deleted ${match.title}')));
+    messenger.showSnackBar(
+      SnackBar(content: Text('Deleted ${entry.match.title}')),
+    );
+  }
+}
+
+class _ImportProgress extends StatelessWidget {
+  const _ImportProgress({required this.description, required this.onCancel});
+
+  final String description;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Column(
+        children: <Widget>[
+          const LinearProgressIndicator(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(description, style: theme.textTheme.bodyMedium),
+                ),
+                TextButton(onPressed: onCancel, child: const Text('Cancel')),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
 class _EmptyLibrary extends StatelessWidget {
-  const _EmptyLibrary({required this.onImport});
+  const _EmptyLibrary({required this.onImport, required this.importRunning});
 
   final VoidCallback onImport;
+  final bool importRunning;
 
   @override
   Widget build(BuildContext context) {
@@ -142,7 +214,7 @@ class _EmptyLibrary extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
-              onPressed: onImport,
+              onPressed: importRunning ? null : onImport,
               icon: const Icon(Icons.add),
               label: const Text('Import video'),
             ),
@@ -183,42 +255,45 @@ class _LibraryError extends StatelessWidget {
 
 class _MatchList extends StatelessWidget {
   const _MatchList({
-    required this.matches,
+    required this.entries,
     required this.onOpen,
     required this.onGenerate,
     required this.onDelete,
   });
 
-  final List<MatchRecord> matches;
-  final void Function(MatchRecord) onOpen;
-  final void Function(MatchRecord) onGenerate;
-  final void Function(MatchRecord) onDelete;
+  final List<MatchListEntry> entries;
+  final void Function(MatchListEntry) onOpen;
+  final void Function(MatchListEntry) onGenerate;
+  final void Function(MatchListEntry) onDelete;
 
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
-      itemCount: matches.length,
+      itemCount: entries.length,
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
-        final match = matches[index];
+        final entry = entries[index];
+        final match = entry.match;
         return ListTile(
           title: Text(match.title),
-          subtitle: Text(
-            '${formatDuration(match.durationSeconds)}  ·  '
-            '${formatMatchDate(match.createdAt)}',
+          isThreeLine: true,
+          subtitle: _MatchSubtitle(entry: entry),
+          leading: Icon(
+            entry.recordingAvailable
+                ? Icons.movie_outlined
+                : Icons.videocam_off_outlined,
           ),
-          leading: const Icon(Icons.movie_outlined),
-          onTap: () => onOpen(match),
+          onTap: () => onOpen(entry),
           trailing: PopupMenuButton<String>(
             tooltip: 'Match actions',
             onSelected: (value) {
               switch (value) {
                 case 'open':
-                  onOpen(match);
+                  onOpen(entry);
                 case 'generate':
-                  onGenerate(match);
+                  onGenerate(entry);
                 case 'delete':
-                  onDelete(match);
+                  onDelete(entry);
               }
             },
             itemBuilder: (context) => const <PopupMenuEntry<String>>[
@@ -236,10 +311,52 @@ class _MatchList extends StatelessWidget {
   }
 }
 
+class _MatchSubtitle extends StatelessWidget {
+  const _MatchSubtitle({required this.entry});
+
+  final MatchListEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final match = entry.match;
+    final summary = formatMediaSummary(
+      width: match.videoWidth,
+      height: match.videoHeight,
+      frameRate: match.frameRate,
+      hasAudio: match.hasAudio,
+      bytes: match.sourceBytes,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          '${formatDuration(match.durationSeconds)}  ·  '
+          '${formatMatchDate(match.createdAt)}',
+        ),
+        if (summary.isNotEmpty)
+          Text(summary, style: theme.textTheme.bodySmall),
+        if (!entry.recordingAvailable)
+          Text(
+            'Recording unavailable',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.error),
+          ),
+      ],
+    );
+  }
+}
+
 class _DeleteChoice {
-  const _DeleteChoice({required this.deleteArtifacts});
+  const _DeleteChoice({
+    required this.deleteArtifacts,
+    required this.deleteRecording,
+  });
 
   final bool deleteArtifacts;
+  final bool deleteRecording;
 }
 
 class _DeleteMatchDialog extends StatefulWidget {
@@ -253,6 +370,7 @@ class _DeleteMatchDialog extends StatefulWidget {
 
 class _DeleteMatchDialogState extends State<_DeleteMatchDialog> {
   bool _deleteArtifacts = false;
+  bool _deleteRecording = false;
 
   @override
   Widget build(BuildContext context) {
@@ -276,6 +394,15 @@ class _DeleteMatchDialogState extends State<_DeleteMatchDialog> {
             title: const Text('Also delete analysis files'),
             subtitle: const Text('Proxy, audio, and sampled frames'),
           ),
+          CheckboxListTile(
+            value: _deleteRecording,
+            onChanged: (value) =>
+                setState(() => _deleteRecording = value ?? false),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text('Also delete the stored recording copy'),
+            subtitle: const Text('The copy Sportcut made for this match'),
+          ),
         ],
       ),
       actions: <Widget>[
@@ -285,7 +412,10 @@ class _DeleteMatchDialogState extends State<_DeleteMatchDialog> {
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(
-            _DeleteChoice(deleteArtifacts: _deleteArtifacts),
+            _DeleteChoice(
+              deleteArtifacts: _deleteArtifacts,
+              deleteRecording: _deleteRecording,
+            ),
           ),
           child: const Text('Delete'),
         ),

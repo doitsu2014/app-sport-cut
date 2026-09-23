@@ -1,25 +1,37 @@
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-/// Where a match's derived artifacts live.
+/// The two app-owned filesystem roots a match uses.
 ///
-/// Artifacts are deliberately outside the original recording's folder: the
-/// recording is referenced in place and never moved or copied, and the derived
-/// files stay separable so a user can delete them to reclaim space.
+/// They are deliberately separate directories. [artifactRoot] belongs to the
+/// engine, which writes a fixed layout inside each match directory; deleting a
+/// match's analysis files removes that directory recursively, so the recording
+/// must not live in it. [recordingsRoot] holds the copy of the recording the
+/// application took custody of at import and keeps for the life of the match.
 class MatchPaths {
-  /// Use an explicit root directory.
-  const MatchPaths(this.root);
+  /// Use explicit roots.
+  const MatchPaths({required this.artifactRoot, required this.recordingsRoot});
 
-  /// Root directory holding every match directory.
-  final String root;
+  /// Root holding every match's engine artifact directory.
+  final String artifactRoot;
 
-  /// Directory for one match.
-  String matchDir(String matchId) => p.join(root, matchId);
+  /// Root holding every match's app-owned copy of its recording.
+  final String recordingsRoot;
 
-  /// The default root: `SportcutMatches` inside the application documents
-  /// directory.
+  /// Engine artifact directory for one match.
+  String matchDir(String matchId) => p.join(artifactRoot, matchId);
+
+  /// App-owned recording directory for one match.
+  String recordingDir(String matchId) => p.join(recordingsRoot, matchId);
+
+  /// The default roots inside the application documents directory:
+  /// `SportcutMatches` for the engine's artifacts and `SportcutRecordings` for
+  /// the recordings the application owns.
   static Future<MatchPaths> forDocuments() async {
     final documents = await getApplicationDocumentsDirectory();
-    return MatchPaths(p.join(documents.path, 'SportcutMatches'));
+    return MatchPaths(
+      artifactRoot: p.join(documents.path, 'SportcutMatches'),
+      recordingsRoot: p.join(documents.path, 'SportcutRecordings'),
+    );
   }
 }
