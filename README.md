@@ -6,7 +6,8 @@ and exports a polished video — entirely on-device, with no cloud processing.
 
 This repository is greenfield. The product and technical plan lives in
 [docs/README.md](docs/README.md); the implementation plan and milestones live in
-[docs/plans/README.md](docs/plans/README.md).
+[docs/plans/README.md](docs/plans/README.md), and what gets built next is
+sequenced in [docs/plans/roadmap.md](docs/plans/roadmap.md).
 
 ## Repository layout
 
