@@ -1,3 +1,182 @@
+# AGENTS.md
+
+Instructions for AI coding agents working in this repository. Read this file
+before changing code. `core/AGENTS.md` and `app/AGENTS.md` add track-specific
+detail and take precedence when you are working inside those directories.
+
+## What this project is
+
+Sportcut turns a badminton match recording into a polished highlight video
+entirely on the user's device: import a local recording, strip the downtime,
+confirm the score in a few taps, pick the best rallies, and export an edited
+video. Everything runs offline — recordings and analysis results never leave the
+device, and no cloud or online-API dependency may be introduced.
+
+The product is deliberately semi-automatic. The app proposes rally boundaries
+and a suggested winner; the user confirms. Do not build features that claim
+fully automatic officiating — the reasoning is in `docs/README.md` (section 2,
+"Product Principle").
+
+## Stack
+
+| Layer | Choice |
+| --- | --- |
+| Mobile client | Flutter / Dart 3, iOS and Android |
+| Client state | Riverpod (`flutter_riverpod`) |
+| Native engine | Rust workspace, edition 2021, `rust-version = 1.80` |
+| Language boundary | `flutter_rust_bridge` v2, pinned to **2.13.0** |
+| Media processing | `ffmpeg` / `ffprobe`, behind the `MediaToolchain` abstraction |
+| Client catalog | SQLite (`sqflite`) |
+
+## Repository map
+
+| Path | Responsibility |
+| --- | --- |
+| `core/` | Rust engine: media foundation, job model, and the single FFI facade. Builds, lints, and tests with no mobile toolchain installed. |
+| `app/` | Flutter client: match library, import, playback, and the typed bridge wrapper. |
+| `models/` | Model assets and weights that ship with the app, plus the notes mapping each to its license-register entry. |
+| `tools/` | Supported developer entry points: preflight, engine verification, bridge generation, engine library build, macOS run. |
+| `docs/` | Product plan (`docs/README.md`), implementation plan (`docs/plans/`), verification records (`docs/verification/`), legal records (`docs/legal/`). |
+| `openspec/` | Change artifacts. Specs in `openspec/specs/`, active changes in `openspec/changes/`, finished ones in `openspec/changes/archive/`. |
+| `flutter_rust_bridge.yaml` | Codegen configuration. Generated files are never committed. |
+
+## The two tracks
+
+Work is split into an **engine track** (`core/`) and a **client track** (`app/`)
+that meet at the bridge. The engine must stay buildable on a machine with no
+Flutter, Xcode, Android SDK, or JDK.
+
+```bash
+tools/preflight.sh --profile engine   # what the engine needs
+tools/preflight.sh --profile mobile   # what the client needs
+tools/preflight.sh                    # everything (default)
+
+tools/verify-engine.sh                # cargo fmt --check, clippy, test
+cd app && flutter analyze             # client static analysis
+
+tools/generate-bridge.sh              # Dart bindings + Rust glue (not committed)
+tools/build-engine-lib.sh             # core/crates/api/target/release/libsportcut_api.*
+tools/run-macos.sh                    # dev run of the client on macOS
+```
+
+If Flutter is not on `PATH`, set `SPORTCUT_FLUTTER_BIN` to the directory
+containing the `flutter` executable before running any client-track command.
+
+## Working agreement: implement first, tests are optional
+
+Default to shipping implementation, not test scaffolding.
+
+- **Do not** write new test files or add test cases unless the user explicitly
+  asks for tests.
+- **Do not** run the test suites as part of ordinary work. Verify your change
+  with the cheapest applicable check instead — `cargo build`,
+  `cargo clippy --workspace --all-targets -- -D warnings`, or
+  `flutter analyze`.
+- Never block a task on missing test coverage, and never mark a task blocked
+  because a test does not exist.
+- Touch an existing test only when your change stops it compiling, or when the
+  user asks you to.
+
+The exception is an explicit request to verify, close, or archive an OpenSpec
+change: that workflow requires recorded evidence, so run `tools/verify-engine.sh`
+and/or `flutter test` in `app/` at that point (see "OpenSpec workflow" below).
+
+## Conventions
+
+### Rust engine (`core/`)
+
+- Workspace lints are enforced from `core/Cargo.toml`: `unsafe_code = "deny"`,
+  `clippy::dbg_macro = "deny"`, `clippy::todo = "deny"`, and
+  `missing_debug_implementations = "warn"`. Do not add `#[allow]` for these in
+  hand-written code; the only exception is the generated FFI module.
+- Formatting is `rustfmt` with `core/rustfmt.toml` (100-column width, Unix
+  newlines). Run `cargo fmt --all` in `core/`.
+- Crate boundaries mirror the pipeline stages (`common`, `media`, `storage`,
+  `jobs`, `court`, `vision`, `rally`, `score`, `highlight`, `api`). Put new
+  capability in the crate that owns the stage instead of widening an unrelated
+  one.
+- Only `sportcut-api` crosses the language boundary. Internal crates are free to
+  change because the bridge only sees that facade.
+- Keep everything reachable from the media pipeline free of the mobile
+  toolchain. Don't add a dependency that only builds on macOS/iOS/Android to a
+  shared crate.
+
+### Flutter client (`app/`)
+
+- Lints come from `package:flutter_lints/flutter.yaml`; keep `flutter analyze`
+  clean.
+- Features live under `app/lib/src/features/<feature>/` with `domain/`, `data/`,
+  and `presentation/` subfolders as needed, so a later phase lands inside its own
+  folder instead of spreading across the app.
+- Reuse the existing patterns: plain named route table in
+  `app/lib/src/app/router.dart`, Riverpod providers for shared state and
+  dependency injection (`app/lib/src/app/di.dart`), and the repository interface
+  in `features/library/domain/`.
+- Talk to the engine only through `app/lib/src/bridge/sportcut_engine.dart`. Do
+  not import `bridge/generated/` from feature code.
+
+### The bridge
+
+- Generated files are **never** hand-edited and **never** committed:
+  `core/crates/api/src/frb_generated.rs` and
+  `app/lib/src/bridge/generated/`. Regenerate them with
+  `tools/generate-bridge.sh`.
+- The codegen input is `crate::dto,crate::facade`; the committed module
+  declaration is in `core/crates/api/src/lib.rs` behind the `bridge` feature.
+- The bridge version must match in all three places: `core/crates/api/Cargo.toml`,
+  `app/pubspec.yaml`, and `tools/generate-bridge.sh`. Change them together.
+- Hand-written, typed Dart wrappers live in `app/lib/src/bridge/` next to — not
+  inside — the generated directory.
+
+### Data and storage ownership
+
+- The engine owns artifact files; the Flutter app owns the SQLite catalog.
+- Given a match directory, the engine writes `manifest.json`,
+  `checkpoints.json`, and the `proxy/`, `audio/`, `frames/`, `calibration/`,
+  `tracks/` subdirectories. Keep that layout stable.
+- The original recording is referenced in place and is never copied, moved, or
+  modified.
+- Derived media belongs outside the repository. Never point an artifact root at
+  the checkout; `.gitignore` rules there are only a backstop.
+- Tests and benchmarks generate their own fixtures with `ffmpeg` instead of
+  committing footage.
+
+### Developer scripts (`tools/`)
+
+- Scripts in `tools/` are the supported entry points; keep them working from a
+  clean checkout with only the tools they declare.
+- They are bash with `#!/usr/bin/env bash` and `set -euo pipefail`, resolve the
+  repository root from `BASH_SOURCE`, and print diagnostics to stderr.
+- `preflight.sh` only reads the machine — it must install nothing and leave no
+  build output behind.
+
+### Licensing gate
+
+Every third-party dependency, model, pretrained weight, dataset, font, audio
+asset, and codec gets a row in `docs/legal/dependency-register.md` **before** the
+change that introduces it is complete. A component that cannot ship in a
+proprietary build is recorded as `not-shippable` with the specific conflict
+named. GPL FFmpeg builds are not shippable — `tools/preflight.sh` flags them.
+Never assume an open-source library makes the assets it carries safe to
+redistribute.
+
+## Guardrails
+
+- No network access, telemetry, or online API in product code paths.
+- No `unsafe` in hand-written Rust.
+- No GPL-licensed component on a shipping path.
+- No secrets, tokens, or machine-specific absolute paths committed to the repo.
+- Keep `main` working: the engine builds and lints without the mobile toolchain.
+
+## Definition of done
+
+- The requested behavior is implemented and matches the relevant spec or plan.
+- Formatting and lint are clean for the track you touched.
+- No generated file was hand-edited or committed.
+- Any new dependency has a license-register row.
+- The task checkbox in the OpenSpec change's `tasks.md` is marked complete when
+  the work came from a change.
+
 <!-- OpenSpec workflow -->
 ## OpenSpec workflow
 
@@ -14,6 +193,9 @@ source of truth for the requested behavior and implementation tasks.
 - If the change is ambiguous, required artifacts are missing, or implementation
   exposes a design conflict, pause and update or clarify the OpenSpec artifacts
   before proceeding.
+- Verification runs are the one place the skip-tests default does not apply:
+  when the user asks to verify, close, or archive a change, run the verification
+  commands and record the output under `docs/verification/`.
 - Run the OpenSpec verification workflow before considering a change ready to
   archive; archive only after implementation and verification are complete.
 <!-- /OpenSpec workflow -->
