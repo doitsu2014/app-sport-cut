@@ -28,6 +28,8 @@ pub enum ArtifactKind {
     Calibration,
     /// Per-frame track data.
     Tracks,
+    /// A rendered highlight video.
+    Export,
 }
 
 impl ArtifactKind {
@@ -39,6 +41,7 @@ impl ArtifactKind {
             Self::Frames => "frames",
             Self::Calibration => "calibration",
             Self::Tracks => "tracks",
+            Self::Export => "export",
         }
     }
 
@@ -50,6 +53,7 @@ impl ArtifactKind {
             Self::Frames => "frames",
             Self::Calibration => "calibration",
             Self::Tracks => "tracks",
+            Self::Export => "export",
         }
     }
 }
@@ -62,6 +66,7 @@ impl std::fmt::Display for ArtifactKind {
             Self::Frames => "frames",
             Self::Calibration => "calibration",
             Self::Tracks => "tracks",
+            Self::Export => "export",
         })
     }
 }
@@ -141,7 +146,13 @@ pub struct ManifestSummary {
 
 impl ArtifactManifest {
     /// Schema version written by this build.
-    pub const SCHEMA_VERSION: u32 = 1;
+    ///
+    /// Version 2 added [`ArtifactKind::Export`]. The bump is not bookkeeping:
+    /// serde rejects an unknown enum variant, so a build from before this change
+    /// would fail to parse `"kind": "export"` and report an unreadable manifest.
+    /// Raising the version turns that into the explicit "written by a newer
+    /// engine" error below instead.
+    pub const SCHEMA_VERSION: u32 = 2;
 
     /// Create an empty manifest for a match.
     pub fn new(match_id: impl Into<String>, original: &Path) -> Self {

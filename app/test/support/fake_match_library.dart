@@ -39,9 +39,16 @@ class FakeMatchLibrary implements MatchLibrary {
   /// Match removed by the last [deleteMatch] call.
   MatchRecord? lastDeleted;
 
+  /// Score reported for each match by [scoreSummaries].
+  Map<String, ({int left, int right})> scores =
+      <String, ({int left, int right})>{};
+
   @override
   Future<List<MatchRecord>> listMatches() async =>
       List<MatchRecord>.unmodifiable(matches);
+
+  @override
+  Future<Map<String, ({int left, int right})>> scoreSummaries() async => scores;
 
   @override
   Future<MatchRecord> importVideo(
@@ -78,7 +85,7 @@ class FakeMatchLibrary implements MatchLibrary {
   bool isRecordingAvailable(MatchRecord match) => File(match.videoPath).existsSync();
 
   @override
-  Future<MediaImportResultDto> generateArtifacts(
+  Future<ArtifactManifestDto> generateArtifacts(
     MatchRecord match, {
     double samplingRate = 1,
   }) async {
@@ -87,49 +94,25 @@ class FakeMatchLibrary implements MatchLibrary {
     if (error != null) {
       throw error;
     }
-    return MediaImportResultDto(
-      metadata: MediaMetadataDto(
-        path: match.videoPath,
-        durationSeconds: match.durationSeconds,
-        frameRate: match.frameRate ?? 30,
-        width: match.videoWidth ?? 1920,
-        height: match.videoHeight ?? 1080,
-        rotationDegrees: 0,
-        orientation: OrientationDto.landscape,
-        hasAudio: match.hasAudio,
-        sizeBytes: BigInt.from(1024),
-      ),
-      manifest: ArtifactManifestDto(
-        matchId: match.id,
-        originalPath: match.videoPath,
-        artifacts: <ArtifactDto>[
-          ArtifactDto(
-            kind: 'proxy',
-            relativePath: 'proxy/proxy.mp4',
-            state: ArtifactStateDto.final_,
-            sizeBytes: BigInt.from(1024),
-          ),
-          ArtifactDto(
-            kind: 'frames',
-            relativePath: 'frames',
-            state: ArtifactStateDto.final_,
-            sizeBytes: BigInt.from(1024),
-          ),
-        ],
-        missingKinds: const <String>[],
-        originalPresent: true,
-      ),
-      job: JobStatusDto(
-        jobId: 'job-1',
-        matchId: match.id,
-        state: JobStateDto.completed,
-        stage: 'frames',
-        progress: null,
-        error: null,
-        completedStages: const <String>['probe', 'proxy', 'audio', 'frames'],
-      ),
-      framesSampled: 45,
-      skippedStages: const <String>[],
+    return ArtifactManifestDto(
+      matchId: match.id,
+      originalPath: match.videoPath,
+      artifacts: <ArtifactDto>[
+        ArtifactDto(
+          kind: 'proxy',
+          relativePath: 'proxy/proxy.mp4',
+          state: ArtifactStateDto.final_,
+          sizeBytes: BigInt.from(1024),
+        ),
+        ArtifactDto(
+          kind: 'frames',
+          relativePath: 'frames',
+          state: ArtifactStateDto.final_,
+          sizeBytes: BigInt.from(1024),
+        ),
+      ],
+      missingKinds: const <String>[],
+      originalPresent: true,
     );
   }
 

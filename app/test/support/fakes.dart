@@ -30,6 +30,25 @@ class FakeMediaEngine implements MediaEngine {
   /// Match directory passed to the last artifact call.
   String? lastMatchDir;
 
+  /// Match identifier passed to the last artifact call.
+  String? lastMatchId;
+
+  /// Job identifiers handed out by [startArtifacts], in order.
+  final List<String> startedJobs = <String>[];
+
+  /// State [jobStatus] reports for a started job.
+  JobStateDto jobState = JobStateDto.completed;
+
+  /// Reason [jobStatus] reports when [jobState] is failed.
+  String? jobError;
+
+  /// Number of status and cancel calls.
+  int jobStatusCalls = 0;
+  int jobCancelCalls = 0;
+
+  /// Match directory passed to the last manifest call.
+  String? lastManifestDir;
+
   @override
   Future<MediaMetadataDto> probe(String path) async {
     probeCalls += 1;
@@ -51,7 +70,7 @@ class FakeMediaEngine implements MediaEngine {
   }
 
   @override
-  Future<MediaImportResultDto> generateArtifacts({
+  Future<JobHandleDto> startArtifacts({
     required String matchId,
     required String originalPath,
     required String matchDir,
@@ -59,51 +78,85 @@ class FakeMediaEngine implements MediaEngine {
   }) async {
     artifactCalls += 1;
     lastMatchDir = matchDir;
+    lastMatchId = matchId;
     final error = failure;
     if (error != null) {
       throw error;
     }
-    return MediaImportResultDto(
-      metadata: await probe(originalPath),
-      manifest: ArtifactManifestDto(
-        matchId: matchId,
-        originalPath: originalPath,
-        artifacts: <ArtifactDto>[
-          ArtifactDto(
-            kind: 'proxy',
-            relativePath: 'proxy/proxy.mp4',
-            state: ArtifactStateDto.final_,
-            sizeBytes: BigInt.from(2048),
-          ),
-        ],
-        missingKinds: const <String>[],
-        originalPresent: true,
-      ),
-      job: JobStatusDto(
-        jobId: 'job-1',
-        matchId: matchId,
-        state: JobStateDto.completed,
-        stage: 'frames',
-        progress: null,
-        error: null,
-        completedStages: const <String>['probe', 'proxy', 'audio', 'frames'],
-      ),
-      framesSampled: 45,
-      skippedStages: const <String>[],
-    );
+    final jobId = 'job-${startedJobs.length + 1}';
+    startedJobs.add(jobId);
+    return JobHandleDto(jobId: jobId, matchId: matchId);
   }
 
   @override
   Future<ArtifactManifestDto> manifest(String matchDir) async {
-    throw UnimplementedError('manifest is not used in these tests');
+    lastManifestDir = matchDir;
+    return ArtifactManifestDto(
+      matchId: lastMatchId ?? 'match-1',
+      originalPath: 'original.mp4',
+      artifacts: <ArtifactDto>[
+        ArtifactDto(
+          kind: 'proxy',
+          relativePath: 'proxy/proxy.mp4',
+          state: ArtifactStateDto.final_,
+          sizeBytes: BigInt.from(2048),
+        ),
+      ],
+      missingKinds: const <String>[],
+      originalPresent: true,
+    );
   }
 
   @override
-  Future<ArtifactManifestDto> regenerate(
+  Future<JobHandleDto> startRegenerate(
     String matchDir, {
     required double samplingRate,
   }) async {
-    throw UnimplementedError('regenerate is not used in these tests');
+    lastMatchDir = matchDir;
+    final error = failure;
+    if (error != null) {
+      throw error;
+    }
+    final jobId = 'job-${startedJobs.length + 1}';
+    startedJobs.add(jobId);
+    return JobHandleDto(jobId: jobId, matchId: lastMatchId ?? 'match-1');
+  }
+
+  @override
+  Future<JobStatusDto> jobStatus(String jobId) async {
+    jobStatusCalls += 1;
+    return JobStatusDto(
+      jobId: jobId,
+      matchId: lastMatchId ?? 'match-1',
+      state: jobState,
+      stage: 'frames',
+      progress: null,
+      error: jobError,
+      completedStages: const <String>['probe', 'proxy', 'audio', 'frames'],
+    );
+  }
+
+  @override
+  Future<JobStatusDto> jobCancel(String jobId) async {
+    jobCancelCalls += 1;
+    return jobStatus(jobId);
+  }
+
+  /// Export requests passed to [startExport].
+  final List<ExportRequestDto> exportRequests = <ExportRequestDto>[];
+
+  @override
+  Future<JobHandleDto> startExport(ExportRequestDto request) async {
+    lastMatchId = request.matchId;
+    lastMatchDir = request.matchDir;
+    final error = failure;
+    if (error != null) {
+      throw error;
+    }
+    exportRequests.add(request);
+    final jobId = 'job-${startedJobs.length + 1}';
+    startedJobs.add(jobId);
+    return JobHandleDto(jobId: jobId, matchId: request.matchId);
   }
 }
 

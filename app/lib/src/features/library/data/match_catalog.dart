@@ -29,12 +29,13 @@ class MatchCatalog {
   final Database _database;
 
   /// Schema version written by this build.
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
 
   /// All migrations, in ascending version order.
   static const List<Migration> defaultMigrations = <Migration>[
     Migration(version: 1, apply: _createInitialSchema),
     Migration(version: 2, apply: _addRecordingOrigin),
+    Migration(version: 3, apply: _addEditingRecords),
   ];
 
   /// Open (and migrate) the catalog.
@@ -123,6 +124,11 @@ class MatchCatalog {
       );
       await txn.delete('score_events', where: 'match_id = ?', whereArgs: args);
       await txn.delete('rallies', where: 'match_id = ?', whereArgs: args);
+      await txn.delete(
+        'export_settings',
+        where: 'match_id = ?',
+        whereArgs: args,
+      );
       await txn.delete('matches', where: 'id = ?', whereArgs: args);
     });
   }
@@ -227,6 +233,51 @@ class MatchCatalog {
   static Future<void> _addRecordingOrigin(Database db) async {
     await db.execute('ALTER TABLE matches ADD COLUMN original_path TEXT');
     await db.execute('ALTER TABLE matches ADD COLUMN source_bytes INTEGER');
+  }
+
+  /// Record what the user decided about a match's rallies and highlight reel.
+  ///
+  /// Additive: a version-2 install keeps every match, rally, score event, and
+  /// clip. `highlight_clips` gains the rally a clip came from — nullable,
+  /// because a clip can be kept from a span that was never scored — and the
+  /// order the user put it in, which is a different thing from `rank`, the
+  /// quality an automatic ranker assigned. Existing rows take their order from
+  /// `rank` where one exists and from their position in the recording otherwise.
+  static Future<void> _addEditingRecords(Database db) async {
+    await db.execute(
+      'ALTER TABLE highlight_clips ADD COLUMN rally_id TEXT '
+      'REFERENCES rallies(id) ON DELETE SET NULL',
+    );
+    await db.execute(
+      'ALTER TABLE highlight_clips ADD COLUMN order_index INTEGER NOT NULL '
+      'DEFAULT 0',
+    );
+    await db.execute('''
+      UPDATE highlight_clips
+      SET order_index = COALESCE(
+        CAST(rank AS INTEGER),
+        CAST(start_seconds * 1000 AS INTEGER)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX idx_highlight_clips_order '
+      'ON highlight_clips(match_id, order_index)',
+    );
+
+    // One row per match: what the user last chose for the export, not a record
+    // of what was rendered. The rendered file is a derived artifact and lives in
+    // the match manifest, so there is one source of truth for each file.
+    await db.execute('''
+      CREATE TABLE export_settings (
+        match_id TEXT PRIMARY KEY REFERENCES matches(id) ON DELETE CASCADE,
+        title TEXT,
+        music_path TEXT,
+        music_gain REAL NOT NULL DEFAULT 0.25,
+        lead_in_seconds REAL NOT NULL DEFAULT 1.0,
+        lead_out_seconds REAL NOT NULL DEFAULT 1.0,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
   }
 
   static Map<String, Object?> _matchToRow(MatchRecord match) =>

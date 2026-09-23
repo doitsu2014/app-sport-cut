@@ -25,6 +25,14 @@ final playbackControllerFactoryProvider = Provider<PlaybackController Function()
   (ref) => VideoPlayerPlaybackController.new,
 );
 
+/// The engine, as the features use it.
+///
+/// Feature code talks to the engine through [MediaEngine] rather than the bridge
+/// directly, so a screen can be tested without the native library.
+final mediaEngineProvider = Provider<MediaEngine>(
+  (ref) => BridgeMediaEngine(ref.watch(sportcutEngineProvider)),
+);
+
 /// The application's catalog database.
 final matchCatalogProvider = FutureProvider<MatchCatalog>((ref) async {
   final path = '${await getDatabasesPath()}/sportcut.db';
@@ -34,7 +42,7 @@ final matchCatalogProvider = FutureProvider<MatchCatalog>((ref) async {
 /// Read and write matches.
 final matchRepositoryProvider = FutureProvider<MatchLibrary>((ref) async {
   final catalog = await ref.watch(matchCatalogProvider.future);
-  final engine = BridgeMediaEngine(ref.watch(sportcutEngineProvider));
+  final engine = ref.watch(mediaEngineProvider);
   return MatchRepository(
     catalog: catalog,
     engine: engine,
@@ -50,11 +58,13 @@ final matchRepositoryProvider = FutureProvider<MatchLibrary>((ref) async {
 final matchListProvider = FutureProvider<List<MatchListEntry>>((ref) async {
   final repository = await ref.watch(matchRepositoryProvider.future);
   final matches = await repository.listMatches();
+  final scores = await repository.scoreSummaries();
   return <MatchListEntry>[
     for (final match in matches)
       MatchListEntry(
         match: match,
         recordingAvailable: repository.isRecordingAvailable(match),
+        score: scores[match.id],
       ),
   ];
 });

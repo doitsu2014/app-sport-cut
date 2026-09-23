@@ -92,9 +92,9 @@ and/or `flutter test` in `app/` at that point (see "OpenSpec workflow" below).
 - Formatting is `rustfmt` with `core/rustfmt.toml` (100-column width, Unix
   newlines). Run `cargo fmt --all` in `core/`.
 - Crate boundaries mirror the pipeline stages (`common`, `media`, `storage`,
-  `jobs`, `court`, `vision`, `rally`, `score`, `highlight`, `api`). Put new
-  capability in the crate that owns the stage instead of widening an unrelated
-  one.
+  `jobs`, `export`, `court`, `vision`, `rally`, `score`, `highlight`, `api`). Put
+  new capability in the crate that owns the stage instead of widening an
+  unrelated one.
 - Only `sportcut-api` crosses the language boundary. Internal crates are free to
   change because the bridge only sees that facade.
 - Keep everything reachable from the media pipeline free of the mobile
@@ -140,7 +140,7 @@ and/or `flutter test` in `app/` at that point (see "OpenSpec workflow" below).
   touch.
 - Given a match directory, the engine writes `manifest.json`,
   `checkpoints.json`, and the `proxy/`, `audio/`, `frames/`, `calibration/`,
-  `tracks/` subdirectories. Keep that layout stable.
+  `tracks/`, and `export/` subdirectories. Keep that layout stable.
 - Derived media belongs outside the repository. Never point an artifact root at
   the checkout; `.gitignore` rules there are only a backstop.
 - Tests and benchmarks generate their own fixtures with `ffmpeg` instead of

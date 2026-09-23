@@ -10,6 +10,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use sportcut_common::SportcutError;
+use sportcut_export::{render, EditClip, EditList, ExportContext, TitleCard};
 use sportcut_media::{
     extract_analysis_audio, generate_proxy, probe, regenerate_missing, run as run_pipeline,
     sample_frames, FrameSamplingOptions, MediaMetadata, MediaToolchain, PipelineContext,
@@ -111,6 +112,34 @@ enum Command {
         #[arg(long, default_value_t = 1.0)]
         rate: f64,
     },
+
+    /// Render a highlight reel from an explicit list of clips.
+    Export {
+        /// Recording to read; referenced in place, never modified.
+        #[arg(long)]
+        input: PathBuf,
+        /// Match directory; the reel is written into its export/ sub-directory.
+        #[arg(long)]
+        match_dir: PathBuf,
+        /// Clip spans as `start:end`, in seconds, repeated per clip.
+        #[arg(long = "clip", value_name = "START:END")]
+        clips: Vec<String>,
+        /// Padding added before and after each clip, in seconds.
+        #[arg(long, default_value_t = 1.0)]
+        padding: f64,
+        /// Image composited over every clip, for developing the scoreboard path.
+        #[arg(long)]
+        overlay: Option<PathBuf>,
+        /// Title card image, shown before the first clip.
+        #[arg(long)]
+        title_image: Option<PathBuf>,
+        /// How long the title card is shown, in seconds.
+        #[arg(long, default_value_t = 2.5)]
+        title_seconds: f64,
+        /// Background music, mixed under the match audio.
+        #[arg(long)]
+        music: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -145,6 +174,25 @@ fn run(cli: Cli) -> Result<(), Failure> {
         } => command_import(&input, &match_root, &match_id, rate, json),
         Command::Inspect { match_dir, json } => command_inspect(&match_dir, json),
         Command::Regenerate { match_dir, rate } => command_regenerate(&match_dir, rate),
+        Command::Export {
+            input,
+            match_dir,
+            clips,
+            padding,
+            overlay,
+            title_image,
+            title_seconds,
+            music,
+        } => command_export(
+            &input,
+            &match_dir,
+            &clips,
+            padding,
+            overlay,
+            title_image,
+            title_seconds,
+            music,
+        ),
     }
 }
 
@@ -307,6 +355,87 @@ fn command_regenerate(match_dir: &std::path::Path, rate: f64) -> Result<(), Fail
     } else {
         println!("regenerated: {}", format_kinds(&regenerated));
     }
+    Ok(())
+}
+
+/// Parse one `start:end` clip span.
+fn parse_span(span: &str, index: usize) -> Result<(f64, f64), Failure> {
+    let (start, end) = span.split_once(':').ok_or_else(|| {
+        Failure::Message(format!(
+            "clip {} is {span:?}; expected START:END in seconds",
+            index + 1
+        ))
+    })?;
+    let start = start
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| Failure::Message(format!("clip {} has an unreadable start", index + 1)))?;
+    let end = end
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| Failure::Message(format!("clip {} has an unreadable end", index + 1)))?;
+    Ok((start, end))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn command_export(
+    input: &std::path::Path,
+    match_dir: &std::path::Path,
+    spans: &[String],
+    padding: f64,
+    overlay: Option<PathBuf>,
+    title_image: Option<PathBuf>,
+    title_seconds: f64,
+    music: Option<PathBuf>,
+) -> Result<(), Failure> {
+    require_file(input)?;
+    if spans.is_empty() {
+        return Err(Failure::Message(
+            "at least one --clip START:END is needed".to_string(),
+        ));
+    }
+
+    // The score is the client's job; the harness renders without one so the
+    // clips, the compositing, and the audio mix can be developed on their own.
+    let clips = spans
+        .iter()
+        .enumerate()
+        .map(|(index, span)| {
+            let (start_seconds, end_seconds) = parse_span(span, index)?;
+            Ok(EditClip {
+                start_seconds,
+                end_seconds,
+                overlay: overlay.clone(),
+            })
+        })
+        .collect::<Result<Vec<_>, Failure>>()?;
+
+    let directory = MatchDirectory::new(match_dir);
+    directory.create().map_err(to_failure)?;
+
+    let mut edit_list = EditList::new(input, directory.resolve("export/highlight.mp4"));
+    edit_list.clips = clips;
+    edit_list.lead_in_seconds = padding;
+    edit_list.lead_out_seconds = padding;
+    edit_list.title = title_image.map(|image| TitleCard {
+        image,
+        seconds: title_seconds,
+    });
+    edit_list.music = music;
+
+    let context = ExportContext {
+        cancel: sportcut_common::CancelToken::new(),
+        progress: &sportcut_common::NoopProgress,
+    };
+    let rendered = render(&edit_list, &toolchain()?, &context).map_err(to_failure)?;
+
+    println!(
+        "reel written: {} ({:.1}s, {} clips, {} bytes)",
+        rendered.path.display(),
+        rendered.duration_seconds,
+        rendered.clip_count,
+        rendered.size_bytes
+    );
     Ok(())
 }
 

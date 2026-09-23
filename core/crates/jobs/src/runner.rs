@@ -7,7 +7,7 @@ use sportcut_storage::{ArtifactManifest, MatchDirectory};
 
 use crate::checkpoint::CheckpointStore;
 use crate::id::JobId;
-use crate::registry::JobRegistry;
+use crate::registry::{JobLease, JobRegistry};
 use crate::session::{JobContext, JobSession};
 use crate::state::JobState;
 
@@ -18,10 +18,16 @@ pub struct JobPlan {
     pub match_id: String,
     /// Stages, in the order they must run.
     pub stages: Vec<String>,
+    /// Whether the plan participates in checkpoint resume. Not public: a plan
+    /// that skips resume does so deliberately, through [`JobPlan::without_resume`].
+    resume: bool,
 }
 
 impl JobPlan {
     /// Build a plan from stage names.
+    ///
+    /// A plan resumes by default: stages the checkpoint file records as complete
+    /// are not re-executed, and the stages that do run are recorded there.
     pub fn new<I, S>(match_id: impl Into<String>, stages: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -30,7 +36,25 @@ impl JobPlan {
         Self {
             match_id: match_id.into(),
             stages: stages.into_iter().map(Into::into).collect(),
+            resume: true,
         }
+    }
+
+    /// A plan that runs every stage it lists, whatever the checkpoints say, and
+    /// records nothing.
+    ///
+    /// Repairing a match works this way. What to re-run is decided from the
+    /// artifact manifest — a proxy recorded as complete but missing from disk
+    /// still has to be rebuilt — so the checkpoint file must neither skip a
+    /// stage nor gain a stage that no pipeline run produced.
+    pub fn without_resume(mut self) -> Self {
+        self.resume = false;
+        self
+    }
+
+    /// Whether stages recorded as complete are skipped.
+    pub fn resumes(&self) -> bool {
+        self.resume
     }
 }
 
@@ -47,13 +71,37 @@ pub struct JobRun {
     pub skipped_stages: Vec<String>,
 }
 
-/// Execute a plan, resuming from checkpoints and honouring cancellation.
+/// Execute a plan, admitting it first, resuming from checkpoints, and honouring
+/// cancellation.
 ///
 /// The stage runner receives the stage label and a [`JobContext`] for progress
 /// and cancellation. It returns `Err(SportcutError::Cancelled)` (or the token
 /// is observed as cancelled) to stop the job.
+///
+/// Use [`execute_admitted`] instead when the caller has already taken an
+/// admission slot. That is what lets a start call reject a second heavy job
+/// synchronously, before any work is handed to another thread.
 pub fn execute<F>(
     registry: &Arc<JobRegistry>,
+    session: &Arc<JobSession>,
+    checkpoints: &CheckpointStore,
+    plan: &JobPlan,
+    stage_runner: F,
+) -> Result<JobRun>
+where
+    F: FnMut(&str, &JobContext) -> Result<()>,
+{
+    // Admission happens before any work: a rejected job never starts.
+    let lease = registry.try_admit(session.id().clone(), &plan.match_id)?;
+    execute_admitted(lease, session, checkpoints, plan, stage_runner)
+}
+
+/// Execute a plan against an admission slot the caller already holds.
+///
+/// The slot is released when this returns, whether the job completed, failed,
+/// or was cancelled.
+pub fn execute_admitted<F>(
+    lease: JobLease,
     session: &Arc<JobSession>,
     checkpoints: &CheckpointStore,
     plan: &JobPlan,
@@ -62,6 +110,9 @@ pub fn execute<F>(
 where
     F: FnMut(&str, &JobContext) -> Result<()>,
 {
+    // Held for the whole run; dropping it frees the admission slot.
+    let _lease = lease;
+
     if plan.match_id != session.match_id() {
         return Err(SportcutError::InvalidInput(format!(
             "job {} belongs to match {}, not {}",
@@ -71,16 +122,17 @@ where
         )));
     }
 
-    // Admission happens before any work: a rejected job never starts.
-    let _lease = registry.try_admit(session.id().clone(), &plan.match_id)?;
-
     let context = session.context();
-    let mut completed = checkpoints.completed_stages()?;
+    let mut completed = if plan.resumes() {
+        checkpoints.completed_stages()?
+    } else {
+        Vec::new()
+    };
     let mut executed = Vec::new();
     let mut skipped = Vec::new();
 
     for stage in &plan.stages {
-        if completed.iter().any(|entry| entry == stage) {
+        if plan.resumes() && completed.iter().any(|entry| entry == stage) {
             skipped.push(stage.clone());
             context.report(stage, 1.0, Some("skipped: already complete".to_string()));
             continue;
@@ -95,12 +147,14 @@ where
 
         match stage_runner(stage, &context) {
             Ok(()) => {
-                checkpoints.record_stage_complete(
-                    session.id(),
-                    &plan.match_id,
-                    stage,
-                    JobState::Running,
-                )?;
+                if plan.resumes() {
+                    checkpoints.record_stage_complete(
+                        session.id(),
+                        &plan.match_id,
+                        stage,
+                        JobState::Running,
+                    )?;
+                }
                 completed.push(stage.clone());
                 executed.push(stage.clone());
                 context.report(stage, 1.0, None);
@@ -111,7 +165,9 @@ where
             Err(error) => {
                 let reason = error.to_string();
                 session.fail(stage, reason.clone());
-                checkpoints.set_state(session.id(), &plan.match_id, JobState::Failed)?;
+                if plan.resumes() {
+                    checkpoints.set_state(session.id(), &plan.match_id, JobState::Failed)?;
+                }
                 return Err(SportcutError::JobFailed {
                     job_id: session.id().to_string(),
                     stage: stage.clone(),
@@ -122,7 +178,9 @@ where
     }
 
     session.complete();
-    checkpoints.set_state(session.id(), &plan.match_id, JobState::Completed)?;
+    if plan.resumes() {
+        checkpoints.set_state(session.id(), &plan.match_id, JobState::Completed)?;
+    }
 
     Ok(JobRun {
         job_id: session.id().clone(),
@@ -139,7 +197,9 @@ fn finish_cancelled(
     error: SportcutError,
 ) -> Result<JobRun> {
     session.cancel();
-    checkpoints.set_state(session.id(), &plan.match_id, JobState::Cancelled)?;
+    if plan.resumes() {
+        checkpoints.set_state(session.id(), &plan.match_id, JobState::Cancelled)?;
+    }
     mark_artifacts_non_final(checkpoints.match_dir())?;
     Err(error)
 }

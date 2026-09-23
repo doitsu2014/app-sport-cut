@@ -91,6 +91,18 @@ pub struct JobStatusDto {
     pub completed_stages: Vec<String>,
 }
 
+/// Handle for a job the client started and can now follow.
+///
+/// Returned as soon as the job is admitted, before any work has run. The
+/// identifier is the value [`crate::job_status`] and [`crate::job_cancel`] take.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobHandleDto {
+    /// Stable job identifier.
+    pub job_id: String,
+    /// Match the job works on.
+    pub match_id: String,
+}
+
 /// Whether a recorded artifact is a result or partial output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -144,17 +156,50 @@ pub struct MediaImportRequestDto {
     pub sampling_rate: f64,
 }
 
-/// Result of an import job.
+/// One clip in an export request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MediaImportResultDto {
-    /// Metadata read from the original recording.
-    pub metadata: MediaMetadataDto,
-    /// The artifact manifest after the job.
-    pub manifest: ArtifactManifestDto,
-    /// Final job status, including the stages that ran and were skipped.
-    pub job: JobStatusDto,
-    /// Number of frames sampled by this run.
-    pub frames_sampled: u32,
-    /// Stages skipped because a checkpoint recorded them as complete.
-    pub skipped_stages: Vec<String>,
+pub struct EditClipDto {
+    /// Start of the clip in the source recording, in seconds.
+    pub start_seconds: f64,
+    /// End of the clip in the source recording, in seconds.
+    pub end_seconds: f64,
+    /// Image the application rendered of the score at this clip, composited
+    /// over it for its whole duration.
+    pub overlay_path: Option<String>,
+}
+
+/// The card shown before the first clip.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EditTitleDto {
+    /// Image the application rendered for the title card.
+    pub image_path: String,
+    /// How long the card is shown, in seconds.
+    pub seconds: f64,
+}
+
+/// Everything needed to render one highlight video.
+///
+/// The engine renders from this list and never reads the application's catalog.
+/// Scores and titles arrive as images the application drew, because burning text
+/// needs a font-capable media toolchain and compositing an image does not.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExportRequestDto {
+    /// Match the export belongs to.
+    pub match_id: String,
+    /// Directory holding this match's artifacts; the reel is written inside it.
+    pub match_dir: String,
+    /// Recording to read. Referenced in place, never modified.
+    pub source_path: String,
+    /// Clips, in the order they must appear in the reel.
+    pub clips: Vec<EditClipDto>,
+    /// Material added before each clip, in seconds.
+    pub lead_in_seconds: f64,
+    /// Material added after each clip, in seconds.
+    pub lead_out_seconds: f64,
+    /// Title card, when the user asked for one.
+    pub title: Option<EditTitleDto>,
+    /// Music mixed under the match audio.
+    pub music_path: Option<String>,
+    /// Music volume relative to the match audio, in the range `0.0..=1.0`.
+    pub music_gain: f64,
 }

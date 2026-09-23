@@ -302,10 +302,11 @@ void main() {
       () async {
     final match = await repository.importVideo(PickedVideo(path: recording.path));
 
-    final result = await repository.generateArtifacts(match, samplingRate: 2);
-    expect(result.job.state, JobStateDto.completed);
-    expect(result.framesSampled, 45);
+    final manifest = await repository.generateArtifacts(match, samplingRate: 2);
+    expect(manifest.artifacts.single.kind, 'proxy');
     expect(engine.lastMatchDir, match.matchDir);
+    expect(engine.startedJobs, hasLength(1));
+    expect(engine.jobStatusCalls, greaterThan(0));
 
     engine = FakeMediaEngine(
       failure: SportcutEngineException('ffmpeg failed: disk full'),

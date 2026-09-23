@@ -15,12 +15,53 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sportcut/src/bridge/sportcut_engine.dart';
+import 'package:sportcut/src/features/export/data/overlay_renderer.dart';
 
 void main() {
   late Directory lab;
   late SportcutEngine engine;
 
+  /// Follow a started job until it stops, the way the client polls.
+  Future<JobStatusDto> awaitJob(String jobId) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 120));
+    while (true) {
+      final status = await engine.jobStatus(jobId);
+      switch (status.state) {
+        case JobStateDto.completed:
+        case JobStateDto.cancelled:
+        case JobStateDto.failed:
+          return status;
+        case JobStateDto.pending:
+        case JobStateDto.running:
+          if (DateTime.now().isAfter(deadline)) {
+            fail('job $jobId never finished: $status');
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    }
+  }
+
+  /// Start an import and wait for it to stop.
+  Future<JobStatusDto> importMatch({
+    required String matchId,
+    required String originalPath,
+    required String matchDir,
+    double samplingRate = 2,
+  }) async {
+    final handle = await engine.startImport(
+      matchId: matchId,
+      originalPath: originalPath,
+      matchDir: matchDir,
+      samplingRate: samplingRate,
+    );
+    expect(handle.matchId, equals(matchId));
+    return awaitJob(handle.jobId);
+  }
+
   setUpAll(() async {
+    // Rasterizing the scoreboard overlay goes through `dart:ui`, which needs a
+    // binding even though this is not a widget test.
+    TestWidgetsFlutterBinding.ensureInitialized();
     lab = await Directory.systemTemp.createTemp('sportcut-bridge-test');
     engine = await SportcutEngine.initialize();
   });
@@ -49,55 +90,59 @@ void main() {
     expect(metadata.durationSeconds, closeTo(2.0, 0.5));
 
     final matchDir = Directory('${lab.path}/matches/match-1');
-    final result = await engine.importMatch(
+    final job = await importMatch(
       matchId: 'match-1',
       originalPath: video.path,
       matchDir: matchDir.path,
-      samplingRate: 2,
     );
 
-    expect(result.job.state, equals(JobStateDto.completed));
-    expect(result.job.completedStages.length, equals(4));
-    expect(result.skippedStages, isEmpty);
-    expect(result.framesSampled, greaterThan(0));
-    expect(result.manifest.originalPresent, isTrue);
-    expect(result.manifest.missingKinds, isEmpty);
+    expect(job.state, equals(JobStateDto.completed));
+    expect(job.completedStages.length, equals(4));
+
+    final manifest = await engine.matchManifest(matchDir.path);
+    expect(manifest.originalPresent, isTrue);
+    expect(manifest.missingKinds, isEmpty);
 
     final kinds =
-        result.manifest.artifacts.map((artifact) => artifact.kind).toList();
+        manifest.artifacts.map((artifact) => artifact.kind).toList();
     expect(kinds, containsAll(<String>['proxy', 'analysis_audio', 'frames']));
     expect(File('${matchDir.path}/proxy/proxy.mp4').existsSync(), isTrue);
     expect(File('${matchDir.path}/audio/analysis.m4a').existsSync(), isTrue);
     expect(Directory('${matchDir.path}/frames').existsSync(), isTrue);
+    expect(
+      Directory('${matchDir.path}/frames').listSync().isNotEmpty,
+      isTrue,
+      reason: 'the import samples frames',
+    );
 
     // The original recording is referenced in place and never modified.
     expect(await video.readAsBytes(), equals(originalBytes));
 
     // Importing again resumes from the checkpoints and redoes nothing.
-    final second = await engine.importMatch(
+    final second = await importMatch(
       matchId: 'match-1',
       originalPath: video.path,
       matchDir: matchDir.path,
-      samplingRate: 2,
     );
-    expect(second.job.state, equals(JobStateDto.completed));
-    expect(second.skippedStages.length, equals(4));
+    expect(second.state, equals(JobStateDto.completed));
+    expect(second.completedStages.length, equals(4));
   });
 
   test('a source without audio imports and reports no analysis audio', () async {
     final video = await _generateVideo(lab, 'silent.mp4', withAudio: false);
     final matchDir = Directory('${lab.path}/matches/silent-match');
 
-    final result = await engine.importMatch(
+    final job = await importMatch(
       matchId: 'silent-match',
       originalPath: video.path,
       matchDir: matchDir.path,
       samplingRate: 1,
     );
 
+    final manifest = await engine.matchManifest(matchDir.path);
     final kinds =
-        result.manifest.artifacts.map((artifact) => artifact.kind).toList();
-    expect(result.job.state, equals(JobStateDto.completed));
+        manifest.artifacts.map((artifact) => artifact.kind).toList();
+    expect(job.state, equals(JobStateDto.completed));
     expect(kinds, isNot(contains('analysis_audio')));
     expect(kinds, contains('proxy'));
   });
@@ -106,11 +151,10 @@ void main() {
     final video = await _generateVideo(lab, 'repair.mp4', withAudio: true);
     final matchDir = Directory('${lab.path}/matches/repair-match');
 
-    await engine.importMatch(
+    await importMatch(
       matchId: 'repair-match',
       originalPath: video.path,
       matchDir: matchDir.path,
-      samplingRate: 2,
     );
 
     // Move the derived artifacts aside, as a user clearing space would.
@@ -123,11 +167,71 @@ void main() {
     expect(damaged.missingKinds, containsAll(<String>['proxy', 'frames']));
     expect(damaged.originalPresent, isTrue);
 
-    final repaired =
-        await engine.regenerateMatch(matchDir.path, samplingRate: 2);
+    final repair = await engine.startRegenerate(matchDir.path, samplingRate: 2);
+    expect((await awaitJob(repair.jobId)).state, equals(JobStateDto.completed));
+
+    final repaired = await engine.matchManifest(matchDir.path);
     expect(repaired.missingKinds, isEmpty);
     expect(File('${matchDir.path}/proxy/proxy.mp4').existsSync(), isTrue);
     expect(Directory('${matchDir.path}/frames').existsSync(), isTrue);
+  });
+
+  test('a reel renders through the bridge and is recorded as an artifact',
+      () async {
+    final video = await _generateVideo(lab, 'reel.mp4', withAudio: true);
+    final matchDir = Directory('${lab.path}/matches/reel-match');
+    final first = await importMatch(
+      matchId: 'reel-match',
+      originalPath: video.path,
+      matchDir: matchDir.path,
+    );
+    expect(first.state, equals(JobStateDto.completed));
+
+    // The scoreboard is drawn by the application, not burned in by the engine.
+    final overlay = await const OverlayRenderer().writeScoreboard(
+      path: '${matchDir.path}/export/overlays/score-0.png',
+      width: 320,
+      height: 240,
+      leftScore: 3,
+      rightScore: 2,
+    );
+    expect(overlay.existsSync(), isTrue);
+
+    final handle = await engine.startExport(
+      ExportRequestDto(
+        matchId: 'reel-match',
+        matchDir: matchDir.path,
+        sourcePath: video.path,
+        clips: <EditClipDto>[
+          EditClipDto(
+            startSeconds: 0.5,
+            endSeconds: 1.5,
+            overlayPath: overlay.path,
+          ),
+        ],
+        leadInSeconds: 0,
+        leadOutSeconds: 0,
+        title: null,
+        musicPath: null,
+        musicGain: 0.25,
+      ),
+    );
+    expect((await awaitJob(handle.jobId)).state, equals(JobStateDto.completed));
+
+    final manifest = await engine.matchManifest(matchDir.path);
+    final exported =
+        manifest.artifacts.where((artifact) => artifact.kind == 'export');
+    expect(exported, hasLength(1));
+    // The render did not displace what the import produced.
+    expect(
+      manifest.artifacts.map((artifact) => artifact.kind),
+      containsAll(<String>['proxy', 'analysis_audio', 'frames', 'export']),
+    );
+    expect(
+      File('${matchDir.path}/${exported.single.relativePath}').existsSync(),
+      isTrue,
+    );
+    expect(exported.single.sizeBytes! > BigInt.zero, isTrue);
   });
 
   test('an unreadable source surfaces a typed engine error', () async {

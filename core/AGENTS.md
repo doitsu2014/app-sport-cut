@@ -33,6 +33,7 @@ cd .. && tools/verify-engine.sh                  # fmt --check + clippy + test
 | `sportcut-media` | `crates/media` | Probe, proxy generation, analysis audio, frame sampling behind `MediaToolchain`. |
 | `sportcut-storage` | `crates/storage` | Match artifact directory, manifest, checkpoint persistence. |
 | `sportcut-jobs` | `crates/jobs` | Job lifecycle, stage-labelled progress, cancellation, resume, concurrency. |
+| `sportcut-export` | `crates/export` | The edit decision list and the highlight-video renderer. |
 | `sportcut-api` | `crates/api` | FFI facade: DTOs, job handles — the only surface across the bridge. |
 | `sportcut-court`, `-vision`, `-rally`, `-score`, `-highlight` | `crates/*` | Pipeline-stage placeholders that later phases fill in. |
 | `sportcut-cli` | `cli` | Headless harness for developing and benchmarking the pipeline. |
@@ -44,8 +45,9 @@ unrelated one. Only `sportcut-api` is exposed across the language boundary.
 
 The engine owns artifact files; the Flutter app owns the SQLite catalog. Inside
 a match directory the engine writes `manifest.json`, `checkpoints.json`, and the
-`proxy/`, `audio/`, `frames/`, `calibration/`, and `tracks/` subdirectories.
-Keep that layout stable, and never copy or modify the original recording.
+`proxy/`, `audio/`, `frames/`, `calibration/`, `tracks/`, and `export/`
+subdirectories. Keep that layout stable, and never copy or modify the original
+recording.
 
 ## Working agreement
 

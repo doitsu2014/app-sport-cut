@@ -65,6 +65,7 @@ void main() {
         'rallies',
         'score_events',
         'highlight_clips',
+        'export_settings',
       ]),
     );
   });
@@ -151,22 +152,52 @@ void main() {
     );
   });
 
-  test('a match written before the recording origin was stored still loads',
+  test('an install written before the editing records migrates in place',
       () async {
-    // A catalog as version 1 wrote it: a match with no recorded origin and no
-    // copy size.
-    final versionOne = await MatchCatalog.open(
+    // A catalog exactly as the previous version wrote it: a match, a confirmed
+    // rally, and a clip recorded before clips recorded where they came from.
+    final previous = await MatchCatalog.open(
       factory: databaseFactoryFfi,
       path: databasePath,
+      migrations: MatchCatalog.defaultMigrations
+          .where((migration) => migration.version <= 2)
+          .toList(),
     );
-    await versionOne.insertMatch(sampleMatch());
-    await versionOne.close();
+    await previous.insertMatch(sampleMatch());
+    await previous.database.insert('rallies', <String, Object?>{
+      'id': 'rally-1',
+      'match_id': 'match-1',
+      'start_seconds': 12.0,
+      'end_seconds': 20.0,
+      'confidence': null,
+      'winner_side': 'left',
+      'status': 'confirmed',
+      'highlight_score': null,
+    });
+    await previous.database.insert('highlight_clips', <String, Object?>{
+      'id': 'clip-1',
+      'match_id': 'match-1',
+      'start_seconds': 12.0,
+      'end_seconds': 20.0,
+      'rank': 3,
+      'selected': 1,
+      'trim_start_seconds': null,
+      'trim_end_seconds': null,
+    });
+    await previous.close();
 
     final migrated = await MatchCatalog.open(
       factory: databaseFactoryFfi,
       path: databasePath,
     );
+    final tables = (await migrated.database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    ))
+        .map((row) => row['name'] as String)
+        .toSet();
     final matches = await migrated.listMatches();
+    final rallies = await migrated.database.query('rallies');
+    final clips = await migrated.database.query('highlight_clips');
     final columns = await migrated.database.rawQuery(
       'PRAGMA table_info(matches)',
     );
@@ -177,10 +208,23 @@ void main() {
       containsAll(<String>['original_path', 'source_bytes']),
       reason: 'the recording-origin columns were not added',
     );
-    expect(matches, hasLength(1));
+    expect(tables, contains('export_settings'));
+    expect(matches, hasLength(1), reason: 'the migration dropped a match');
     expect(matches.single.videoPath, '/Users/someone/Movies/match.mp4');
     expect(matches.single.originalPath, isNull);
     expect(matches.single.sourceBytes, isNull);
+    expect(rallies, hasLength(1), reason: 'the migration dropped a rally');
+    expect(clips, hasLength(1), reason: 'the migration dropped a clip');
+    expect(
+      clips.single['rally_id'],
+      isNull,
+      reason: 'a clip was attached to a rally it never recorded',
+    );
+    expect(
+      clips.single['order_index'],
+      3,
+      reason: 'the existing order should come from the suggestion rank',
+    );
   });
 
   test('a match records where its recording came from and what it costs',

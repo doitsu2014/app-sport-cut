@@ -58,6 +58,7 @@ class LibraryScreen extends ConsumerWidget {
                   : _MatchList(
                       entries: entries,
                       onOpen: (entry) => _open(context, entry),
+                      onReview: (entry) => _review(context, entry),
                       onGenerate: (entry) =>
                           _generateArtifacts(context, ref, entry),
                       onDelete: (entry) => _confirmDelete(context, ref, entry),
@@ -98,11 +99,11 @@ class LibraryScreen extends ConsumerWidget {
     }
     try {
       final repository = await ref.read(matchRepositoryProvider.future);
-      final result = await repository.generateArtifacts(entry.match);
+      final manifest = await repository.generateArtifacts(entry.match);
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Analysis files ready: ${result.manifest.artifacts.length} artifacts',
+            'Analysis files ready: ${manifest.artifacts.length} artifacts',
           ),
         ),
       );
@@ -120,6 +121,20 @@ class LibraryScreen extends ConsumerWidget {
       return;
     }
     Navigator.of(context).pushNamed(AppRoutes.player, arguments: entry.match);
+  }
+
+  /// Open the review session: marking rallies, confirming winners, scoring.
+  ///
+  /// Review needs the recording, so a match whose copy has gone is reported the
+  /// same way playing it is.
+  void _review(BuildContext context, MatchListEntry entry) {
+    if (!entry.recordingAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_unavailableMessage(entry.match))),
+      );
+      return;
+    }
+    Navigator.of(context).pushNamed(AppRoutes.score, arguments: entry.match);
   }
 
   static String _unavailableMessage(MatchRecord match) =>
@@ -257,12 +272,14 @@ class _MatchList extends StatelessWidget {
   const _MatchList({
     required this.entries,
     required this.onOpen,
+    required this.onReview,
     required this.onGenerate,
     required this.onDelete,
   });
 
   final List<MatchListEntry> entries;
   final void Function(MatchListEntry) onOpen;
+  final void Function(MatchListEntry) onReview;
   final void Function(MatchListEntry) onGenerate;
   final void Function(MatchListEntry) onDelete;
 
@@ -290,6 +307,8 @@ class _MatchList extends StatelessWidget {
               switch (value) {
                 case 'open':
                   onOpen(entry);
+                case 'review':
+                  onReview(entry);
                 case 'generate':
                   onGenerate(entry);
                 case 'delete':
@@ -298,6 +317,10 @@ class _MatchList extends StatelessWidget {
             },
             itemBuilder: (context) => const <PopupMenuEntry<String>>[
               PopupMenuItem<String>(value: 'open', child: Text('Play')),
+              PopupMenuItem<String>(
+                value: 'review',
+                child: Text('Review and score'),
+              ),
               PopupMenuItem<String>(
                 value: 'generate',
                 child: Text('Prepare analysis files'),
@@ -320,6 +343,7 @@ class _MatchSubtitle extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final match = entry.match;
+    final score = entry.score;
     final summary = formatMediaSummary(
       width: match.videoWidth,
       height: match.videoHeight,
@@ -336,6 +360,11 @@ class _MatchSubtitle extends StatelessWidget {
           '${formatDuration(match.durationSeconds)}  ·  '
           '${formatMatchDate(match.createdAt)}',
         ),
+        if (score != null)
+          Text(
+            'Score ${score.left}–${score.right}',
+            style: theme.textTheme.bodySmall,
+          ),
         if (summary.isNotEmpty)
           Text(summary, style: theme.textTheme.bodySmall),
         if (!entry.recordingAvailable)

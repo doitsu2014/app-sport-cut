@@ -10,12 +10,13 @@
 /// ```dart
 /// await SportcutEngine.initialize();
 /// final metadata = await SportcutEngine.instance.probe('/path/to/match.mp4');
-/// final result = await SportcutEngine.instance.importMatch(
+ /// final job = await SportcutEngine.instance.startImport(
 ///   matchId: 'match-1',
 ///   originalPath: '/path/to/match.mp4',
 ///   matchDir: '/path/to/matches/match-1',
 ///   samplingRate: 2,
 /// );
+/// final status = await SportcutEngine.instance.jobStatus(job.jobId);
 /// ```
 library;
 
@@ -31,11 +32,14 @@ export 'generated/dto.dart'
         ArtifactDto,
         ArtifactManifestDto,
         ArtifactStateDto,
+        EditClipDto,
+        EditTitleDto,
+        ExportRequestDto,
+        JobHandleDto,
         JobProgressDto,
         JobStateDto,
         JobStatusDto,
         MediaImportRequestDto,
-        MediaImportResultDto,
         MediaMetadataDto,
         OrientationDto;
 
@@ -110,12 +114,14 @@ class SportcutEngine {
   Future<MediaMetadataDto> probe(String path) =>
       _guard(() async => rust.probeMedia(path: path));
 
-  /// Import a recording into [matchDir].
+  /// Start importing a recording into [matchDir].
   ///
-  /// The original file is referenced in place; nothing is copied. Re-importing
-  /// a match whose stages are already checkpointed completes without redoing
-  /// work, and an interrupted import resumes from its last completed stage.
-  Future<MediaImportResultDto> importMatch({
+  /// The recording is referenced in place; nothing is copied. The call returns
+  /// as soon as the job is admitted: follow it with [jobStatus] and read the
+  /// match manifest once it reaches a terminal state. Re-importing a match whose
+  /// stages are already checkpointed completes without redoing work, and an
+  /// interrupted import resumes from its last completed stage.
+  Future<JobHandleDto> startImport({
     required String matchId,
     required String originalPath,
     required String matchDir,
@@ -128,22 +134,40 @@ class SportcutEngine {
           matchDir: matchDir,
           samplingRate: samplingRate,
         );
-        return rust.importMedia(request: request);
+        return rust.startImport(request: request);
       });
 
   /// Read a match's manifest, including which artifacts are missing.
   Future<ArtifactManifestDto> matchManifest(String matchDir) =>
       _guard(() async => rust.matchManifest(matchDir: matchDir));
 
-  /// Rebuild derived artifacts that are recorded but missing from disk.
-  Future<ArtifactManifestDto> regenerateMatch(
+  /// Start rebuilding the derived artifacts a match records but no longer has.
+  Future<JobHandleDto> startRegenerate(
     String matchDir, {
     double samplingRate = 1,
   }) =>
-      _guard(() async => rust.regenerateMatchMedia(
+      _guard(() async => rust.startRegenerateMatchMedia(
             matchDir: matchDir,
             samplingRate: samplingRate,
           ));
+
+  /// Read the current state of a job that was started earlier.
+  Future<JobStatusDto> jobStatus(String jobId) =>
+      _guard(() async => rust.jobStatus(jobId: jobId));
+
+  /// Ask a started job to stop.
+  ///
+  /// Cancellation is cooperative, so the returned status may still be running.
+  Future<JobStatusDto> jobCancel(String jobId) =>
+      _guard(() async => rust.jobCancel(jobId: jobId));
+
+  /// Start rendering a match's highlight video from an edit decision list.
+  ///
+  /// The list is built from the match's catalog records, so the engine never
+  /// reads the application's database. Follow the returned job with [jobStatus]
+  /// and read the match manifest once it reaches a terminal state.
+  Future<JobHandleDto> startExport(ExportRequestDto request) =>
+      _guard(() async => rust.exportHighlight(request: request));
 
   /// Run an engine call, converting engine errors into one exception type.
   Future<T> _guard<T>(Future<T> Function() body) async {

@@ -13,7 +13,14 @@ pub const MANIFEST_FILE: &str = "manifest.json";
 pub const CHECKPOINT_FILE: &str = "checkpoints.json";
 
 /// Sub-directories the engine writes derived artifacts into.
-pub const ARTIFACT_DIRS: [&str; 5] = ["proxy", "audio", "frames", "calibration", "tracks"];
+pub const ARTIFACT_DIRS: [&str; 6] = [
+    "proxy",
+    "audio",
+    "frames",
+    "calibration",
+    "tracks",
+    "export",
+];
 
 /// A match's artifact directory.
 #[derive(Debug, Clone)]

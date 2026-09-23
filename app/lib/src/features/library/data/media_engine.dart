@@ -9,8 +9,11 @@ abstract interface class MediaEngine {
   /// Read metadata from a recording.
   Future<MediaMetadataDto> probe(String path);
 
-  /// Run the import pipeline for a match, producing proxy, audio, and frames.
-  Future<MediaImportResultDto> generateArtifacts({
+  /// Start the import pipeline for a match, producing proxy, audio, and frames.
+  ///
+  /// Returns as soon as the job is admitted; the caller follows it with
+  /// [jobStatus].
+  Future<JobHandleDto> startArtifacts({
     required String matchId,
     required String originalPath,
     required String matchDir,
@@ -20,11 +23,20 @@ abstract interface class MediaEngine {
   /// Read the manifest of a match, including which artifacts are missing.
   Future<ArtifactManifestDto> manifest(String matchDir);
 
-  /// Rebuild derived artifacts that are recorded but missing.
-  Future<ArtifactManifestDto> regenerate(
+  /// Start rebuilding derived artifacts that are recorded but missing.
+  Future<JobHandleDto> startRegenerate(
     String matchDir, {
     required double samplingRate,
   });
+
+  /// Read the current state of a job started through this engine.
+  Future<JobStatusDto> jobStatus(String jobId);
+
+  /// Ask a job started through this engine to stop.
+  Future<JobStatusDto> jobCancel(String jobId);
+
+  /// Start rendering a highlight video.
+  Future<JobHandleDto> startExport(ExportRequestDto request);
 }
 
 /// [MediaEngine] backed by the real engine across the bridge.
@@ -38,13 +50,13 @@ class BridgeMediaEngine implements MediaEngine {
   Future<MediaMetadataDto> probe(String path) => _engine.probe(path);
 
   @override
-  Future<MediaImportResultDto> generateArtifacts({
+  Future<JobHandleDto> startArtifacts({
     required String matchId,
     required String originalPath,
     required String matchDir,
     required double samplingRate,
   }) =>
-      _engine.importMatch(
+      _engine.startImport(
         matchId: matchId,
         originalPath: originalPath,
         matchDir: matchDir,
@@ -56,9 +68,19 @@ class BridgeMediaEngine implements MediaEngine {
       _engine.matchManifest(matchDir);
 
   @override
-  Future<ArtifactManifestDto> regenerate(
+  Future<JobHandleDto> startRegenerate(
     String matchDir, {
     required double samplingRate,
   }) =>
-      _engine.regenerateMatch(matchDir, samplingRate: samplingRate);
+      _engine.startRegenerate(matchDir, samplingRate: samplingRate);
+
+  @override
+  Future<JobStatusDto> jobStatus(String jobId) => _engine.jobStatus(jobId);
+
+  @override
+  Future<JobStatusDto> jobCancel(String jobId) => _engine.jobCancel(jobId);
+
+  @override
+  Future<JobHandleDto> startExport(ExportRequestDto request) =>
+      _engine.startExport(request);
 }

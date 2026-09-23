@@ -24,6 +24,6 @@ mod state;
 pub use checkpoint::{CheckpointStore, JobCheckpoint};
 pub use id::JobId;
 pub use registry::{JobLease, JobRegistry};
-pub use runner::{execute, mark_artifacts_non_final, JobPlan, JobRun};
+pub use runner::{execute, execute_admitted, mark_artifacts_non_final, JobPlan, JobRun};
 pub use session::{JobContext, JobSession};
 pub use state::{JobProgress, JobState, JobStatus};

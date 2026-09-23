@@ -12,6 +12,12 @@ abstract interface class MatchLibrary {
   /// Every stored match, newest first.
   Future<List<MatchRecord>> listMatches();
 
+  /// The score each match has reached, keyed by match identifier.
+  ///
+  /// The library shows a score on every row, so this is one query for the whole
+  /// list rather than one per match; a match with no confirmed rally is absent.
+  Future<Map<String, ({int left, int right})>> scoreSummaries();
+
   /// Create a match from a chosen recording, taking custody of it.
   ///
   /// The picked file is copied into app-owned storage and it is that copy the
@@ -25,8 +31,9 @@ abstract interface class MatchLibrary {
   /// Whether this match's stored recording can still be read.
   bool isRecordingAvailable(MatchRecord match);
 
-  /// Produce this match's derived artifacts.
-  Future<MediaImportResultDto> generateArtifacts(
+  /// Produce this match's derived artifacts, returning what the match has once
+  /// the engine reports the job finished.
+  Future<ArtifactManifestDto> generateArtifacts(
     MatchRecord match, {
     double samplingRate,
   });

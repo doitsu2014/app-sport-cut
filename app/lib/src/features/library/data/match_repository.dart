@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../../../bridge/sportcut_engine.dart';
+import '../../editing/data/editing_store.dart';
 import '../domain/import_cancel_token.dart';
 import '../domain/match_import_exception.dart';
 import '../domain/match_library.dart';
@@ -45,6 +46,13 @@ class MatchRepository implements MatchLibrary {
   /// Every stored match, newest first.
   @override
   Future<List<MatchRecord>> listMatches() => _catalog.listMatches();
+
+  /// The score each match has reached, for the library list.
+  @override
+  Future<Map<String, ({int left, int right})>> scoreSummaries() =>
+      _editingStore.scoreSummaries();
+
+  late final EditingStore _editingStore = EditingStore(_catalog.database);
 
   /// One match, or `null`.
   Future<MatchRecord?> findMatch(String id) => _catalog.findMatch(id);
@@ -111,17 +119,21 @@ class MatchRepository implements MatchLibrary {
 
   /// Produce this match's derived artifacts (proxy, analysis audio, frames).
   @override
-  Future<MediaImportResultDto> generateArtifacts(
+  Future<ArtifactManifestDto> generateArtifacts(
     MatchRecord match, {
     double samplingRate = 1,
   }) async {
     try {
-      return await _engine.generateArtifacts(
+      final handle = await _engine.startArtifacts(
         matchId: match.id,
         originalPath: match.videoPath,
         matchDir: match.matchDir,
         samplingRate: samplingRate,
       );
+      await _awaitJob(handle.jobId, title: match.title);
+      return await _engine.manifest(match.matchDir);
+    } on MatchImportException {
+      rethrow;
     } on Exception catch (error) {
       throw MatchImportException(
         'Analysis files could not be produced for ${match.title}: $error',
@@ -139,8 +151,57 @@ class MatchRepository implements MatchLibrary {
   Future<ArtifactManifestDto> regenerateArtifacts(
     MatchRecord match, {
     double samplingRate = 1,
-  }) =>
-      _engine.regenerate(match.matchDir, samplingRate: samplingRate);
+  }) async {
+    try {
+      final handle = await _engine.startRegenerate(
+        match.matchDir,
+        samplingRate: samplingRate,
+      );
+      await _awaitJob(handle.jobId, title: match.title);
+      return await _engine.manifest(match.matchDir);
+    } on MatchImportException {
+      rethrow;
+    } on Exception catch (error) {
+      throw MatchImportException(
+        'Analysis files could not be produced for ${match.title}: $error',
+        kind: MatchImportKind.storage,
+        cause: error,
+      );
+    }
+  }
+
+  /// How often a started job's state is read while the caller waits.
+  static const Duration _pollInterval = Duration(milliseconds: 150);
+
+  /// Follow a started job until it stops, and turn its ending into a result.
+  ///
+  /// The engine's work is a job so that a longer one — an export, later — can be
+  /// shown and cancelled; this helper is for the callers that only need to know
+  /// how it ended.
+  Future<void> _awaitJob(String jobId, {required String title}) async {
+    while (true) {
+      final status = await _engine.jobStatus(jobId);
+      switch (status.state) {
+        case JobStateDto.completed:
+          return;
+        case JobStateDto.cancelled:
+          throw MatchImportException(
+            'Producing analysis files for $title was cancelled.',
+            kind: MatchImportKind.cancelled,
+          );
+        case JobStateDto.failed:
+          throw MatchImportException(
+            status.error ??
+                'Analysis files could not be produced for $title: the '
+                    'engine did not say why.',
+            kind: MatchImportKind.storage,
+          );
+        case JobStateDto.pending:
+        case JobStateDto.running:
+          await Future<void>.delayed(_pollInterval);
+      }
+    }
+  }
 
   /// Delete a match.
   ///

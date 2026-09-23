@@ -154,7 +154,11 @@ impl JobSession {
     }
 
     /// Mark the job failed, naming the stage and the reason.
-    pub(crate) fn fail(&self, stage: &str, reason: impl Into<String>) {
+    ///
+    /// Public because a caller that starts a job on another thread can hit a
+    /// failure before any stage runs — discovering the media toolchain, for
+    /// example — and still owes the client a reason.
+    pub fn fail(&self, stage: &str, reason: impl Into<String>) {
         let mut state = self.lock_state();
         state.state = Some(JobState::Failed);
         state.stage = Some(stage.to_string());

@@ -16,6 +16,7 @@ workspace = true
 
 [dependencies]
 sportcut-common = { workspace = true }
+sportcut-export = { workspace = true }
 sportcut-media = { workspace = true }
 sportcut-storage = { workspace = true }
 clap = { workspace = true }

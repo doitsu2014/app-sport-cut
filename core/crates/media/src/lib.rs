@@ -10,7 +10,7 @@
 //! `docs/legal/dependency-register.md`.
 
 mod audio;
-mod exec;
+pub mod exec;
 mod frames;
 mod pipeline;
 mod probe;

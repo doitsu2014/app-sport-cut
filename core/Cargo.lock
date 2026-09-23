@@ -818,6 +818,7 @@ dependencies = [
  "flutter_rust_bridge",
  "serde",
  "sportcut-common",
+ "sportcut-export",
  "sportcut-jobs",
  "sportcut-media",
  "sportcut-storage",
@@ -832,6 +833,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sportcut-common",
+ "sportcut-export",
  "sportcut-media",
  "sportcut-storage",
 ]
@@ -849,6 +851,14 @@ name = "sportcut-court"
 version = "0.1.0"
 dependencies = [
  "sportcut-common",
+]
+
+[[package]]
+name = "sportcut-export"
+version = "0.1.0"
+dependencies = [
+ "sportcut-common",
+ "sportcut-media",
 ]
 
 [[package]]

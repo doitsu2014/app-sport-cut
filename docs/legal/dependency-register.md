@@ -57,7 +57,7 @@ Required by the `project-bootstrap` capability
 | `tempfile` | library | 3.27.0 | crates.io | MIT OR Apache-2.0 | shippable | dev-only | Test fixtures only. |
 | `flutter_rust_bridge` | library | 2.13.0 (pinned, `=`) | crates.io | MIT | shippable | engine | Bridge runtime; version is pinned so regenerated bindings stay compatible. Pulls `tokio` 1.53.1, `futures`, `threadpool`, `log`, `portable-atomic`, `allo-isolate` (all MIT OR Apache-2.0). |
 | `flutter_rust_bridge_codegen` | toolchain | 2.13.0 | crates.io (`cargo install`) | MIT | shippable | dev-only | Code generator. Not linked into the engine; reaches the app only through the Dart package below. |
-| `ffmpeg` / `ffprobe` executables | toolchain | 8.1.1 (development build) | see the toolchain section above | GPL-3.0-or-later for this build | not-shippable | dev-only | The analysis path shells out to this toolchain today. A shipped target needs an LGPL-configured build or a platform-native replacement. |
+| `ffmpeg` / `ffprobe` executables | toolchain | 8.1.1 (development build) | see the toolchain section above | GPL-3.0-or-later for this build | not-shippable | dev-only | The analysis path shells out to this toolchain, and so does the highlight renderer added by `add-manual-editing-and-export`, which also selects `mpeg4` and `aac` — both built into ffmpeg — so nothing here needs a GPL encoder. A shipped target needs an LGPL-configured build or a platform-native renderer; the mobile platforms cannot execute a toolchain at all. |
 
 All Rust dependencies resolve to permissive licenses (MIT, Apache-2.0, BSD,
 ISC, or Unlicense). `cargo-deny`-style automated auditing is not wired up yet;
@@ -78,6 +78,11 @@ crate that is not listed is treated as unaudited.
 | `flutter_rust_bridge` (Dart package) | library | 2.13.0 (pinned in `app/pubspec.yaml`) | pub.dev | MIT | shippable | mobile-client | Must match the Rust crate and generator versions; regenerating bindings with a different generator version is a contract change. |
 | `flutter_lints` | library | ^4.0.0 (dev-dependency) | pub.dev | BSD-3-Clause | shippable | dev-only | Lint rules for the client; not shipped. |
 | `flutter_riverpod` (with `riverpod` 3.4.3) | library | 3.4.3 | pub.dev | MIT | shippable | mobile-client | State management and dependency injection; the plan named Riverpod or Bloc, and this is the choice. |
+| `share_plus` | library | 13.3.0 | pub.dev | BSD-3-Clause | shippable | mobile-client | Hands the finished highlight video to the platform's save and share sheet. Introduced by `add-manual-editing-and-export`. |
+| `share_plus_platform_interface` | library | 7.2.0 | pub.dev | BSD-3-Clause | shippable | mobile-client | Platform interface for `share_plus`, pulled in by it. |
+| `mime` | library | 2.1.0 | pub.dev | BSD-3-Clause | shippable | mobile-client | MIME-type lookup used by `share_plus` when handing a file to the platform. |
+| `url_launcher_platform_interface` | library | 2.3.2 | pub.dev | BSD-3-Clause | shippable | mobile-client | Pulled in by `share_plus`; unused on the mobile targets this change touches. |
+| `url_launcher_linux`, `url_launcher_web`, `url_launcher_windows` | library | 3.2.3 / 2.4.3 / 3.1.6 | pub.dev | BSD-3-Clause | shippable | mobile-client | Transitive companions of `share_plus` for desktop and web; they ship as unused code on iOS and Android. |
 | `path` / `path_provider` | library | 1.9.1 / 2.1.6 | pub.dev | BSD-3-Clause | shippable | mobile-client | Path joining and the platform documents directory for match artifacts. |
 | `file_picker` | library | 13.1.0 | pub.dev | MIT | shippable | mobile-client | Choosing a recording from device storage. |
 | `video_player` | library | 2.14.0 | pub.dev | BSD-3-Clause | shippable | mobile-client | Local playback; it wraps AVPlayer on iOS and ExoPlayer/Media3 on Android, which are the platform decode paths the licensing design prefers. |
@@ -104,7 +109,7 @@ crate that is not listed is treated as unaudited.
 
 | Component | Kind | Version | Source | License | Distribution verdict | Shipped in | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Score overlay font | font | none | not selected | n/a | unresolved | none-yet | Must be licensed for redistributable embedding in an app binary. |
+| Score overlay font | font | none | not bundled | n/a | shippable | none | Not bundled and not distributed. The scoreboard and title card are drawn by the application at runtime with the platform's own font, then handed to the renderer as an image, so nothing is redistributed. See `add-manual-editing-and-export`. |
 | Background music tracks | audio | none | not selected | n/a | unresolved | none-yet | Export music is bundled or user-provided; either way the redistribution terms are recorded here. |
 | Brand assets (icon, logo) | asset | none | project-owned | project copyright | unresolved | none-yet | Project-owned; confirm any third-party components used to produce them. |
 

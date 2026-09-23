@@ -20,18 +20,22 @@ of truth for that feature's behaviour once it exists.
 | Headless CLI harness | Done |
 | `court`, `vision`, `rally`, `score`, `highlight` | Empty crates — fixed boundaries, no implementation |
 
-**Bridge** — `core/crates/api/src/facade.rs` exposes five functions:
-`probe_media`, `import_media`, `match_manifest`, `regenerate_match_media`, and
-`media_import_stages`. It builds a `JobSession` internally but never returns a
-handle, so **the client can observe neither progress nor cancellation for
-engine-side work**. That is the one piece of the job model the client cannot
-reach yet.
+**Bridge** — `core/crates/api/src/facade.rs` exposes the calls the client makes:
+`probe_media`, `match_manifest`, `media_import_stages`, and the start/poll pair
+`start_import` / `start_regenerate_match_media` / `export_highlight` with
+`job_status` and `job_cancel`. Long work returns a job handle instead of blocking
+for the whole run, so the client can show stage-labelled progress and cancel
+while the engine works. The job registry is process-wide, so "one heavy job at a
+time" holds across calls rather than within one.
 
 **Client** (`app/`) — shell, routing, theme, and dependency injection; the match
 library with import custody, media metadata, availability reporting, and
 deletion; offline playback with transport controls; a four-table SQLite catalog
-in which `rallies`, `score_events`, and `highlight_clips` are created and unused.
-Five routes are placeholders: calibration, analysis, score, highlights, export.
+that now writes `rallies`, `score_events`, `highlight_clips`, and
+`export_settings`; a review session for marking rallies and confirming winners;
+a highlight reel with trimming and ordering; an export screen that renders the
+reel; and an analysis screen for the engine's artifacts. One route is still a
+placeholder: calibration.
 
 **Toolchain** — Flutter 3.47.5 and Xcode 26.6 are installed, and the macOS and
 iOS builds both succeed. The Android SDK and a JDK are not installed, so no
@@ -39,7 +43,7 @@ Android build has been produced. The local FFmpeg is a GPL Homebrew build and is
 development-only.
 
 **Verification** — the engine runs 23 tests (`tools/verify-engine.sh`); the
-client runs 52 (`flutter analyze` and `flutter test`), including
+client runs 53 (`flutter analyze` and `flutter test`), including
 `app/test/bridge_test.dart`, which loads the real engine library. The evidence
 is under [`docs/verification/`](../verification/).
 
@@ -55,6 +59,16 @@ needed for that now exists; these four features close it.
 | Trim and export | Choose clips from a match, write `highlight_clips` rows, produce an edited video | Nothing new — playback, probe metadata, the job model, and the artifact layout all exist | **Encoder decision** |
 | Manual score timeline | One-tap winner confirmation, writing `rallies` and `score_events`; the human-in-the-loop loop the product is built around | Nothing | None |
 | Score overlay, music, title card | Burned-in scoreboard, user-supplied music ducked under match audio | Trim and export, manual score timeline | Encoder decision; music asset licensing |
+
+All four are implemented by the change
+[`add-manual-editing-and-export`](../../openspec/changes/add-manual-editing-and-export/proposal.md),
+which is the source of truth for their behavior. One limit is deliberate and
+recorded rather than hidden: **the export renders through the local `ffmpeg`
+toolchain, which only runs on a workstation.** The mobile platforms cannot
+execute a toolchain at all, and the Homebrew build is GPL. The edit is described
+as data — an edit decision list — so the renderer can be replaced by a
+platform-native one without the client or the catalog changing; that replacement
+is the change named in the gates below.
 
 Suggested order: **trim and export → manual score timeline → job progress and
 cancellation as soon as a stage becomes long enough to need it.**
@@ -118,12 +132,12 @@ project does not have yet, so it is the wrong place to spend the next change.
 
 | Gate | Blocks | State |
 | --- | --- | --- |
-| Encoder choice for export | A shippable export. The dev path can use the local ffmpeg | Shipping paths unresolved: the Homebrew build is `not-shippable` (GPL-3.0), LGPL FFmpeg is `unresolved`, platform-native AVFoundation/VideoToolbox and MediaCodec/Media3 are `shippable` |
+| Encoder choice for export | A shippable export | Still unresolved for shipping, but no longer blocking the *work*. `add-manual-editing-and-export` records the decision: the edit is an edit decision list, the first renderer is the local ffmpeg (development only), and the renderer is swappable. The follow-up change `add-platform-export-backend` owns AVFoundation/VideoToolbox and MediaCodec/Media3, and produces H.264 with the platform's hardware encoder |
 | H.264 / AAC patent licensing | A store distribution, separately from the library license | `unresolved` in the register |
 | Inference runtime | Person detection and everything downstream | TensorFlow Lite is `unresolved` (not yet introduced) |
 | Model weights and datasets | Person detection and everything downstream | No weights ship; `models/` holds only a README |
 | Test footage | The Phase 0 success criteria and all computer-vision work | Not available |
-| Platform scope (iOS only, or both) | CI, bridge packaging, and how much platform-native media code is needed | Undecided |
+| Platform scope (iOS only, or both) | `add-platform-export-backend`, CI, bridge packaging, and how much platform-native media code is needed | Undecided. Note this is the same decision as the encoder row above: "which encoder" is really "where media I/O happens", and the mobile platforms can only do it natively |
 | Distribution channel (store or sideload) | How strict the licensing bar is | Undecided |
 
 Every gate above is recorded in

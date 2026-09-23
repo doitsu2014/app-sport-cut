@@ -1,8 +1,11 @@
 /// A match, as the application knows it.
 ///
-/// The original recording is referenced in place: [videoPath] points at the
-/// user's file and is never copied. [matchDir] holds the engine's derived
-/// artifacts for this match.
+/// [videoPath] is the app-owned copy of the recording, taken into custody when
+/// the match was imported: the platform picker hands back a file the operating
+/// system may purge, so the bytes the user picked are copied once and it is that
+/// copy the application plays and analyzes. The file the user selected is left
+/// exactly where it was, and [originalPath] is only a record of where it came
+/// from. [matchDir] holds the engine's derived artifacts for this match.
 class MatchRecord {
   /// Create a match record.
   const MatchRecord({
