@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+publish = false
+authors = ["Sportcut"]
+description = "Offline badminton match analysis engine"
+
+[workspace.dependencies]
+sportcut-common = { path = "crates/common" }
+sportcut-media = { path = "crates/media" }
+sportcut-storage = { path = "crates/storage" }
+sportcut-jobs = { path = "crates/jobs" }
+sportcut-api = { path = "crates/api" }
+sportcut-court = { path = "crates/court" }
+sportcut-vision = { path = "crates/vision" }
+sportcut-rally = { path = "crates/rally" }
+sportcut-score = { path = "crates/score" }
+sportcut-highlight = { path = "crates/highlight" }
+
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tempfile = "3.13"
+
+[workspace.lints.rust]
+# `deny` rather than `forbid`, because the generated bridge glue in
+# sportcut-api contains the FFI `unsafe` blocks and needs a narrow, explicit
+# `#[allow(unsafe_code)]` on that one module. Every crate written by hand still
+# forbids unsafe at its own crate root.
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+dbg_macro = "deny"
+todo = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[profile.dev]
+# Frame sampling and proxy generation are dominated by the media toolchain, but
+# the manifest and checkpoint code paths are exercised often enough to warrant
+# optimized dependencies in local test runs.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2

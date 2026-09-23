@@ -19,3 +19,58 @@ target
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+# Added by code-review-graph
+.code-review-graph/
+
+# --- Flutter / Dart build output -------------------------------------------------
+# Tooling state
+.dart_tool/
+**/.dart_tool/
+.packages
+.pub-cache/
+.pub/
+**/pubspec_overrides.yaml
+
+# Build output
+app/build/
+**/build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.flutter-devtools/
+**/Flutter/ephemeral/
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_export_environment.sh
+**/flutter_assets/
+**/Pods/
+**/.symlinks/
+**/android/.gradle/
+**/android/local.properties
+**/*.iml
+
+# Coverage and profiling output
+**/coverage/
+lcov.info
+
+# --- Generated bridge bindings ---------------------------------------------------
+# Bindings are regenerated with tools/generate-bridge.sh, never hand-edited or
+# committed. See docs/plans/README.md.
+app/lib/src/bridge/generated/
+core/crates/api/src/frb_generated.rs
+
+# --- Per-match artifact directories ---------------------------------------------
+# Derived media belongs outside the repository. These rules are a backstop for
+# runs that point their artifact root at the checkout by mistake.
+artifacts/
+matches/
+*.match/
+match-artifacts/
+
+# --- Test media -------------------------------------------------------------------
+# Recordings are large and may not be redistributable. Tests generate their own
+# fixtures with ffmpeg instead of committing footage.
+test-media/
+testdata/
+**/test_media/
+tools/testdata/
+*.mp4
+!docs/**/*.mp4

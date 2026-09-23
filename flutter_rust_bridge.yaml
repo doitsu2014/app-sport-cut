@@ -1,0 +1,20 @@
+# flutter_rust_bridge v2 code generation configuration.
+#
+# Generated files are not committed:
+#   Rust glue   -> core/crates/api/src/frb_generated.rs
+#   Dart bindings -> app/lib/src/bridge/generated/
+#
+# Regenerate with tools/generate-bridge.sh. The version of the code generator
+# must match the flutter_rust_bridge dependency pinned in
+# core/crates/api/Cargo.toml.
+
+# The generator scans the modules where the items are defined; it does not
+# follow `pub use` re-exports. `crate::api` (in core/crates/api/src/lib.rs) is
+# the same surface re-exported for Rust callers.
+rust_input: crate::dto,crate::facade
+rust_root: core/crates/api
+dart_output: app/lib/src/bridge/generated
+
+# The module declaration is committed in core/crates/api/src/lib.rs and gated
+# behind the `bridge` feature, so the generator must not inject its own line.
+add_mod_to_lib: false

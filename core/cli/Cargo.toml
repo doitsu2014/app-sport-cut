@@ -1,0 +1,23 @@
+[package]
+name = "sportcut-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Headless harness for developing and benchmarking the Sportcut engine"
+
+[[bin]]
+name = "sportcut-cli"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+sportcut-common = { workspace = true }
+sportcut-media = { workspace = true }
+sportcut-storage = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

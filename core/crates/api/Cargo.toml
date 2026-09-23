@@ -1,0 +1,36 @@
+[package]
+name = "sportcut-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# A cdylib is what the Flutter builds link against; the staticlib is what the
+# iOS build links into the app binary.
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1.0"
+# Optional: the generated bridge glue is only compiled when the `bridge`
+# feature is on, so the engine workspace keeps building and testing on a
+# machine with no Dart toolchain.
+flutter_rust_bridge = { version = "=2.13.0", optional = true }
+sportcut-common = { workspace = true }
+sportcut-media = { workspace = true }
+sportcut-storage = { workspace = true }
+sportcut-jobs = { workspace = true }
+serde = { workspace = true }
+
+[features]
+default = []
+# Enable when building the library that the Flutter app links against.
+# Requires tools/generate-bridge.sh to have produced frb_generated.rs.
+bridge = ["dep:flutter_rust_bridge"]
+
+[dev-dependencies]
+tempfile = { workspace = true }

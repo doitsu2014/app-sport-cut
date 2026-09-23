@@ -1,1 +1,91 @@
-# app-sport-cut
+# Sportcut — Offline Badminton Match Analyzer
+
+Sportcut imports a badminton match recording from the device, removes the dead
+time, makes score confirmation fast, suggests the best rallies as highlights,
+and exports a polished video — entirely on-device, with no cloud processing.
+
+This repository is greenfield. The product and technical plan lives in
+[docs/README.md](docs/README.md); the implementation plan and milestones live in
+[docs/plans/README.md](docs/plans/README.md).
+
+## Repository layout
+
+| Directory | Responsibility |
+| --- | --- |
+| `core/` | Native Rust engine: the analysis pipeline, the media foundation, the job model, and the single FFI facade. Builds and tests without any mobile toolchain. |
+| `app/` | Flutter mobile client for iOS and Android: match library, review screens, and playback. |
+| `models/` | Model assets and pretrained weights that ship with the app, plus the notes that map each asset to its license register entry. |
+| `tools/` | Developer scripts: environment preflight, engine verification, and bridge regeneration. |
+| `docs/` | Product plan (`docs/README.md`), implementation plan (`docs/plans/`), and legal records (`docs/legal/`) including the dependency register. |
+| `openspec/` | OpenSpec change artifacts. `openspec/changes/bootstrap-project-base/` is the change that created this layout. |
+
+## Prerequisites
+
+The project has two tracks that can be worked on separately. Work out what is
+installed — and what is missing, with remediation steps — with:
+
+```bash
+tools/preflight.sh                 # everything
+tools/preflight.sh --profile engine # only what the engine needs
+```
+
+**Engine track (buildable today).**
+
+- Rust toolchain with `cargo` (1.80 or newer; developed against 1.97).
+- A media toolchain: `ffmpeg` and `ffprobe` on `PATH`.
+  - The probe, proxy, audio, and frame stages shell out to this toolchain, so
+    the license-affecting build configuration matters. `tools/preflight.sh`
+    reads it and flags GPL components, which are not shippable in a proprietary
+    mobile build (see [docs/legal/dependency-register.md](docs/legal/dependency-register.md)).
+
+**Mobile client track (requires a toolchain install).**
+
+- Flutter SDK with Dart (3.x).
+- A full Xcode installation, not just Command Line Tools, for iOS builds.
+- Android SDK with the platform tools for Android builds.
+- A JDK for the Android build.
+
+If the Flutter SDK is not on `PATH`, point the tooling at it explicitly:
+
+```bash
+export SPORTCUT_FLUTTER_BIN=/path/to/flutter/bin
+```
+
+The engine is deliberately independent of the client: everything in `core/`
+builds, lints, and tests on a machine that has no Flutter, Xcode, Android SDK,
+or JDK installed.
+
+## Verification commands
+
+Engine track:
+
+```bash
+tools/verify-engine.sh     # cargo fmt --check, cargo clippy, cargo test
+```
+
+Mobile client track (requires the Flutter SDK):
+
+```bash
+cd app
+flutter pub get
+flutter analyze
+flutter test
+```
+
+Bridge generation and the engine library the app links against:
+
+```bash
+tools/generate-bridge.sh     # Dart bindings + Rust glue (not committed)
+tools/build-engine-lib.sh    # core/crates/api/target/release/libsportcut_api.*
+```
+
+If the Flutter SDK is not on `PATH`, export `SPORTCUT_FLUTTER_BIN` first (see
+the prerequisites above).
+
+## Status
+
+The engine foundation — workspace layout, media pipeline, and job model — is the
+first deliverable, tracked as the OpenSpec change
+`openspec/changes/bootstrap-project-base`. The Flutter shell follows once the
+mobile toolchain is installed, because it cannot be compiled or tested without
+it.
