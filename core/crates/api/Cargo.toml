@@ -21,6 +21,7 @@ anyhow = "1.0"
 # machine with no Dart toolchain.
 flutter_rust_bridge = { version = "=2.13.0", optional = true }
 sportcut-common = { workspace = true }
+sportcut-court = { workspace = true }
 sportcut-export = { workspace = true }
 sportcut-media = { workspace = true }
 sportcut-storage = { workspace = true }

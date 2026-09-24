@@ -352,8 +352,16 @@ fn command_regenerate(match_dir: &std::path::Path, rate: f64) -> Result<(), Fail
 
     if regenerated.is_empty() {
         println!("nothing to regenerate");
-    } else {
-        println!("regenerated: {}", format_kinds(&regenerated));
+        return Ok(());
+    }
+    if !regenerated.rebuilt.is_empty() {
+        println!("regenerated: {}", format_kinds(&regenerated.rebuilt));
+    }
+    if !regenerated.not_rebuildable.is_empty() {
+        println!(
+            "cannot rebuild: {} (user input, or output that needs a caller's request)",
+            format_kinds(&regenerated.not_rebuildable)
+        );
     }
     Ok(())
 }

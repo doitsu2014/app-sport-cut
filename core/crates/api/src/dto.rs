@@ -137,10 +137,106 @@ pub struct ArtifactManifestDto {
     pub original_path: String,
     /// Artifacts recorded for this match.
     pub artifacts: Vec<ArtifactDto>,
-    /// Artifact kinds recorded but missing from disk; these can be regenerated.
+    /// Artifact kinds recorded but missing from disk.
     pub missing_kinds: Vec<String>,
+    /// Missing artifact kinds the engine cannot rebuild on its own, because they
+    /// are the user's own input or need a request the caller supplies.
+    pub not_rebuildable_kinds: Vec<String>,
     /// Whether the original recording is still where the manifest says it is.
     pub original_present: bool,
+}
+
+/// One court corner, in normalized displayed frame coordinates.
+///
+/// Measured in the frame as the user sees it, not in the source file's stored
+/// pixels, so the same value is valid for the preview, the proxy, and the frames
+/// sampled from the proxy.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CourtCornerDto {
+    /// Horizontal position, `0.0` at the left edge.
+    pub x: f64,
+    /// Vertical position, `0.0` at the top edge.
+    pub y: f64,
+}
+
+/// Which way the court runs relative to where the camera was standing.
+///
+/// The four corners are read in image order, so on their own they cannot say
+/// whether the edge nearest the camera is a baseline or a sideline. This is that
+/// answer, and it is what places the net.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CourtOrientationDto {
+    /// The court stretches away from the camera, so the nearest edge is a
+    /// baseline and the net cuts across the court's depth.
+    Away,
+    /// The court stretches across the view, so the nearest edge is a sideline
+    /// and the net cuts across the view from side to side.
+    Across,
+}
+
+/// One calibrated span of a recording.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CalibrationSegmentDto {
+    /// Timestamp on the recording timeline where this segment begins, in
+    /// milliseconds.
+    pub from_ms: i64,
+    /// The four court corners, in the order the user marked them: nearest the
+    /// camera on the left, nearest on the right, farthest on the right, then
+    /// farthest on the left.
+    pub corners: Vec<CourtCornerDto>,
+    /// Which way the court runs relative to the camera.
+    pub orientation: CourtOrientationDto,
+}
+
+/// A match's court calibration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CourtCalibrationDto {
+    /// Schema version of the record.
+    pub schema_version: u32,
+    /// Calibrated spans, in recording order.
+    pub segments: Vec<CalibrationSegmentDto>,
+}
+
+/// The geometry one calibrated segment defines.
+///
+/// The matrices and the outline are the engine's arithmetic, handed over so the
+/// application never has to repeat it. The outline is what the application draws
+/// over the recording; the matrices are what a later stage uses to place a
+/// position on the court.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CourtGeometryDto {
+    /// Row-major 3x3 mapping from normalized image coordinates to court
+    /// coordinates, as nine values.
+    pub image_to_court: Vec<f64>,
+    /// Row-major 3x3 mapping from court coordinates back to normalized image
+    /// coordinates, as nine values.
+    pub court_to_image: Vec<f64>,
+    /// The four court corners, in the order they were marked.
+    pub corners: Vec<CourtCornerDto>,
+    /// The two ends of the net line, in normalized image coordinates.
+    pub net: Vec<CourtCornerDto>,
+}
+
+/// Request to store a match's court calibration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CalibrationSaveRequestDto {
+    /// Directory holding the match's artifacts.
+    pub match_dir: String,
+    /// The calibration to store, replacing any already recorded.
+    pub calibration: CourtCalibrationDto,
+}
+
+/// What storing a calibration did.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CalibrationSaveDto {
+    /// Whether the stored calibration differs from the one it replaced.
+    pub changed: bool,
+    /// Artifact kinds invalidated because they were derived from the previous
+    /// calibration rather than the new one.
+    pub invalidated_kinds: Vec<String>,
+    /// The geometry of each stored segment, in the same order.
+    pub geometry: Vec<CourtGeometryDto>,
 }
 
 /// Request to import a recording into a match directory.

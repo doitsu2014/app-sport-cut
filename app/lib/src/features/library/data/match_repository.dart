@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import '../../../bridge/sportcut_engine.dart';
+import '../../calibration/data/calibration_bridge.dart';
+import '../../calibration/domain/court_calibration.dart';
 import '../../editing/data/editing_store.dart';
 import '../domain/import_cancel_token.dart';
 import '../domain/match_import_exception.dart';
@@ -146,6 +148,52 @@ class MatchRepository implements MatchLibrary {
   /// Which artifacts are present, and which are missing.
   Future<ArtifactManifestDto> manifest(MatchRecord match) =>
       _engine.manifest(match.matchDir);
+
+  /// Record the court the user marked on this match.
+  ///
+  /// The order is deliberate and is the opposite of import's: the engine writes
+  /// the calibration into the match directory first, and the catalog is written
+  /// last. The catalog is the source of truth, so a calibration it holds must
+  /// always have an artifact behind it; a failure here leaves the previous
+  /// calibration in place rather than half of a new one.
+  @override
+  Future<MatchRecord> saveCalibration(
+    MatchRecord match,
+    CourtCalibration calibration,
+  ) async {
+    if (!calibration.isComplete) {
+      throw MatchImportException(
+        'The court for ${match.title} is not marked yet: four corners are '
+        'needed before it can be saved.',
+        kind: MatchImportKind.storage,
+      );
+    }
+    try {
+      await _engine.saveCalibration(
+        matchDir: match.matchDir,
+        calibration: toCalibrationDto(calibration),
+      );
+    } on Exception catch (error) {
+      throw MatchImportException(
+        'The court for ${match.title} could not be saved: $error',
+        kind: MatchImportKind.storage,
+        cause: error,
+      );
+    }
+
+    final updated = match.copyWith(courtCalibration: calibration);
+    try {
+      await _catalog.updateMatch(updated);
+    } on Exception catch (error) {
+      throw MatchImportException(
+        'The court for ${match.title} was written but could not be saved to '
+        'the library: $error',
+        kind: MatchImportKind.catalog,
+        cause: error,
+      );
+    }
+    return updated;
+  }
 
   /// Rebuild derived artifacts that are recorded but missing.
   Future<ArtifactManifestDto> regenerateArtifacts(

@@ -24,8 +24,8 @@ pub use frames::{
 };
 pub use pipeline::{
     regenerate_missing, run, run_stage, PipelineContext, PipelineOptions, PipelineReport,
-    AUDIO_RELATIVE_PATH, FRAMES_RELATIVE_PATH, PROXY_RELATIVE_PATH, STAGES, STAGE_AUDIO,
-    STAGE_FRAMES, STAGE_PROBE, STAGE_PROXY,
+    Regeneration, AUDIO_RELATIVE_PATH, FRAMES_RELATIVE_PATH, PROXY_RELATIVE_PATH,
+    REBUILDABLE_KINDS, STAGES, STAGE_AUDIO, STAGE_FRAMES, STAGE_PROBE, STAGE_PROXY,
 };
 pub use probe::{probe, MediaMetadata, Orientation};
 pub use proxy::{generate_proxy, ProxyOptions, ProxyOutput, DEFAULT_PROXY_MAX_HEIGHT};

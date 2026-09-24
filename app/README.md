@@ -55,6 +55,15 @@ tools/run-macos.sh            # builds the engine library, then flutter run -d m
 
 Two things are specific to the macOS runner:
 
+- **`Failed to foreground app; open returned 1` comes from `flutter run`, not
+  from the app.** The tool launches the app binary itself, then calls `open` to
+  bring it to the front. That call happens as soon as the tool attaches — which
+  can be before the app has registered itself with LaunchServices — so `open`
+  returns 1 and the tool logs it. The application is running normally, and macOS
+  lists it as a foreground app a moment later; it simply may not come to the
+  front, so switch to it with ⌘-Tab. Flutter's own source notes there is no
+  reliable moment for the call. A second copy of the app already running
+  produces the same line.
 - **The debug runner is unsandboxed.** `macos/Runner/DebugProfile.entitlements`
   sets `com.apple.security.app-sandbox` to `false`. A sandboxed app cannot load
   the engine library from `core/crates/api/target/release` (it fails with

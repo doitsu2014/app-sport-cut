@@ -1,3 +1,5 @@
+import '../../calibration/domain/court_calibration.dart';
+
 /// A match, as the application knows it.
 ///
 /// [videoPath] is the app-owned copy of the recording, taken into custody when
@@ -21,6 +23,7 @@ class MatchRecord {
     this.hasAudio = false,
     this.originalPath,
     this.sourceBytes,
+    this.courtCalibration,
   });
 
   /// Stable identifier, also the match and recording directory name.
@@ -67,6 +70,17 @@ class MatchRecord {
   /// Size of the app-owned copy in bytes, when known.
   final int? sourceBytes;
 
+  /// The court the user marked on this recording, when they have calibrated it.
+  ///
+  /// The catalog holds this rather than the match's artifact directory, because
+  /// it is the user's own marking: it must survive the derived artifacts being
+  /// deleted, and it is what the engine is handed to project the same court into
+  /// the match directory.
+  final CourtCalibration? courtCalibration;
+
+  /// Whether the user has marked this match's court.
+  bool get isCalibrated => courtCalibration?.isComplete ?? false;
+
   /// This record with the given fields replaced.
   MatchRecord copyWith({
     String? id,
@@ -81,6 +95,7 @@ class MatchRecord {
     bool? hasAudio,
     String? originalPath,
     int? sourceBytes,
+    CourtCalibration? courtCalibration,
   }) =>
       MatchRecord(
         id: id ?? this.id,
@@ -95,5 +110,6 @@ class MatchRecord {
         hasAudio: hasAudio ?? this.hasAudio,
         originalPath: originalPath ?? this.originalPath,
         sourceBytes: sourceBytes ?? this.sourceBytes,
+        courtCalibration: courtCalibration ?? this.courtCalibration,
       );
 }

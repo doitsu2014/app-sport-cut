@@ -32,6 +32,13 @@ export 'generated/dto.dart'
         ArtifactDto,
         ArtifactManifestDto,
         ArtifactStateDto,
+        CalibrationSaveDto,
+        CalibrationSaveRequestDto,
+        CalibrationSegmentDto,
+        CourtCalibrationDto,
+        CourtCornerDto,
+        CourtGeometryDto,
+        CourtOrientationDto,
         EditClipDto,
         EditTitleDto,
         ExportRequestDto,
@@ -140,6 +147,42 @@ class SportcutEngine {
   /// Read a match's manifest, including which artifacts are missing.
   Future<ArtifactManifestDto> matchManifest(String matchDir) =>
       _guard(() async => rust.matchManifest(matchDir: matchDir));
+
+  /// Derive the court geometry a marked segment defines.
+  ///
+  /// Nothing is stored. Call this while the user is still moving corners around
+  /// to draw the projected court over the recording, and again to redisplay a
+  /// calibration the application already holds. Returns the mapping in both
+  /// directions as row-major nine-value matrices, together with the court outline
+  /// and net in normalized image coordinates.
+  ///
+  /// Throws [SportcutEngineException] when the corners cannot define a court.
+  Future<CourtGeometryDto> courtGeometry(CalibrationSegmentDto segment) =>
+      _guard(() async => rust.courtGeometry(segment: segment));
+
+  /// Store a match's court calibration in its artifact directory.
+  ///
+  /// A calibration that differs from the one it replaces invalidates the
+  /// artifacts derived from the previous court; the result names which. Write
+  /// the application's own catalog copy only after this call succeeds, so a
+  /// calibration the catalog holds always has a matching artifact behind it.
+  Future<CalibrationSaveDto> saveCalibration({
+    required String matchDir,
+    required CourtCalibrationDto calibration,
+  }) =>
+      _guard(() async {
+        final request = CalibrationSaveRequestDto(
+          matchDir: matchDir,
+          calibration: calibration,
+        );
+        return rust.saveMatchCalibration(request: request);
+      });
+
+  /// Read the court calibration stored for a match.
+  ///
+  /// `null` when the match has never been calibrated.
+  Future<CourtCalibrationDto?> matchCalibration(String matchDir) =>
+      _guard(() async => rust.matchCalibration(matchDir: matchDir));
 
   /// Start rebuilding the derived artifacts a match records but no longer has.
   Future<JobHandleDto> startRegenerate(

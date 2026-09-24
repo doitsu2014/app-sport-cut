@@ -10,4 +10,5 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+serde = { workspace = true }
 sportcut-common = { workspace = true }

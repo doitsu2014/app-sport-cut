@@ -33,6 +33,36 @@ pub const FRAMES_RELATIVE_PATH: &str = "frames";
 /// Every stage of the media pipeline, in execution order.
 pub const STAGES: [&str; 4] = [STAGE_PROBE, STAGE_PROXY, STAGE_AUDIO, STAGE_FRAMES];
 
+/// Artifact kinds this pipeline can rebuild on its own, from the original
+/// recording.
+///
+/// Everything else is either user input — a court calibration the engine never
+/// invents — or output that needs a request the caller supplies, like the edit
+/// list an export renders. Reporting those as rebuilt would claim work that
+/// never happened.
+pub const REBUILDABLE_KINDS: [ArtifactKind; 3] = [
+    ArtifactKind::Proxy,
+    ArtifactKind::AnalysisAudio,
+    ArtifactKind::Frames,
+];
+
+/// What a regeneration run found, and how much of it it could do.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Regeneration {
+    /// Artifact kinds that were missing and were rebuilt.
+    pub rebuilt: Vec<ArtifactKind>,
+    /// Artifact kinds that are missing but that this pipeline cannot rebuild,
+    /// because they are supplied by the user or by a caller's request.
+    pub not_rebuildable: Vec<ArtifactKind>,
+}
+
+impl Regeneration {
+    /// Whether the match was missing nothing at all.
+    pub fn is_empty(&self) -> bool {
+        self.rebuilt.is_empty() && self.not_rebuildable.is_empty()
+    }
+}
+
 /// Options for a full pipeline run.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PipelineOptions {
@@ -307,12 +337,17 @@ fn run_stages(
 
 /// Regenerate derived artifacts that the manifest records but that are missing
 /// from disk, without re-importing the match.
+///
+/// Answers with both halves of the request: what was rebuilt, and what is
+/// missing but cannot be rebuilt here. A court calibration is the user's own
+/// marking, so a missing one is reported as such rather than counted as
+/// repaired.
 pub fn regenerate_missing(
     match_dir: &MatchDirectory,
     toolchain: &MediaToolchain,
     options: &PipelineOptions,
     context: &PipelineContext<'_>,
-) -> Result<Vec<ArtifactKind>> {
+) -> Result<Regeneration> {
     let manifest_path = match_dir.manifest_path();
     if !manifest_path.is_file() {
         return Err(SportcutError::Artifact(format!(
@@ -322,9 +357,17 @@ pub fn regenerate_missing(
     }
 
     let manifest = ArtifactManifest::load(&manifest_path)?;
-    let missing = manifest.missing_artifacts(match_dir.root());
+    let (rebuilt, not_rebuildable): (Vec<ArtifactKind>, Vec<ArtifactKind>) = manifest
+        .missing_artifacts(match_dir.root())
+        .into_iter()
+        .partition(|kind| REBUILDABLE_KINDS.contains(kind));
+
+    let missing = rebuilt.clone();
     if missing.is_empty() {
-        return Ok(Vec::new());
+        return Ok(Regeneration {
+            rebuilt,
+            not_rebuildable,
+        });
     }
 
     // Regenerating frames requires a proxy, so ask for the stage that produces
@@ -350,7 +393,10 @@ pub fn regenerate_missing(
     };
 
     run(match_dir, toolchain, &options, &skip, context)?;
-    Ok(missing)
+    Ok(Regeneration {
+        rebuilt,
+        not_rebuildable,
+    })
 }
 
 /// Run a single stage of the pipeline.

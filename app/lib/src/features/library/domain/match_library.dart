@@ -1,4 +1,5 @@
 import '../../../bridge/sportcut_engine.dart';
+import '../../calibration/domain/court_calibration.dart';
 import '../data/video_file_picker.dart';
 import 'import_cancel_token.dart';
 import 'match_record.dart';
@@ -37,6 +38,17 @@ abstract interface class MatchLibrary {
     MatchRecord match, {
     double samplingRate,
   });
+
+  /// Record the court the user marked on this match.
+  ///
+  /// The engine writes the calibration into the match directory and only then is
+  /// the catalog updated, so a calibration the catalog holds always has a
+  /// matching artifact behind it, and a failure leaves the previous calibration
+  /// intact rather than half of a new one.
+  Future<MatchRecord> saveCalibration(
+    MatchRecord match,
+    CourtCalibration calibration,
+  );
 
   /// Delete a match, optionally removing its derived artifacts and the
   /// app-owned copy of its recording. The file the user selected is never

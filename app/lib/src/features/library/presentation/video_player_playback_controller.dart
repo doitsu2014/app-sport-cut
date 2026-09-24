@@ -28,6 +28,7 @@ class VideoPlayerPlaybackController implements PlaybackController {
         isPlaying: controller.value.isPlaying,
         position: controller.value.position,
         duration: controller.value.duration,
+        aspectRatio: controller.value.aspectRatio,
       );
     } on Exception catch (error) {
       // An unsupported container or codec lands here; the screen shows the
@@ -83,6 +84,7 @@ class VideoPlayerPlaybackController implements PlaybackController {
       isPlaying: value.isPlaying,
       position: value.position,
       duration: value.duration,
+      aspectRatio: value.aspectRatio,
       error: value.hasError ? value.errorDescription : null,
     );
   }

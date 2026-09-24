@@ -23,6 +23,21 @@ abstract interface class MediaEngine {
   /// Read the manifest of a match, including which artifacts are missing.
   Future<ArtifactManifestDto> manifest(String matchDir);
 
+  /// Derive the court geometry a marked segment defines, without storing it.
+  ///
+  /// Returns the mapping in both directions and the court outline and net to
+  /// draw over the recording.
+  Future<CourtGeometryDto> courtGeometry(CalibrationSegmentDto segment);
+
+  /// Store a match's court calibration in its artifact directory.
+  Future<CalibrationSaveDto> saveCalibration({
+    required String matchDir,
+    required CourtCalibrationDto calibration,
+  });
+
+  /// Read the court calibration stored for a match, when there is one.
+  Future<CourtCalibrationDto?> matchCalibration(String matchDir);
+
   /// Start rebuilding derived artifacts that are recorded but missing.
   Future<JobHandleDto> startRegenerate(
     String matchDir, {
@@ -66,6 +81,21 @@ class BridgeMediaEngine implements MediaEngine {
   @override
   Future<ArtifactManifestDto> manifest(String matchDir) =>
       _engine.matchManifest(matchDir);
+
+  @override
+  Future<CourtGeometryDto> courtGeometry(CalibrationSegmentDto segment) =>
+      _engine.courtGeometry(segment);
+
+  @override
+  Future<CalibrationSaveDto> saveCalibration({
+    required String matchDir,
+    required CourtCalibrationDto calibration,
+  }) =>
+      _engine.saveCalibration(matchDir: matchDir, calibration: calibration);
+
+  @override
+  Future<CourtCalibrationDto?> matchCalibration(String matchDir) =>
+      _engine.matchCalibration(matchDir);
 
   @override
   Future<JobHandleDto> startRegenerate(

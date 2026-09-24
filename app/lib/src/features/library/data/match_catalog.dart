@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 
+import '../../calibration/domain/court_calibration.dart';
 import '../domain/match_record.dart';
 
 /// One versioned schema change.
@@ -294,6 +297,7 @@ class MatchCatalog {
         'has_audio': match.hasAudio ? 1 : 0,
         'original_path': match.originalPath,
         'source_bytes': match.sourceBytes,
+        'court_calibration': encodeCalibration(match.courtCalibration),
       };
 
   static MatchRecord _matchFromRow(Map<String, Object?> row) => MatchRecord(
@@ -310,5 +314,30 @@ class MatchCatalog {
         hasAudio: (row['has_audio'] as int? ?? 0) == 1,
         originalPath: row['original_path'] as String?,
         sourceBytes: (row['source_bytes'] as num?)?.toInt(),
+        courtCalibration: decodeCalibration(row['court_calibration']),
       );
+
+  /// The catalog column holding a match's calibration, as JSON.
+  ///
+  /// `null` for a match the user has not calibrated, which is how every match
+  /// created before calibration existed loads: the column was already there and
+  /// stayed empty, so no migration is needed to start using it.
+  static String? encodeCalibration(CourtCalibration? calibration) =>
+      calibration == null ? null : jsonEncode(calibration.toJson());
+
+  /// Read a calibration out of its catalog column.
+  ///
+  /// A value that cannot be read is reported as no calibration rather than
+  /// failing the whole match: an unreadable marking must not make the recording
+  /// itself unreachable.
+  static CourtCalibration? decodeCalibration(Object? column) {
+    if (column is! String || column.isEmpty) {
+      return null;
+    }
+    try {
+      return CourtCalibration.fromJson(jsonDecode(column));
+    } on FormatException {
+      return null;
+    }
+  }
 }

@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:sportcut/src/bridge/sportcut_engine.dart';
+import 'package:sportcut/src/features/calibration/domain/court_calibration.dart';
 import 'package:sportcut/src/features/library/data/video_file_picker.dart';
 import 'package:sportcut/src/features/library/domain/import_cancel_token.dart';
 import 'package:sportcut/src/features/library/domain/match_library.dart';
@@ -38,6 +39,9 @@ class FakeMatchLibrary implements MatchLibrary {
 
   /// Match removed by the last [deleteMatch] call.
   MatchRecord? lastDeleted;
+
+  /// Calibration passed to the last [saveCalibration] call.
+  CourtCalibration? lastSavedCalibration;
 
   /// Score reported for each match by [scoreSummaries].
   Map<String, ({int left, int right})> scores =
@@ -112,8 +116,27 @@ class FakeMatchLibrary implements MatchLibrary {
         ),
       ],
       missingKinds: const <String>[],
+      notRebuildableKinds: const <String>[],
       originalPresent: true,
     );
+  }
+
+  @override
+  Future<MatchRecord> saveCalibration(
+    MatchRecord match,
+    CourtCalibration calibration,
+  ) async {
+    final error = failure;
+    if (error != null) {
+      throw error;
+    }
+    lastSavedCalibration = calibration;
+    final updated = match.copyWith(courtCalibration: calibration);
+    final index = matches.indexWhere((stored) => stored.id == match.id);
+    if (index >= 0) {
+      matches[index] = updated;
+    }
+    return updated;
   }
 
   @override

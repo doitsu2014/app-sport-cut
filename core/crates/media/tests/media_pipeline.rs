@@ -264,7 +264,8 @@ fn derived_artifacts_are_regenerable_without_re_importing() {
         &PipelineContext::default(),
     )
     .expect("regeneration should succeed");
-    assert_eq!(regenerated.len(), 2);
+    assert_eq!(regenerated.rebuilt.len(), 2);
+    assert!(regenerated.not_rebuildable.is_empty());
 
     assert!(match_dir.resolve("proxy/proxy.mp4").is_file());
     assert!(match_dir.resolve("frames").is_dir());

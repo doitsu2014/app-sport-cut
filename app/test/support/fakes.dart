@@ -49,6 +49,15 @@ class FakeMediaEngine implements MediaEngine {
   /// Match directory passed to the last manifest call.
   String? lastManifestDir;
 
+  /// Calibration the last save call was given.
+  CourtCalibrationDto? lastSavedCalibration;
+
+  /// Segment the last geometry call was given.
+  CalibrationSegmentDto? lastGeometrySegment;
+
+  /// Calibration [matchCalibration] reports, when one has been stored.
+  CourtCalibrationDto? storedCalibration;
+
   @override
   Future<MediaMetadataDto> probe(String path) async {
     probeCalls += 1;
@@ -103,8 +112,56 @@ class FakeMediaEngine implements MediaEngine {
         ),
       ],
       missingKinds: const <String>[],
+      notRebuildableKinds: const <String>[],
       originalPresent: true,
     );
+  }
+
+  @override
+  Future<CourtGeometryDto> courtGeometry(CalibrationSegmentDto segment) async {
+    lastGeometrySegment = segment;
+    final error = failure;
+    if (error != null) {
+      throw error;
+    }
+    return CourtGeometryDto(
+      imageToCourt: Float64List.fromList(
+        const <double>[1, 0, 0, 0, 1, 0, 0, 0, 1],
+      ),
+      courtToImage: Float64List.fromList(
+        const <double>[1, 0, 0, 0, 1, 0, 0, 0, 1],
+      ),
+      corners: segment.corners,
+      net: <CourtCornerDto>[
+        const CourtCornerDto(x: 0, y: 0.5),
+        const CourtCornerDto(x: 1, y: 0.5),
+      ],
+    );
+  }
+
+  @override
+  Future<CalibrationSaveDto> saveCalibration({
+    required String matchDir,
+    required CourtCalibrationDto calibration,
+  }) async {
+    lastMatchDir = matchDir;
+    lastSavedCalibration = calibration;
+    final error = failure;
+    if (error != null) {
+      throw error;
+    }
+    storedCalibration = calibration;
+    return const CalibrationSaveDto(
+      changed: true,
+      invalidatedKinds: <String>[],
+      geometry: <CourtGeometryDto>[],
+    );
+  }
+
+  @override
+  Future<CourtCalibrationDto?> matchCalibration(String matchDir) async {
+    lastMatchDir = matchDir;
+    return storedCalibration;
   }
 
   @override

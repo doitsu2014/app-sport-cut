@@ -59,6 +59,8 @@ class LibraryScreen extends ConsumerWidget {
                       entries: entries,
                       onOpen: (entry) => _open(context, entry),
                       onReview: (entry) => _review(context, entry),
+                      onCalibrate: (entry) =>
+                          _calibrate(context, ref, entry),
                       onGenerate: (entry) =>
                           _generateArtifacts(context, ref, entry),
                       onDelete: (entry) => _confirmDelete(context, ref, entry),
@@ -135,6 +137,32 @@ class LibraryScreen extends ConsumerWidget {
       return;
     }
     Navigator.of(context).pushNamed(AppRoutes.score, arguments: entry.match);
+  }
+
+  /// Open court calibration: marking the four corners of the court.
+  ///
+  /// Calibration reads the recording, so a match whose copy has gone is reported
+  /// the same way playing it is.
+  Future<void> _calibrate(
+    BuildContext context,
+    WidgetRef ref,
+    MatchListEntry entry,
+  ) async {
+    if (!entry.recordingAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_unavailableMessage(entry.match))),
+      );
+      return;
+    }
+    final saved = await Navigator.of(context).pushNamed(
+      AppRoutes.calibration,
+      arguments: entry.match,
+    );
+    // A saved court is a change to the match, so the list is re-read; a screen
+    // the user simply backed out of changed nothing.
+    if (saved is MatchRecord) {
+      ref.invalidate(matchListProvider);
+    }
   }
 
   static String _unavailableMessage(MatchRecord match) =>
@@ -273,6 +301,7 @@ class _MatchList extends StatelessWidget {
     required this.entries,
     required this.onOpen,
     required this.onReview,
+    required this.onCalibrate,
     required this.onGenerate,
     required this.onDelete,
   });
@@ -280,6 +309,7 @@ class _MatchList extends StatelessWidget {
   final List<MatchListEntry> entries;
   final void Function(MatchListEntry) onOpen;
   final void Function(MatchListEntry) onReview;
+  final void Function(MatchListEntry) onCalibrate;
   final void Function(MatchListEntry) onGenerate;
   final void Function(MatchListEntry) onDelete;
 
@@ -309,6 +339,8 @@ class _MatchList extends StatelessWidget {
                   onOpen(entry);
                 case 'review':
                   onReview(entry);
+                case 'calibrate':
+                  onCalibrate(entry);
                 case 'generate':
                   onGenerate(entry);
                 case 'delete':
@@ -320,6 +352,10 @@ class _MatchList extends StatelessWidget {
               PopupMenuItem<String>(
                 value: 'review',
                 child: Text('Review and score'),
+              ),
+              PopupMenuItem<String>(
+                value: 'calibrate',
+                child: Text('Mark the court'),
               ),
               PopupMenuItem<String>(
                 value: 'generate',

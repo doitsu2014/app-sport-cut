@@ -2,9 +2,9 @@
 
 ## Purpose
 Local video probing, reduced-resolution proxy generation, analysis audio
-extraction, frame sampling, and the per-match artifact layout the engine writes
-to disk. Every stage runs on-device against local files, and the original
-recording is referenced in place and never modified.
+extraction, frame sampling, highlight-video rendering, and the per-match artifact
+layout the engine writes to disk. Every stage runs on-device against local files,
+and the original recording is referenced in place and never modified.
 ## Requirements
 ### Requirement: Local video probing
 The engine SHALL read media metadata from a local video file, including duration, frame rate, resolution, orientation, and audio track presence, without modifying the source file.
@@ -55,10 +55,10 @@ The engine SHALL sample frames from the proxy at a configurable rate and SHALL e
 - **THEN** the engine rejects the request with an explicit error rather than silently processing at a different rate
 
 ### Requirement: Per-match artifact layout
-The engine SHALL store all derived media and analysis artifacts for a match inside a single match directory with a manifest recording each artifact and the original media reference.
+The engine SHALL store all derived media and analysis artifacts for a match, including rendered highlight videos, inside a single match directory with a manifest recording each artifact and the original media reference.
 
 #### Scenario: Artifacts organized under one directory
-- **WHEN** the engine produces proxy, audio, or frame artifacts for a match
+- **WHEN** the engine produces proxy, audio, frame, or export artifacts for a match
 - **THEN** every artifact is written beneath that match's artifact directory
 - **AND** the original recording is referenced rather than relocated
 
@@ -66,6 +66,15 @@ The engine SHALL store all derived media and analysis artifacts for a match insi
 - **WHEN** a match's derived artifacts are deleted while the original recording and catalog record remain
 - **THEN** the manifest reports which artifacts are missing
 - **AND** the artifacts can be regenerated without re-importing the match
+
+#### Scenario: Exported video recorded like every other artifact
+- **WHEN** the engine renders a highlight video for a match
+- **THEN** the rendered file is recorded in the manifest with its kind, relative path, state, and size
+
+#### Scenario: Exported video does not displace match analysis
+- **WHEN** a match has both analysis artifacts and a rendered highlight video
+- **THEN** the manifest lists both
+- **AND** neither is presented as a substitute for the other
 
 ### Requirement: Offline operation guaranteed
 The media pipeline SHALL perform all probing, proxy generation, audio extraction, and frame sampling using local resources only, and MUST NOT require network access.

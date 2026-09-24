@@ -16,17 +16,22 @@ use std::thread;
 
 use anyhow::{anyhow, Result};
 use sportcut_common::{CancelToken, SportcutError};
+use sportcut_court::{CalibrationSegment, CourtCalibration};
 use sportcut_export::{render, EditClip, EditList, ExportContext, TitleCard, EXPORT_RELATIVE_PATH};
 use sportcut_jobs::{execute_admitted, CheckpointStore, JobLease, JobPlan, JobSession};
 use sportcut_media::{
     probe, regenerate_missing, run_stage, MediaToolchain, PipelineContext, PipelineOptions, STAGES,
     STAGE_PROBE,
 };
-use sportcut_storage::{ArtifactKind, ArtifactManifest, ArtifactState, MatchDirectory};
+use sportcut_storage::{
+    load_calibration, save_calibration, ArtifactKind, ArtifactManifest, ArtifactState,
+    MatchDirectory,
+};
 
 use crate::dto::{
-    ArtifactManifestDto, ExportRequestDto, JobHandleDto, JobStatusDto, MediaImportRequestDto,
-    MediaMetadataDto,
+    ArtifactManifestDto, CalibrationSaveDto, CalibrationSaveRequestDto, CalibrationSegmentDto,
+    CourtCalibrationDto, CourtGeometryDto, ExportRequestDto, JobHandleDto, JobStatusDto,
+    MediaImportRequestDto, MediaMetadataDto,
 };
 use crate::jobs;
 
@@ -117,6 +122,56 @@ pub fn job_status(job_id: String) -> Result<JobStatusDto> {
         Vec::new()
     };
     Ok(JobStatusDto::from(&session.status_with_stages(completed)))
+}
+
+/// Derive the court geometry a marked segment defines.
+///
+/// Nothing is stored. This is what the application calls while the user is still
+/// moving corners around, and again to redisplay a calibration it already holds,
+/// so the homography lives in the engine rather than in two languages.
+pub fn court_geometry(segment: CalibrationSegmentDto) -> Result<CourtGeometryDto> {
+    let segment = CalibrationSegment::try_from(&segment).map_err(to_anyhow)?;
+    CourtGeometryDto::from_segment(&segment).map_err(to_anyhow)
+}
+
+/// Store a match's court calibration.
+///
+/// The calibration is written into the match directory and recorded in the
+/// manifest. A calibration that differs from the one it replaces invalidates the
+/// artifacts derived from the previous court. The application writes its own
+/// catalog copy after this call returns, so a calibration the catalog holds
+/// always has a matching artifact behind it.
+pub fn save_match_calibration(request: CalibrationSaveRequestDto) -> Result<CalibrationSaveDto> {
+    if request.match_dir.trim().is_empty() {
+        return Err(anyhow!("match_dir must not be empty"));
+    }
+
+    let calibration = CourtCalibration::try_from(&request.calibration).map_err(to_anyhow)?;
+    let match_dir = MatchDirectory::new(&request.match_dir);
+    let saved = save_calibration(&match_dir, &calibration).map_err(to_anyhow)?;
+
+    let geometry = calibration
+        .segments
+        .iter()
+        .map(CourtGeometryDto::from_segment)
+        .collect::<sportcut_common::Result<Vec<_>>>()
+        .map_err(to_anyhow)?;
+
+    Ok(CalibrationSaveDto {
+        changed: saved.changed,
+        invalidated_kinds: saved.invalidated.iter().map(ToString::to_string).collect(),
+        geometry,
+    })
+}
+
+/// Read the court calibration stored in a match directory.
+///
+/// `None` when the match has never been calibrated, which is a normal state
+/// rather than a failure.
+pub fn match_calibration(match_dir: String) -> Result<Option<CourtCalibrationDto>> {
+    let match_dir = MatchDirectory::new(&match_dir);
+    let calibration = load_calibration(&match_dir).map_err(to_anyhow)?;
+    Ok(calibration.as_ref().map(CourtCalibrationDto::from))
 }
 
 /// Ask a job to stop.

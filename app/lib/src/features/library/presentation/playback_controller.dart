@@ -9,6 +9,7 @@ class PlaybackState {
     this.isPlaying = false,
     this.position = Duration.zero,
     this.duration = Duration.zero,
+    this.aspectRatio = 16 / 9,
     this.error,
   });
 
@@ -23,6 +24,18 @@ class PlaybackState {
 
   /// Total duration, once known.
   final Duration duration;
+
+  /// Width divided by height of the frame as displayed, with any rotation the
+  /// container declares already applied.
+  ///
+  /// The platform player reports this with rotation applied, so a recording
+  /// whose stored pixels are landscape but whose container says portrait reports
+  /// a tall box.
+  ///
+  /// Anything drawn over the video shares the box this ratio describes, so a
+  /// position on screen divided by that box's size is the same normalized
+  /// coordinate the recording's frames use.
+  final double aspectRatio;
 
   /// Explicit message when playback cannot start.
   final String? error;

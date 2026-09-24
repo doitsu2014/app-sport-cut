@@ -18,7 +18,8 @@ of truth for that feature's behaviour once it exists.
 | Per-match artifact directory, manifest, regeneration | Done |
 | Job model: lifecycle, non-decreasing progress, cancellation, checkpoints, single heavy job | Done |
 | Headless CLI harness | Done |
-| `court`, `vision`, `rally`, `score`, `highlight` | Empty crates — fixed boundaries, no implementation |
+| Court calibration: four corners, homography, court plane, side assignment | Done |
+| `vision`, `rally`, `score`, `highlight` | Empty crates — fixed boundaries, no implementation |
 
 **Bridge** — `core/crates/api/src/facade.rs` exposes the calls the client makes:
 `probe_media`, `match_manifest`, `media_import_stages`, and the start/poll pair
@@ -34,8 +35,10 @@ deletion; offline playback with transport controls; a four-table SQLite catalog
 that now writes `rallies`, `score_events`, `highlight_clips`, and
 `export_settings`; a review session for marking rallies and confirming winners;
 a highlight reel with trimming and ordering; an export screen that renders the
-reel; and an analysis screen for the engine's artifacts. One route is still a
-placeholder: calibration.
+reel; an analysis screen for the engine's artifacts; and a court calibration
+screen that marks the four corners, projects the court back over the recording,
+and stores the result with the match. No route is a placeholder any more: the
+ones that remain are the later phases' own screens.
 
 **Toolchain** — Flutter 3.47.5 and Xcode 26.6 are installed, and the macOS and
 iOS builds both succeed. The Android SDK and a JDK are not installed, so no
@@ -81,13 +84,32 @@ two tables already exist in the schema and it needs no new engine capability.
 
 | Feature | Delivers | Depends on | Gate |
 | --- | --- | --- | --- |
-| Court calibration | Four-corner selection, homography into a normalized court, a calibration artifact in the manifest, editable later | Nothing | None — can start at any time |
+| Court calibration | **Done.** Four-corner selection, a homography into a normalized court, the net, side assignment, a calibration artifact in the manifest, editable later | Nothing | None |
 | Person detection and player count | The `vision` backend, people located in sampled frames, two or four players | Inference runtime and weights chosen | Test footage; inference runtime; model weights |
 | Player tracking and court-side assignment | Per-frame tracks, each assigned to the left or right side | Court calibration, person detection | As above |
 
-Court calibration is unusual in having no gate at all, but its payoff only
-arrives once tracking exists. Start it early if you want to de-risk the CV track
-in small steps; start it late if you would rather ship the Wave 1 value first.
+Court calibration had no gate at all and no longer blocks anything: it is
+implemented, and the two features below it are all that remain. They are gated on
+inputs the project does not have — test footage, an inference runtime, and model
+weights — and neither can start until those are resolved.
+
+Three deliberate limits are worth recording while the wave is fresh:
+
+- **The court is addressed in normalized coordinates, not metres.** That is
+  enough to say which half of the net a player is in, which is what segmentation
+  and scoring need. Distance in metres, approximate serve position, and movement
+  speed are Wave 3 ranking signals and need a physical court model; the stored
+  record carries a schema version and a list of segments so adding one is a
+  forward change rather than a rewrite.
+- **The user says which way the court runs** — away from the camera, or across
+  the view. Four corners cannot say it on their own: a rectangle's corner order
+  is only determined up to reflection, and the net falls on the midpoint of the
+  court's long axis either way. Marking the net line as two more points would
+  remove the question and is the natural refinement.
+- **A recording shot from behind a baseline reads as near and far, not left and
+  right.** The two halves of the net are still what the engine computes and
+  stores; `left` and `right` remain the score screen's labels for them, because
+  they are already written into the catalog and the export overlay.
 
 ## Wave 3 — Phase 2 and 3: automation
 
@@ -120,7 +142,7 @@ import (done) ──► trim and clips ──► export ──► overlay + musi
   job progress / cancel ────────────────┘      (enabler, no dependencies)
 
   court calibration ──► player tracking ──► rally segmentation
-        (no gate)              ▲                    │
+         (done)                ▲                    │
                     footage + runtime + weights     ▼
                                     score suggestion ──► highlight ranking
 ```
