@@ -58,6 +58,35 @@ void main() {
     return awaitJob(handle.jobId);
   }
 
+  /// Import a match, waiting for the engine's admission slot to come free.
+  ///
+  /// A job reports its terminal state a moment before its worker releases the
+  /// admission slot, so a client that starts the next job the instant the last
+  /// one finished can be told that a heavy job is still running. The wait is
+  /// bounded, so a slot that never came free would still fail the test.
+  Future<JobStatusDto> importWhenAdmitted({
+    required String matchId,
+    required String originalPath,
+    required String matchDir,
+  }) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (true) {
+      try {
+        return await importMatch(
+          matchId: matchId,
+          originalPath: originalPath,
+          matchDir: matchDir,
+        );
+      } on SportcutEngineException catch (error) {
+        if (!error.message.contains('resource-intensive') ||
+            DateTime.now().isAfter(deadline)) {
+          rethrow;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    }
+  }
+
   setUpAll(() async {
     // Rasterizing the scoreboard overlay goes through `dart:ui`, which needs a
     // binding even though this is not a widget test.
@@ -245,12 +274,141 @@ void main() {
       ),
     );
   });
+
+  test('a calibration crosses the bridge, is stored, and reads back', () async {
+    final video = await _generateVideo(lab, 'calibrated.mp4', withAudio: true);
+    final matchDir = Directory('${lab.path}/matches/calibrated-match');
+    final imported = await importMatch(
+      matchId: 'calibrated-match',
+      originalPath: video.path,
+      matchDir: matchDir.path,
+    );
+    expect(imported.state, equals(JobStateDto.completed));
+
+    // A match nobody has marked claims no court, no net, and no sides.
+    expect(await engine.matchCalibration(matchDir.path), isNull);
+
+    const segment = CalibrationSegmentDto(
+      fromMs: 0,
+      corners: <CourtCornerDto>[
+        CourtCornerDto(x: 0.10, y: 0.90),
+        CourtCornerDto(x: 0.90, y: 0.90),
+        CourtCornerDto(x: 0.70, y: 0.40),
+        CourtCornerDto(x: 0.30, y: 0.40),
+      ],
+      orientation: CourtOrientationDto.away,
+    );
+
+    // While the user is still moving corners the engine is asked to project the
+    // court and stores nothing.
+    final geometry = await engine.courtGeometry(segment);
+    expect(geometry.imageToCourt, hasLength(9));
+    expect(geometry.courtToImage, hasLength(9));
+    expect(geometry.corners, hasLength(4));
+    expect(geometry.net, hasLength(2));
+    expect(await engine.matchCalibration(matchDir.path), isNull);
+
+    final saved = await engine.saveCalibration(
+      matchDir: matchDir.path,
+      calibration: const CourtCalibrationDto(
+        schemaVersion: 1,
+        segments: <CalibrationSegmentDto>[segment],
+      ),
+    );
+    expect(saved.changed, isTrue);
+    expect(saved.geometry, hasLength(1));
+    expect(
+      File('${matchDir.path}/calibration/calibration.json').existsSync(),
+      isTrue,
+    );
+
+    // The manifest records the calibration like any other artifact.
+    final manifest = await engine.matchManifest(matchDir.path);
+    final recorded =
+        manifest.artifacts.where((artifact) => artifact.kind == 'calibration');
+    expect(recorded, hasLength(1));
+    expect(recorded.single.state, equals(ArtifactStateDto.final_));
+    expect(manifest.missingKinds, isEmpty);
+
+    // And the corners and orientation survive the round trip.
+    final stored = await engine.matchCalibration(matchDir.path);
+    expect(stored, isNotNull);
+    expect(stored!.segments, hasLength(1));
+    expect(stored.segments.single.orientation, equals(CourtOrientationDto.away));
+    expect(stored.segments.single.corners, hasLength(4));
+    expect(stored.segments.single.corners.first.x, closeTo(0.10, 1e-9));
+    expect(stored.segments.single.corners.last.y, closeTo(0.40, 1e-9));
+  });
+
+  test('an unknown job handle is reported through the binding', () async {
+    await expectLater(
+      engine.jobStatus('job-that-never-started'),
+      throwsA(
+        isA<SportcutEngineException>().having(
+          (error) => error.message,
+          'message',
+          contains('no job job-that-never-started'),
+        ),
+      ),
+    );
+    await expectLater(
+      engine.jobCancel('job-that-never-started'),
+      throwsA(
+        isA<SportcutEngineException>().having(
+          (error) => error.message,
+          'message',
+          contains('job-that-never-started'),
+        ),
+      ),
+    );
+  });
+
+  test('a running import can be cancelled from the client', () async {
+    final video = await _generateVideo(
+      lab,
+      'cancelled.mp4',
+      withAudio: true,
+      seconds: 20,
+    );
+    final matchDir = Directory('${lab.path}/matches/cancelled-match');
+
+    final handle = await engine.startImport(
+      matchId: 'cancelled-match',
+      originalPath: video.path,
+      matchDir: matchDir.path,
+      samplingRate: 2,
+    );
+    final asked = await engine.jobCancel(handle.jobId);
+    expect(asked.state, equals(JobStateDto.cancelled));
+
+    final finished = await awaitJob(handle.jobId);
+    expect(finished.state, equals(JobStateDto.cancelled));
+
+    // Nothing the cancelled run had recorded is presented as a result. A run
+    // stopped before the first stage had a manifest at all, which is also fine.
+    if (File('${matchDir.path}/manifest.json').existsSync()) {
+      final manifest = await engine.matchManifest(matchDir.path);
+      for (final artifact in manifest.artifacts) {
+        expect(artifact.state, isNot(equals(ArtifactStateDto.final_)));
+      }
+    }
+
+    // The admission slot comes free again: the engine admits the next job
+    // rather than leaving the user with a machine that will not import.
+    final next = await importWhenAdmitted(
+      matchId: 'after-cancel',
+      originalPath: video.path,
+      matchDir: '${lab.path}/matches/after-cancel',
+    );
+    expect(next.state, equals(JobStateDto.completed));
+  });
 }
 
 Future<File> _generateVideo(
   Directory lab,
   String name, {
   required bool withAudio,
+  double seconds = 2,
 }) async {
   final output = File('${lab.path}/$name');
   final arguments = <String>[
@@ -260,14 +418,14 @@ Future<File> _generateVideo(
     '-f',
     'lavfi',
     '-i',
-    'testsrc2=size=320x240:rate=10:duration=2',
+    'testsrc2=size=320x240:rate=10:duration=$seconds',
   ];
   if (withAudio) {
     arguments.addAll(<String>[
       '-f',
       'lavfi',
       '-i',
-      'sine=frequency=440:duration=2',
+      'sine=frequency=440:duration=$seconds',
     ]);
   }
   arguments.addAll(<String>[

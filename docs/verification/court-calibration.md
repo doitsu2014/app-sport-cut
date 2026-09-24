@@ -1,8 +1,16 @@
 # Court calibration verification
 
-Evidence for the `add-court-calibration` change, gathered with Flutter 3.47.5 /
-Dart 3.13.4, Rust 1.97.1, and ffmpeg 8.1.1 on macOS
-(`SPORTCUT_FLUTTER_BIN=/path/to/flutter/bin`).
+Evidence for the
+[`add-court-calibration`](../../openspec/changes/add-court-calibration/proposal.md)
+change, gathered with Flutter 3.47.5 / Dart 3.13.4, Rust 1.97.1, and ffmpeg
+8.1.1 on macOS (`SPORTCUT_FLUTTER_BIN=/path/to/flutter/bin`).
+
+The change itself was verified with a harness built outside the checkout, which
+printed its results once. Those results are no longer the evidence: the harness
+was replaced by
+[`add-wave-1-2-test-coverage`](../../openspec/changes/add-wave-1-2-test-coverage/proposal.md),
+which turned every check it made into a test that runs on every change. The
+tables below name those tests.
 
 ## What this change had to establish first
 
@@ -61,11 +69,11 @@ FORMAT OK
 ==> engine verification passed
 ```
 
-23 tests pass: `facade` 4, `job_lifecycle` 7, `media_pipeline` 10, `offline` 2.
-No new dependency entered the workspace — `git diff core/Cargo.lock` adds no
-crate — so `docs/legal/dependency-register.md` needs no new row. The only new
-inter-crate edge is `sportcut-storage -> sportcut-court`, both first-party and
-both inside the engine workspace.
+69 tests pass: `court` 20, `export` 13 + 6, `facade` 11, `job_lifecycle` 7,
+`media_pipeline` 10, `offline` 2. No new dependency entered the workspace —
+`git diff core/Cargo.lock` adds no crate — so `docs/legal/dependency-register.md`
+needs no new row. The only new inter-crate edge is `sportcut-storage ->
+sportcut-court`, both first-party and both inside the engine workspace.
 
 ```bash
 cd app && flutter analyze
@@ -82,48 +90,59 @@ cd app && flutter test
 ```
 
 ```text
-00:01 +53: All tests passed!
+00:03 +127: All tests passed!
 ```
 
-53 tests pass, the same set as before this change. Two of them were updated
-because the new `ArtifactManifestDto.notRebuildableKinds` field made their
-constructions stop compiling (`test/support/fakes.dart`,
-`test/support/fake_match_library.dart`); no test file was added.
+127 tests pass. Two of them were updated when this change added
+`ArtifactManifestDto.notRebuildableKinds` (`test/support/fakes.dart`,
+`test/support/fake_match_library.dart`); the rest of the growth is the coverage
+change.
+
+## The geometry, checked by property
+
+The court is arithmetic, so it is checked against properties rather than against
+stored expectations — the properties a wrong homography breaks:
+
+```bash
+cargo test -p sportcut-court
+```
+
+```text
+test result: ok. 20 passed; 0 failed
+```
+
+`core/crates/court/src/homography.rs` and `core/crates/court/src/lib.rs` hold:
+the unit square maps to itself, so the first corner is the court origin; the
+court centre projects to where the marked quadrilateral's diagonals cross, which
+a correct projective map reproduces and an affine one does not; projection
+round-trips image to court and back through a trapezoid and through the affine
+branch a parallelogram takes; the net lands at the midpoint of the court's long
+axis in both orientations; side assignment follows the net rather than the image
+position; the outline carries the marked corners and the projected net, and moves
+with an edited corner; and a repeated corner, three corners in a straight line, a
+corner outside the frame, a bow-tie ordering, and a quadrilateral enclosing
+almost no area are each rejected with a message naming the problem.
 
 ## The engine path, end to end
 
-The repository's working agreement is to implement first and not to add test
-files, so the new engine behaviour was exercised by a throwaway harness built
-outside the checkout against the real crates — the pipeline that runs, the
-manifest that is written, and the facade the client actually calls. It printed:
+`core/crates/api/tests/facade.rs` drives the facade the client calls, against a
+match directory produced by a real import:
 
 ```text
-1. imported a match with a manifest
-2. an uncalibrated match reports no calibration and records none
-3. derived geometry without storing: net (0.216, 0.493)-(0.784, 0.493)
-4. saving wrote the file and recorded it in the manifest as final
-5. the calibration reads back, and the manifest view reports nothing missing
-6. re-saving the same court invalidates nothing
-7. a changed court invalidated the tracks derived from the old one
-8. a missing calibration is reported as unrebuildable (rebuilt [])
-
-all engine calibration checks passed
+test saving_a_calibration_writes_the_artifact_and_reads_back ... ok
+test saving_the_same_calibration_again_discards_nothing ... ok
+test a_missing_calibration_is_reported_as_needing_the_user ... ok
+test a_match_reports_no_calibration_until_one_is_saved ... ok
 ```
 
-The geometry itself was checked separately, against properties rather than
-against a stored expectation:
-
-- the unit square maps to itself, so the first corner is the court origin;
-- the court centre projects to `(0.500000, 0.457143)` for a trapezoid whose near
-  edge is wider — exactly where that quadrilateral's diagonals cross, which is
-  the invariant a wrong homography breaks;
-- projection round-trips image to court and back;
-- the net lands at the midpoint of the court's long axis in both orientations,
-  through `u` when the court runs across the view and through `v` when it runs
-  away;
-- a repeated corner, three corners in a straight line, a corner outside the
-  frame, a bow-tie ordering, and a quadrilateral enclosing almost no area are
-  each rejected with a message naming the problem.
+Those four assert what the throwaway harness printed: an uncalibrated match
+reports no calibration and records none; saving writes
+`calibration/calibration.json` and records it in the manifest as final; the
+calibration reads back with the corners and orientation the user marked, and the
+geometry the client asks for directly is the same arithmetic; re-saving the same
+court invalidates nothing, while a changed court invalidates the `tracks`
+derived from the old one; and a wiped calibration is reported as missing and
+*not* rebuildable, so a repair rebuilds the frames without inventing a court.
 
 ## Scenario to evidence mapping
 
@@ -131,28 +150,28 @@ against a stored expectation:
 
 | Scenario | Evidence |
 | --- | --- |
-| Four corners captured | Harness step 4 |
-| Marked position independent of rotation and resolution | The rotation check above, plus normalized corners |
-| Marked position independent of the preview layout | The overlay and the video share one `AspectRatio`; `app_shell_test`'s `every route in the table builds a screen` constructs the screen |
-| Incomplete calibration not saved | `CalibrationController.save` and `MatchRepository.saveCalibration` both refuse; harness step 2 shows an unmarked match records nothing |
-| Positions outside the frame rejected | `nudgeCorner` clamps to the frame; `CalibrationSegment::validate` rejects an out-of-range corner with a named error |
-| Mapping produced for a valid calibration | Harness step 3 |
-| Mapping round-trips | Geometry checks above |
-| Degenerate calibration rejected | Geometry checks above |
-| Court orientation recorded | Harness steps 3, 4, and the two net orientations |
-| Position assigned to a side | Geometry checks: `side_of` follows the net on the long axis |
-| Side determined for a player position | `CalibrationSegment::side_of`; there is no tracking stage yet to feed it |
-| Outline available for verification | Harness step 3 returns the outline and the net |
-| Outline follows an edited corner | Harness step 7 changes a corner and the projection is re-derived |
-| Calibration survives a restart | Harness step 5 reads the stored calibration back |
-| Calibration survives deleted artifacts | Harness step 8; the catalog copy is the source of truth and the artifact is re-written from it |
-| No calibration invented | Harness steps 2 and 8 |
-| Engine writes the calibration into the match directory | Harness step 4 |
-| Edited calibration replaces the stored one | Harness step 7 |
-| Artifacts from the previous court invalidated | Harness step 7 drops `tracks` |
-| Unchanged calibration discards nothing | Harness step 6 |
-| Missing calibration reported as needing the user | Harness step 8 |
-| Rebuild completes the artifacts it can reproduce | `regenerate_missing` now partitions at the top; the existing `media_pipeline` regeneration test asserts the rebuilt half |
+| Four corners captured | `app/test/calibration_screen_test.dart`, `the four corners are marked and the court is projected`; `saving stores the court with the match` |
+| Marked position independent of rotation and resolution | The rotation check above; corners are normalized, and `core/crates/court/src/lib.rs` validates them in that space |
+| Marked position independent of the preview layout | `app/test/calibration_screen_test.dart`, `dragging a handle moves that corner` (the handle and the frame share one aspect-ratio box) |
+| Incomplete calibration not saved | `app/test/calibration_controller_test.dart`, `an incomplete calibration is not saved`; `app/test/calibration_screen_test.dart`, `an incomplete court cannot be saved` |
+| Positions outside the frame rejected | `app/test/calibration_controller_test.dart`, `a corner dragged past the edge stops at the edge`; `core/crates/court/src/lib.rs`, `a_corner_outside_the_frame_is_rejected_by_position` |
+| Mapping produced for a valid calibration | `core/crates/court/src/lib.rs`, `a_valid_calibration_produces_a_mapping_in_both_directions` |
+| Mapping round-trips | `core/crates/court/src/homography.rs`, `mapping_a_projected_court_round_trips` |
+| Degenerate calibration rejected | `core/crates/court/src/lib.rs`, the five rejection tests; `app/test/calibration_controller_test.dart`, `a court the engine rejects is reported and nothing is drawn`; `app/test/calibration_screen_test.dart`, `a court the engine rejects is reported to the user` |
+| Court orientation recorded | `core/crates/court/src/lib.rs`, `the_net_falls_on_the_courts_long_axis`; `app/test/calibration_screen_test.dart`, `the way the court runs is the user choice, and is saved` |
+| Position assigned to a side | `core/crates/court/src/lib.rs`, `a_position_is_assigned_the_half_of_the_net_it_falls_in` |
+| Side determined for a player position | manual-only: there is no tracking stage yet to feed a position. The mapping a tracker will read is covered by the two rows above |
+| Outline available for verification | `core/crates/court/src/lib.rs`, `the_outline_carries_the_marked_corners_and_the_projected_net` |
+| Outline follows an edited corner | `core/crates/court/src/lib.rs`, `the_outline_follows_an_edited_corner` |
+| Calibration survives a restart | `app/test/match_catalog_test.dart`, `a court calibration is stored on the match and read back`; `core/crates/api/tests/facade.rs`, `saving_a_calibration_writes_the_artifact_and_reads_back` |
+| Calibration survives deleted artifacts | The catalog is the source of truth: the calibration lives on the match row, so it is read without the artifact (`a_match_that_was_never_calibrated...` shows the null case, and the facade test shows the artifact being written from it) |
+| No calibration invented | `core/crates/api/tests/facade.rs`, `a_match_reports_no_calibration_until_one_is_saved`; `app/test/match_catalog_test.dart`, `a match that was never calibrated loads with no calibration` |
+| Engine writes the calibration into the match directory | `core/crates/api/tests/facade.rs`, `saving_a_calibration_writes_the_artifact_and_reads_back` |
+| Edited calibration replaces the stored one | `core/crates/api/tests/facade.rs`, `saving_the_same_calibration_again_discards_nothing` |
+| Artifacts from the previous court invalidated | Same test: `tracks` are dropped and named in `invalidated_kinds` |
+| Unchanged calibration discards nothing | Same test |
+| Missing calibration reported as needing the user | `core/crates/api/tests/facade.rs`, `a_missing_calibration_is_reported_as_needing_the_user` |
+| Rebuild completes the artifacts it can reproduce | Same test: the frames are rebuilt while the calibration stays reported as not rebuildable |
 | Calibration works offline | No network call exists on the path; ffmpeg and SQLite are local |
 | No recording data leaves the device | As above |
 
@@ -160,9 +179,9 @@ against a stored expectation:
 
 | Scenario | Evidence |
 | --- | --- |
-| Artifacts organized under one directory | Harness step 4 writes `calibration/calibration.json` inside the match directory |
-| Derived artifacts are regenerable | `media_pipeline` regeneration test |
-| User-authored artifacts are not regenerable | Harness steps 2 and 8 |
+| Artifacts organized under one directory | `core/crates/api/tests/facade.rs` writes `calibration/calibration.json` inside the match directory |
+| Derived artifacts are regenerable | `core/crates/media/tests/media_pipeline.rs` |
+| User-authored artifacts are not regenerable | `a_missing_calibration_is_reported_as_needing_the_user` |
 | Exported video recorded like every other artifact | Unchanged by this change; existing export coverage |
 | Exported video does not displace match analysis | Unchanged by this change; existing export coverage |
 
@@ -173,11 +192,27 @@ against a stored expectation:
 | Schema changes are versioned | No migration is needed: `court_calibration` is in the version-1 initial schema and was never written |
 | Catalog works offline | Unchanged; the column is written through the same local SQLite handle |
 | Editing records belong to their match | The calibration is a column on the `matches` row |
-| Court calibration owned by the catalog | `MatchCatalog.encodeCalibration` writes it on the match row; `MatchRecord.courtCalibration` reads it without the engine |
-| Existing matches load without a calibration | A null column decodes to no calibration, and no other field is touched |
+| Court calibration owned by the catalog | `app/test/match_catalog_test.dart`, `a court calibration is stored on the match and read back`; a value that cannot be decoded is reported as no calibration (`a calibration that cannot be read is reported as no calibration`) |
+| Existing matches load without a calibration | `app/test/match_catalog_test.dart`, `a match that was never calibrated loads with no calibration` |
 | Clip records a clip's order and origin | Unchanged by this change |
 | Export settings persisted | Unchanged by this change |
-| Match deletion | The calibration lives on the `matches` row, which deletion removes; `library_screen_test` covers the delete flow |
+| Match deletion | `app/test/match_catalog_test.dart`, `deleting a match removes its calibration with it` |
+
+### Crossing the boundary
+
+`app/test/bridge_test.dart`, `a calibration crosses the bridge, is stored, and
+reads back`, drives `courtGeometry`, `saveCalibration`, and `matchCalibration`
+through the real generated bindings and the real engine library: projecting
+stores nothing, saving writes the artifact and the manifest row, and the corners
+and orientation survive the round trip.
+
+## Manual-only verification
+
+| Scenario or behaviour | Why it is manual |
+| --- | --- |
+| Dragging a handle on a real touch screen | The gesture and the arithmetic are covered; whether the handle feels right under a finger is a judgement that needs a device |
+| Calibrating a real match | Every fixture here is synthetic. The Phase 0 "test footage" gate is still open, so nothing measures whether a marked court is accurate on a real recording |
+| Running the calibration flow on a device | Needs a simulator or device; the roadmap's platform-scope gate records why one is not available here |
 
 ## Two things implementation decided, recorded back here
 
@@ -194,23 +229,6 @@ against a stored expectation:
   `sportcut-court` for the record type. The alternative — a small module in
   `sportcut-api` — would have put artifact writing in a crate documented as a
   thin typed wrapper.
-
-## Not verified here
-
-- **The calibration screen's interaction.** Dragging a handle, scrubbing to a
-  clear frame, and pressing save are not covered by a test: this change adds no
-  test files, and the existing client tests only assert that the route builds.
-  The screen's arithmetic is thin by design — a drag is a delta divided by the
-  box size, and the geometry comes from the engine — but the flow has not been
-  driven.
-- **A real recording.** The rotation check and the engine harness both use
-  synthetic ffmpeg fixtures. The Phase 0 "test footage" gate is still open, and
-  nothing here measures whether a marked court is accurate on a real match.
-- **The end-to-end path on a device.** The engine harness drives the real
-  facade, and `bridge_test` loads the real engine library, but the two have not
-  been run together on the calibration calls: no test exercises
-  `save_match_calibration` or `court_geometry` *through* the Dart bindings.
-  `flutter analyze` proves those bindings exist and typecheck.
 
 ## Known limits carried forward
 

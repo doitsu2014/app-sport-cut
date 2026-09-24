@@ -362,3 +362,286 @@ fn turn_at(current: ImagePoint, next: ImagePoint, after: ImagePoint) -> f64 {
         turn
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A court seen from behind a baseline, marked in the order the user walks
+    /// it: near-left, near-right, far-right, far-left.
+    const TRAPEZOID: [ImagePoint; 4] = [
+        ImagePoint::new(0.10, 0.90),
+        ImagePoint::new(0.90, 0.90),
+        ImagePoint::new(0.70, 0.40),
+        ImagePoint::new(0.30, 0.40),
+    ];
+
+    fn segment(corners: [ImagePoint; 4]) -> CalibrationSegment {
+        CalibrationSegment {
+            from_ms: 0,
+            corners,
+            orientation: CourtOrientation::Away,
+        }
+    }
+
+    fn valid_segment() -> CalibrationSegment {
+        segment(TRAPEZOID)
+    }
+
+    fn rejection(corners: [ImagePoint; 4]) -> String {
+        segment(corners)
+            .validate()
+            .expect_err("the corners must be rejected")
+            .to_string()
+    }
+
+    #[test]
+    fn a_valid_calibration_produces_a_mapping_in_both_directions() {
+        let segment = valid_segment();
+        let mapping = segment
+            .mapping()
+            .expect("a marked trapezoid defines a court");
+
+        let court = mapping
+            .to_court(ImagePoint::new(0.5, 0.65))
+            .expect("an image point maps to the court");
+        assert!(court.u.is_finite() && court.v.is_finite(), "{court:?}");
+
+        let back = mapping
+            .to_image(CourtPoint::new(0.5, 0.5))
+            .expect("a court point maps to the image");
+        assert!(back.x.is_finite() && back.y.is_finite(), "{back:?}");
+    }
+
+    #[test]
+    fn a_duplicated_corner_is_rejected_by_name() {
+        let mut corners = TRAPEZOID;
+        corners[1] = corners[0];
+        let message = rejection(corners);
+        assert!(message.contains("same place"), "{message}");
+        assert!(message.contains("corners 1 and 2"), "{message}");
+    }
+
+    #[test]
+    fn three_corners_in_a_straight_line_are_rejected() {
+        let corners = [
+            ImagePoint::new(0.10, 0.50),
+            ImagePoint::new(0.50, 0.50),
+            ImagePoint::new(0.90, 0.50),
+            ImagePoint::new(0.50, 0.90),
+        ];
+        let message = rejection(corners);
+        assert!(message.contains("straight line"), "{message}");
+    }
+
+    #[test]
+    fn a_corner_outside_the_frame_is_rejected_by_position() {
+        let mut corners = TRAPEZOID;
+        corners[2] = ImagePoint::new(1.20, 0.40);
+        let message = rejection(corners);
+        assert!(message.contains("corner 3"), "{message}");
+        assert!(message.contains("outside the frame"), "{message}");
+
+        let mut not_a_number = TRAPEZOID;
+        not_a_number[0] = ImagePoint::new(f64::NAN, 0.90);
+        let message = rejection(not_a_number);
+        assert!(message.contains("outside the frame"), "{message}");
+    }
+
+    #[test]
+    fn corners_marked_out_of_order_are_rejected() {
+        // A bow tie: the walk crosses itself rather than going round the court.
+        let corners = [TRAPEZOID[0], TRAPEZOID[1], TRAPEZOID[3], TRAPEZOID[2]];
+        let message = rejection(corners);
+        assert!(
+            message.contains("do not go round the court in order"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn a_quadrilateral_enclosing_almost_no_area_is_rejected() {
+        // A thin parallelogram: every corner is well separated from the others,
+        // but the strip it encloses is far too narrow to define a court.
+        let corners = [
+            ImagePoint::new(0.100, 0.500000),
+            ImagePoint::new(0.900, 0.500000),
+            ImagePoint::new(0.901, 0.500001),
+            ImagePoint::new(0.101, 0.500001),
+        ];
+        let message = rejection(corners);
+        assert!(message.contains("almost no area"), "{message}");
+    }
+
+    #[test]
+    fn the_net_falls_on_the_courts_long_axis() {
+        // A court running away from the camera: the net cuts across the axis
+        // from the near edge to the far one.
+        let away = valid_segment();
+        assert_eq!(
+            away.net_in_court(),
+            [CourtPoint::new(0.0, 0.5), CourtPoint::new(1.0, 0.5)]
+        );
+
+        // A court running across the view: the edge nearest the camera is a
+        // sideline, so the long axis is the other one.
+        let across = CalibrationSegment {
+            orientation: CourtOrientation::Across,
+            ..valid_segment()
+        };
+        assert_eq!(
+            across.net_in_court(),
+            [CourtPoint::new(0.5, 0.0), CourtPoint::new(0.5, 1.0)]
+        );
+    }
+
+    #[test]
+    fn a_position_is_assigned_the_half_of_the_net_it_falls_in() {
+        let away = valid_segment();
+        assert_eq!(away.side_of(CourtPoint::new(0.5, 0.2)), CourtSide::First);
+        assert_eq!(away.side_of(CourtPoint::new(0.5, 0.8)), CourtSide::Second);
+        // A position on the net itself is reported as the first half rather
+        // than as no side at all.
+        assert_eq!(away.side_of(CourtPoint::new(0.5, 0.5)), CourtSide::First);
+
+        let across = CalibrationSegment {
+            orientation: CourtOrientation::Across,
+            ..valid_segment()
+        };
+        assert_eq!(across.side_of(CourtPoint::new(0.2, 0.5)), CourtSide::First);
+        assert_eq!(across.side_of(CourtPoint::new(0.8, 0.5)), CourtSide::Second);
+    }
+
+    #[test]
+    fn side_assignment_follows_the_net_rather_than_the_image() {
+        // One image point, one court position, two answers: which half it is in
+        // comes from where the net falls, not from where the camera stood.
+        let away = valid_segment();
+        let across = CalibrationSegment {
+            orientation: CourtOrientation::Across,
+            ..valid_segment()
+        };
+        let court = CourtPoint::new(0.8, 0.2);
+        let image = away
+            .mapping()
+            .expect("a mapping")
+            .to_image(court)
+            .expect("the point maps");
+
+        let seen_again = away
+            .mapping()
+            .expect("a mapping")
+            .to_court(image)
+            .expect("the point maps back");
+        assert_eq!(away.side_of(seen_again), CourtSide::First);
+        assert_eq!(across.side_of(seen_again), CourtSide::Second);
+    }
+
+    #[test]
+    fn the_outline_carries_the_marked_corners_and_the_projected_net() {
+        let segment = valid_segment();
+        let outline = segment.outline().expect("the outline projects");
+        assert_eq!(outline.corners, TRAPEZOID);
+
+        let mapping = segment.mapping().expect("a mapping");
+        for (index, endpoint) in segment.net_in_court().iter().enumerate() {
+            let expected = mapping.to_image(*endpoint).expect("the net projects");
+            assert!(
+                (outline.net[index].x - expected.x).abs() < 1e-9
+                    && (outline.net[index].y - expected.y).abs() < 1e-9,
+                "net end {index}: expected {expected:?}, got {:?}",
+                outline.net[index]
+            );
+        }
+    }
+
+    #[test]
+    fn the_outline_follows_an_edited_corner() {
+        let before = valid_segment().outline().expect("the outline projects");
+
+        let mut corners = TRAPEZOID;
+        corners[3] = ImagePoint::new(0.20, 0.30);
+        let after = segment(corners)
+            .outline()
+            .expect("the edited outline projects");
+
+        assert_eq!(after.corners[3], corners[3]);
+        assert_ne!(after.corners[3], before.corners[3]);
+        assert!(
+            (after.net[0].x - before.net[0].x).abs() > 1e-9
+                || (after.net[0].y - before.net[0].y).abs() > 1e-9,
+            "the net should move with the corner: {before:?} vs {after:?}"
+        );
+    }
+
+    #[test]
+    fn a_segment_starting_before_the_recording_is_rejected() {
+        let mut segment = valid_segment();
+        segment.from_ms = -1;
+        let error = segment.validate().expect_err("must be rejected");
+        assert!(error.to_string().contains("is negative"), "{error}");
+    }
+
+    #[test]
+    fn a_calibration_with_no_corners_claims_nothing() {
+        let empty = CourtCalibration {
+            schema_version: CourtCalibration::SCHEMA_VERSION,
+            segments: Vec::new(),
+        };
+        let error = empty.validate().expect_err("must be rejected");
+        assert!(
+            error.to_string().contains("no corners have been marked"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_calibration_from_a_newer_schema_is_rejected_rather_than_guessed_at() {
+        let calibration = CourtCalibration {
+            schema_version: CourtCalibration::SCHEMA_VERSION + 1,
+            segments: vec![valid_segment()],
+        };
+        let error = calibration.validate().expect_err("must be rejected");
+        assert!(error.to_string().contains("newer engine"), "{error}");
+    }
+
+    #[test]
+    fn segments_must_advance_through_the_recording() {
+        let calibration = CourtCalibration {
+            schema_version: CourtCalibration::SCHEMA_VERSION,
+            segments: vec![valid_segment(), valid_segment()],
+        };
+        let error = calibration.validate().expect_err("must be rejected");
+        assert!(error.to_string().contains("does not come after"), "{error}");
+    }
+
+    #[test]
+    fn a_timestamp_before_the_first_segment_has_no_calibration() {
+        // The first segment begins part-way through the recording, so the part
+        // before it has no court rather than the first segment's.
+        let calibration = CourtCalibration {
+            schema_version: CourtCalibration::SCHEMA_VERSION,
+            segments: vec![
+                CalibrationSegment {
+                    from_ms: 5_000,
+                    ..valid_segment()
+                },
+                CalibrationSegment {
+                    from_ms: 9_000,
+                    orientation: CourtOrientation::Across,
+                    ..valid_segment()
+                },
+            ],
+        };
+
+        assert!(calibration.segment_at(4_999).is_none());
+        assert_eq!(
+            calibration.segment_at(5_000).map(|s| s.orientation),
+            Some(CourtOrientation::Away)
+        );
+        assert_eq!(
+            calibration.segment_at(9_000).map(|s| s.orientation),
+            Some(CourtOrientation::Across)
+        );
+    }
+}

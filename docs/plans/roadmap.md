@@ -45,10 +45,14 @@ iOS builds both succeed. The Android SDK and a JDK are not installed, so no
 Android build has been produced. The local FFmpeg is a GPL Homebrew build and is
 development-only.
 
-**Verification** — the engine runs 23 tests (`tools/verify-engine.sh`); the
-client runs 53 (`flutter analyze` and `flutter test`), including
+**Verification** — the engine runs 69 tests (`tools/verify-engine.sh`); the
+client runs 127 (`flutter analyze` and `flutter test`), including
 `app/test/bridge_test.dart`, which loads the real engine library. The evidence
-is under [`docs/verification/`](../verification/).
+is under [`docs/verification/`](../verification/). The count grew because
+[`add-wave-1-2-test-coverage`](../../openspec/changes/add-wave-1-2-test-coverage/proposal.md)
+turned what the wave-1 and wave-2 verification records had observed by hand —
+and, for calibration, with a harness built outside the checkout and deleted —
+into tests that run on every change.
 
 ## Wave 1 — finish Phase 1: a useful product with no computer vision
 
@@ -172,3 +176,13 @@ A feature is not done when it compiles. It is done when its OpenSpec change
 exists, the behaviour matches the spec, formatting and lint are clean for the
 track that was touched, any new dependency has a register row, and the evidence
 is recorded under [`docs/verification/`](../verification/).
+
+A wave is not closed until its scenarios are covered or declared. Every scenario
+in a shipped capability's spec either names the test that covers it in the
+capability's verification record, or is recorded there as manual-only with the
+reason it cannot be automated — a device-only interaction, or a capability the
+project does not have yet. Evidence a reader cannot re-run is not evidence:
+a one-off run outside the checkout does not count, which is what wave 2's
+calibration harness turned out to be. The rule is recorded rather than assumed
+because `AGENTS.md` deliberately leaves ordinary feature work to implement
+first; the coverage step is what closes a wave, not what gates every change.

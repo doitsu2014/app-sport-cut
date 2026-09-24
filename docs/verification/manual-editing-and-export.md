@@ -1,9 +1,13 @@
 # Manual editing and export verification
 
 Evidence for the change
-[`add-manual-editing-and-export`](../../openspec/changes/add-manual-editing-and-export/proposal.md),
+[`add-manual-editing-and-export`](../../openspec/changes/archive/2026-09-24-add-manual-editing-and-export/proposal.md),
 gathered with Flutter 3.47.5 / Dart 3.13.4, Rust 1.97.1, and FFmpeg 8.1.1 on
-macOS (`SPORTCUT_FLUTTER_BIN=/path/to/flutter/bin`).
+macOS (`SPORTCUT_FLUTTER_BIN=/path/to/flutter/bin`). The scenario tables below
+were completed by
+[`add-wave-1-2-test-coverage`](../../openspec/changes/add-wave-1-2-test-coverage/proposal.md),
+which turned the observations recorded here into tests that run on every
+change.
 
 ## What this change delivers
 
@@ -24,15 +28,20 @@ tools/verify-engine.sh
 ==> cargo clippy --workspace --all-targets -- -D warnings
 ==> cargo test --workspace
 ...
-test result: ok. 4 passed; 0 failed  (facade)
-test result: ok. 7 passed; 0 failed  (job lifecycle)
-test result: ok. 10 passed; 0 failed (media pipeline)
-test result: ok. 2 passed; 0 failed  (offline)
+test result: ok. 20 passed; 0 failed  (court, unit)
+test result: ok. 13 passed; 0 failed  (export, unit)
+test result: ok. 6 passed; 0 failed   (export, render)
+test result: ok. 11 passed; 0 failed  (facade)
+test result: ok. 7 passed; 0 failed   (job lifecycle)
+test result: ok. 10 passed; 0 failed  (media pipeline)
+test result: ok. 2 passed; 0 failed   (offline)
 ==> engine verification passed
 ```
 
-23 engine tests pass with no warnings. The export crate was added to the
-workspace and builds on a machine with no Flutter, Xcode, Android SDK, or JDK.
+69 engine tests pass with no warnings — 46 of them added by the coverage change,
+covering the edit list's rules, the court geometry, the job handles, and the
+renderer. No test needs a mobile toolchain, and the ones that need a recording
+generate it with the local `ffmpeg` and skip when that toolchain is absent.
 
 ## Client verification
 
@@ -42,7 +51,7 @@ cd app && flutter analyze
 
 ```text
 Analyzing app...
-No issues found! (ran in 1.5s)
+No issues found! (ran in 1.4s)
 ```
 
 ```bash
@@ -50,12 +59,13 @@ cd app && flutter test
 ```
 
 ```text
-00:01 +53: All tests passed!
+00:03 +127: All tests passed!
 ```
 
-53 tests pass, including `test/bridge_test.dart`, which loads the real engine
-library and drives the facade: import, manifest, regeneration, and now a render
-that goes through the edit decision list and comes back recorded as an artifact.
+127 tests pass — 74 added by the coverage change — including
+`test/bridge_test.dart`, which loads the real engine library and drives the
+facade: import, manifest, regeneration, a render that goes through the edit
+decision list, and now the calibration calls and a cancelled import.
 
 ## A filter the local toolchain does not have
 
@@ -118,7 +128,9 @@ duration=10.500000
 
 10.5 s is exactly the title card (2.5 s) plus two clips of 4.0 s each after
 0.5 s of padding on both sides — the cuts, the padding, and the title are all
-where the edit list asked for them.
+where the edit list asked for them. This run is what
+`core/crates/export/tests/render.rs` now does on every change, against fixtures
+it generates itself.
 
 The clips and the composite were checked against the source rather than inferred
 from the duration. Average Y/U/V of a region inside the overlay's box, from the
@@ -147,6 +159,108 @@ Music plays under the title card and mixes with the match audio afterwards; with
 no music the match audio waits for the card and the card itself is silent and in
 step with the picture.
 
+## Scenario to evidence mapping
+
+Each row names the test that covers it. A row that says *manual-only* is a
+scenario no automated test can hold, with the reason recorded in the last
+section.
+
+### `processing-jobs` — Client-observable job handles (added)
+
+| Scenario | Evidence |
+| --- | --- |
+| Starting long work returns a handle | `core/crates/api/tests/facade.rs`, `importing_through_the_facade_produces_the_contract_the_client_expects` |
+| Progress read while running | `app/test/export_screen_test.dart`, `a running render shows its stage and can be cancelled`; `app/test/analysis_screen_test.dart`, `a running rebuild can be cancelled` |
+| Cancellation requested from the client | `core/crates/api/tests/facade.rs`, `a_cancelled_import_stops_and_leaves_nothing_final`; `app/test/bridge_test.dart`, `a running import can be cancelled from the client` |
+| Terminal state readable after the call returns | `core/crates/api/tests/facade.rs`, every test that waits for a terminal state through `await_job` |
+| Unknown handle reported | `core/crates/api/tests/facade.rs`, `an_unknown_job_handle_is_reported_by_identifier`; through the bindings, `app/test/bridge_test.dart`, `an unknown job handle is reported through the binding` |
+| Admission reason reported | `core/crates/api/tests/facade.rs`, `importing_through_the_facade_produces_the_contract_the_client_expects` and `a_conflicting_job_is_refused_by_name_and_the_slot_is_released` |
+
+### `media-pipeline` — Per-match artifact layout (modified)
+
+| Scenario | Evidence |
+| --- | --- |
+| Artifacts organized under one directory | `core/crates/media/tests/media_pipeline.rs`; the export test asserts the reel lands in `export/highlight.mp4` |
+| Derived artifacts are regenerable | `core/crates/api/tests/facade.rs`, `a_match_missing_derived_artifacts_can_be_repaired_through_the_facade` |
+| Exported video recorded like every other artifact | `app/test/bridge_test.dart`, `a reel renders through the bridge and is recorded as an artifact` |
+| Exported video does not displace match analysis | Same test: the manifest lists the export alongside proxy, audio, and frames |
+
+### `highlight-export` — new capability
+
+| Scenario | Evidence |
+| --- | --- |
+| Edit list describes the reel | `app/test/bridge_test.dart`, `a reel renders through the bridge and is recorded as an artifact`; `app/test/export_screen_test.dart`, `rendering asks the engine for the reel the user built` |
+| Edit list independent of renderer | manual-only: there is no second backend to render through yet. `add-platform-export-backend` is the change that can test it |
+| Empty reel rejected | `core/crates/export/src/edit_list.rs`, `a_reel_with_no_clips_is_rejected`; the export screen disables rendering with no clips (`an empty reel cannot be rendered`) |
+| Clip outside the recording rejected | `core/crates/export/src/edit_list.rs`, `a_clip_outside_the_recording_is_rejected` and `a_clip_reaching_the_reported_duration_is_accepted` |
+| Reel rendered | `core/crates/export/tests/render.rs`, `a_rendered_reel_holds_the_clips_in_order_with_padding_and_a_title` |
+| Padding applied | Same test, and `core/crates/export/src/edit_list.rs`, `padding_is_clamped_to_the_recording` |
+| Original recording unmodified | `core/crates/export/tests/render.rs`, the same test's content hash |
+| Match audio preserved | `core/crates/export/tests/render.rs`, `the_reel_carries_the_match_audio` |
+| Source without audio | `core/crates/export/tests/render.rs`, `a_recording_without_an_audio_track_renders_video_only` |
+| Score overlay burned in | `core/crates/export/tests/render.rs`, `the_overlay_is_composited_into_the_encoded_frames` |
+| Score does not change mid-clip | `app/test/export_screen_test.dart`, `rendering asks the engine for the reel the user built` (the scoreboard is drawn from the score at the clip's own position); `app/test/score_timeline_test.dart`, `the score at a moment is the score as it stood then` |
+| Title card prepended | `core/crates/export/tests/render.rs`, the first test's opening frame |
+| Overlay wording is user-supplied | `app/test/export_screen_test.dart`, the same request assertion: the scoreboard is asked for with no names, so none can be invented |
+| Missing overlay reported | `core/crates/export/src/edit_list.rs`, `an_unreadable_overlay_is_named_before_rendering` |
+| Music chosen from device storage | `app/test/export_screen_test.dart`, `music is chosen from device storage and stored with the match` |
+| Music mixed under match audio | `core/crates/export/tests/render.rs`, `music_shorter_than_the_reel_plays_under_it_to_the_end` |
+| Music shorter than the reel | Same test |
+| Unreadable music reported | `core/crates/export/src/edit_list.rs`, `an_unreadable_music_track_is_named_before_rendering`; `app/test/export_screen_test.dart`, `music that is no longer on the device is reported before rendering` |
+| No music selected | `core/crates/export/tests/render.rs`, the first test's silent title window |
+| Export artifact recorded | `app/test/bridge_test.dart`, `a reel renders through the bridge and is recorded as an artifact` |
+| Finished video handed to the user | `app/test/export_screen_test.dart`, `a finished reel is offered to the user` asserts the offer; opening the share sheet itself is manual-only |
+| Cancelled export | `core/crates/export/tests/render.rs`, `a_cancelled_export_leaves_no_partial_reel` |
+| Export removed with the match | `app/test/match_repository_test.dart`, deletion with and without artifacts |
+| Export is repeatable | `app/test/export_screen_test.dart`, `a finished reel is offered to the user` offers `Render again`; the renderer replaces `export/highlight.mp4` |
+
+### `match-editing` — new capability
+
+| Scenario | Evidence |
+| --- | --- |
+| Editing session opened | `app/test/score_screen_test.dart`, `a span the user marks becomes a rally on the timeline` |
+| Editing works offline | No network call exists on the path; the suites run with no network access |
+| Editing session left and resumed | `app/test/editing_repository_test.dart`, `a marked rally is recorded and is there next time` and `the reel keeps the order the user set` |
+| Rally marked from playback | `app/test/score_screen_test.dart`, `a span the user marks becomes a rally on the timeline` |
+| Boundary adjusted | `app/test/editing_repository_test.dart`, `moving a rally changes that rally and no other` |
+| Marking rejected | `app/test/editing_repository_test.dart`, `a rally that does not end after it starts is rejected`; `app/test/score_screen_test.dart`, `a span that does not end after it starts is refused` |
+| No rally is invented | `app/test/editing_repository_test.dart`, `a match that has not been reviewed holds no records` |
+| Winner confirmed with one tap | `app/test/score_screen_test.dart`, `one tap on a side records that side as the winner` |
+| Winner corrected | `app/test/score_screen_test.dart`, `correcting the winner moves the point to the other side` |
+| Rally left unscored | `app/test/score_screen_test.dart`, `an unscored rally shows no score for itself` |
+| Winner never inferred | `app/test/editing_repository_test.dart`, `a winner is recorded only from an explicit confirmation` |
+| Score advances with confirmed winners | `app/test/score_timeline_test.dart`, `the score advances one point per confirmed rally in rally order` |
+| Correction rewrites the later score | `app/test/score_timeline_test.dart`, `correcting an early winner rewrites every later score`; `app/test/editing_repository_test.dart`, the score-events test |
+| Score shown with the match | `app/test/editing_repository_test.dart`, the same test's `scoreSummaries` assertion |
+| Score is reproducible | `app/test/score_timeline_test.dart`, `the same rallies always derive the same timeline` |
+| Rally kept as a clip | `app/test/highlights_screen_test.dart`, `keeping a rally puts a clip in the reel` |
+| Rally left out | `app/test/highlights_screen_test.dart`, `removing a clip takes it out of the reel and leaves the rally` |
+| Clip trimmed | `app/test/highlights_screen_test.dart`, `trimming a clip moves its boundaries and not the rally` |
+| Clips reordered | `app/test/highlights_screen_test.dart`, `dragging a clip rewrites the reel order` |
+| Clip order is the user's | `app/test/editing_repository_test.dart`, `the reel keeps the order the user set` |
+
+### `match-library` — Local catalog ownership and schema (modified)
+
+| Scenario | Evidence |
+| --- | --- |
+| Schema changes are versioned | `app/test/match_catalog_test.dart`, `an install written before the editing records migrates in place` |
+| Catalog works offline | `app/test/match_catalog_test.dart` runs against `sqflite_common_ffi` with no network |
+| Editing records belong to their match | Foreign keys on `rallies`, `score_events`, `highlight_clips`, and `export_settings`, and `PRAGMA foreign_keys = ON` in `MatchCatalog.open` |
+| Clip records a clip's order and origin | `an install written before the editing records migrates in place` asserts `order_index` is backfilled and `rally_id` left null for a clip that never recorded one |
+| Export settings persisted | `app/test/editing_repository_test.dart`, `export settings are stored and read back` |
+| Match deletion | `app/test/match_catalog_test.dart`, `deleting a match removes its dependent records` |
+
+## Manual-only verification
+
+These rows are not covered by an automated test, with the reason. Everything
+else in the tables above is covered.
+
+| Scenario or behaviour | Why it is manual |
+| --- | --- |
+| Opening the platform share sheet | `share_plus` hands the file to the operating system; there is no seam a test can assert through without the platform. The screen's offer of the file is covered |
+| Exporting on a device | The render backend is the workstation's `ffmpeg`; a device cannot run it at all until `add-platform-export-backend` lands |
+| The reel playing back on a device | Needs a simulator or device; the toolchain gate in the roadmap records why one is not available here |
+
 ## Limits recorded, not hidden
 
 - **The render backend is development-only.** It shells out to the local
@@ -165,76 +279,11 @@ step with the picture.
   partial until they are rebuilt. The files themselves are untouched; only their
   recorded state changes. Narrowing that to the artifacts a job actually writes
   is worth doing alongside the native render backend.
-- **The review screens have no automated coverage.** They are verified by
-  `flutter analyze` and by reading the code; the repository's working agreement
-  is not to add tests unless asked, and the change did not ask. Running the flow
-  itself still needs a device or simulator — `tools/preflight.sh --profile
-  mobile` reports the Android SDK and JDK as missing.
-
-## Scenario to evidence mapping
-
-### `processing-jobs` — Client-observable job handles (added)
-
-| Scenario | Evidence |
-| --- | --- |
-| Starting long work returns a handle | `core/crates/api/tests/facade.rs`, `importing_through_the_facade_produces_the_contract_the_client_expects` |
-| Progress read while running | `app/test/bridge_test.dart`, `importing a recording through the bridge produces the expected artifacts` (polls the handle to completion) |
-| Cancellation requested from the client | Implemented in `job_cancel`; exercised by the export and analysis screens. Not covered by an automated test. |
-| Terminal state readable after the call returns | `core/crates/api/tests/facade.rs`, all four tests wait for a terminal state through `await_job` |
-| Unknown handle reported | Implemented in `jobs::unknown_job`; the error names the identifier. Not covered by an automated test. |
-| Admission reason reported | `core/crates/api/tests/facade.rs`, the same test starts a second import for a different match and asserts the rejection names the resource-intensive job |
-
-### `media-pipeline` — Per-match artifact layout (modified)
-
-| Scenario | Evidence |
-| --- | --- |
-| Artifacts organized under one directory | The fixture render above writes `match/export/highlight.mp4` |
-| Derived artifacts are regenerable | Unchanged behavior, covered by `a_match_missing_derived_artifacts_can_be_repaired_through_the_facade` |
-| Exported video recorded like every other artifact | `app/test/bridge_test.dart`, `a reel renders through the bridge and is recorded as an artifact` |
-| Exported video does not displace match analysis | Same test: the manifest lists the export alongside proxy, audio, and frames |
-
-### `highlight-export` — new capability
-
-| Scenario | Evidence |
-| --- | --- |
-| Edit list describes the reel | `app/test/bridge_test.dart` builds an `ExportRequestDto`; the fixture render above applies one |
-| Edit list independent of renderer | Structural: the edit list carries no backend detail. Not measurable until a second backend exists. |
-| Empty reel rejected | `export_highlight` rejects it, and the export screen disables rendering with no clips |
-| Clip outside the recording rejected | `EditList::validate`; not covered by an automated test |
-| Reel rendered | The fixture render above |
-| Padding applied | The fixture render's 10.5 s total |
-| Original recording unmodified | `app/test/bridge_test.dart`, `importing a recording through the bridge produces the expected artifacts`, asserts the source file is byte-for-byte unchanged |
-| Match audio preserved | The audio table above (without music, during a clip) |
-| Source without audio | The render falls back to `-an`; not covered by an automated test |
-| Score overlay burned in | The Y/U/V table above |
-| Score does not change mid-clip | The overlay is composited per clip for its whole duration; not covered by an automated test |
-| Title card prepended | The YAVG 30 of the title window, and the 10.5 s total |
-| Overlay wording is user-supplied | `OverlayRenderer._label` omits a name that was never given |
-| Missing overlay reported | `EditList::validate` names the file; not covered by an automated test |
-| Music chosen from device storage | `SystemAudioFilePicker`, wired to the export screen |
-| Music mixed under match audio | The audio table above |
-| Music shorter than the reel | The music chain pads and fades to the reel's length; not covered by an automated test |
-| Unreadable music reported | `ExportController._request` fails before rendering |
-| No music selected | The audio table above (without music) |
-| Export artifact recorded | `app/test/bridge_test.dart` |
-| Finished video handed to the user | The export screen's share action (`share_plus`); not covered by an automated test |
-| Cancelled export | The render writes a `.part` file and renames only on success, so a cancelled export leaves the previous reel's *file* untouched. Its recorded state becomes non-final, as noted in the limits above. Not covered by an automated test. |
-| Export removed with the match | `deleteMatch` removes the match directory when the user asks for the artifacts |
-| Export is repeatable | A re-render replaces `export/highlight.mp4`, which is what `record_artifact` does by kind |
-
-### `match-editing` — new capability
-
-Every scenario here is implemented and exercised only by `flutter analyze` and by
-reading the code; the review screens have no automated coverage, as recorded
-above.
-
-### `match-library` — Local catalog ownership and schema (modified)
-
-| Scenario | Evidence |
-| --- | --- |
-| Schema changes are versioned | `app/test/match_catalog_test.dart`, `an install written before the editing records migrates in place` |
-| Catalog works offline | `app/test/match_catalog_test.dart` runs against `sqflite_common_ffi` with no network |
-| Editing records belong to their match | Foreign keys on `rallies`, `score_events`, `highlight_clips`, and `export_settings`, and `PRAGMA foreign_keys = ON` in `MatchCatalog.open` |
-| Clip records a clip's order and origin | `an install written before the editing records migrates in place` asserts `order_index` is backfilled and `rally_id` left null for a clip that never recorded one |
-| Export settings persisted | `EditingStore.writeExportSettings` / `readExportSettings` |
-| Match deletion | `app/test/match_catalog_test.dart`, `deleting a match removes its dependent records` |
+- **A job reports its terminal state a moment before its worker releases the
+  heavy-job admission slot.** A client that starts the next import the instant
+  the previous one finished can therefore be told that another heavy job is
+  still running. The application's own flow never does this — the user has to
+  tap import again — but the tests that chain imports deliberately wait for the
+  slot, which is what `start_import_when_admitted` and `importWhenAdmitted`
+  document. Releasing the slot before the terminal state is a small, separate
+  change to `sportcut-jobs`.

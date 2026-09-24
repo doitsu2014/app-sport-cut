@@ -192,3 +192,257 @@ fn require_readable_file(path: &Path, what: &str) -> Result<()> {
         path.display()
     )))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    /// Metadata of a plain ten-second recording, as a probe would report it.
+    fn source() -> MediaMetadata {
+        MediaMetadata {
+            path: "source.mp4".to_string(),
+            duration_seconds: 10.0,
+            frame_rate: 10.0,
+            width: 320,
+            height: 240,
+            rotation_degrees: 0,
+            has_audio: true,
+            size_bytes: 0,
+        }
+    }
+
+    /// A reel with one clip covering the middle of the recording.
+    fn reel() -> EditList {
+        let mut edit_list = EditList::new("source.mp4", "reel.mp4");
+        edit_list.clips = vec![EditClip {
+            start_seconds: 4.0,
+            end_seconds: 6.0,
+            overlay: None,
+        }];
+        edit_list
+    }
+
+    /// A file that exists, for the rules that check readability.
+    ///
+    /// The crate has no test-only dependencies — `tempfile` belongs to the media
+    /// crate — so the handful of files these tests need are written under the
+    /// system temporary directory and removed when the test ends.
+    #[derive(Debug)]
+    struct Scrap {
+        dir: PathBuf,
+    }
+
+    impl Scrap {
+        fn new(label: &str) -> Self {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("the clock is after the epoch")
+                .as_nanos();
+            let dir = std::env::temp_dir().join(format!(
+                "sportcut-edit-list-{label}-{}-{stamp}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&dir).expect("create the scrap directory");
+            Self { dir }
+        }
+
+        fn file(&self, name: &str) -> PathBuf {
+            let path = self.dir.join(name);
+            std::fs::write(&path, b"fixture").expect("write the fixture file");
+            path
+        }
+    }
+
+    impl Drop for Scrap {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[test]
+    fn a_reel_with_no_clips_is_rejected() {
+        let mut edit_list = EditList::new("source.mp4", "reel.mp4");
+        edit_list.clips = Vec::new();
+
+        let error = edit_list.validate(&source()).expect_err("must be rejected");
+        assert!(error.to_string().contains("at least one clip"), "{error}");
+    }
+
+    #[test]
+    fn a_clip_that_does_not_end_after_it_starts_is_rejected() {
+        for (start, end) in [(6.0, 4.0), (4.0, 4.0)] {
+            let mut edit_list = reel();
+            edit_list.clips = vec![
+                EditClip {
+                    start_seconds: 1.0,
+                    end_seconds: 2.0,
+                    overlay: None,
+                },
+                EditClip {
+                    start_seconds: start,
+                    end_seconds: end,
+                    overlay: None,
+                },
+            ];
+
+            let error = edit_list.validate(&source()).expect_err("must be rejected");
+            // The offending clip is named by position, not by index.
+            assert!(error.to_string().contains("clip 2"), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_boundary_that_is_not_a_number_is_rejected() {
+        for (start, end) in [(f64::NAN, 6.0), (4.0, f64::INFINITY)] {
+            let mut edit_list = reel();
+            edit_list.clips[0].start_seconds = start;
+            edit_list.clips[0].end_seconds = end;
+
+            let error = edit_list.validate(&source()).expect_err("must be rejected");
+            assert!(error.to_string().contains("not a number"), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_clip_outside_the_recording_is_rejected() {
+        let mut before = reel();
+        before.clips[0].start_seconds = -1.0;
+        before.clips[0].end_seconds = 2.0;
+        let error = before.validate(&source()).expect_err("must be rejected");
+        assert!(error.to_string().contains("starts before"), "{error}");
+
+        let mut past_the_end = reel();
+        past_the_end.clips[0].end_seconds = 10.5;
+        let error = past_the_end
+            .validate(&source())
+            .expect_err("must be rejected");
+        assert!(error.to_string().contains("past the end"), "{error}");
+        assert!(error.to_string().contains("10.000s"), "{error}");
+    }
+
+    #[test]
+    fn a_clip_reaching_the_reported_duration_is_accepted() {
+        // The client computes a clip that runs to the end of the recording from
+        // a duration the probe reported, so an exact comparison would reject a
+        // legitimate clip.
+        let mut edit_list = reel();
+        edit_list.clips[0].end_seconds = 10.04;
+        edit_list.validate(&source()).expect("within tolerance");
+    }
+
+    #[test]
+    fn negative_padding_is_rejected() {
+        let mut edit_list = reel();
+        edit_list.lead_in_seconds = -0.5;
+        let error = edit_list.validate(&source()).expect_err("must be rejected");
+        assert!(error.to_string().contains("padding"), "{error}");
+    }
+
+    #[test]
+    fn a_music_gain_outside_the_unit_range_is_rejected() {
+        for gain in [-0.1, 1.1] {
+            let mut edit_list = reel();
+            edit_list.music_gain = gain;
+            let error = edit_list.validate(&source()).expect_err("must be rejected");
+            assert!(error.to_string().contains("music gain"), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_title_card_needs_a_positive_duration() {
+        let scrap = Scrap::new("title");
+        let mut edit_list = reel();
+        edit_list.title = Some(TitleCard {
+            image: scrap.file("title.png"),
+            seconds: 0.0,
+        });
+
+        let error = edit_list.validate(&source()).expect_err("must be rejected");
+        assert!(error.to_string().contains("positive duration"), "{error}");
+    }
+
+    #[test]
+    fn an_unreadable_overlay_is_named_before_rendering() {
+        let scrap = Scrap::new("overlay");
+        let missing = scrap.dir.join("overlay.png");
+        let mut edit_list = reel();
+        edit_list.clips[0].overlay = Some(missing.clone());
+
+        let error = edit_list.validate(&source()).expect_err("must be rejected");
+        let message = error.to_string();
+        assert!(message.contains("overlay of clip 1"), "{message}");
+        assert!(message.contains("overlay.png"), "{message}");
+    }
+
+    #[test]
+    fn an_unreadable_music_track_is_named_before_rendering() {
+        let scrap = Scrap::new("music");
+        let mut edit_list = reel();
+        edit_list.music = Some(scrap.dir.join("music.m4a"));
+
+        let error = edit_list.validate(&source()).expect_err("must be rejected");
+        let message = error.to_string();
+        assert!(message.contains("music track"), "{message}");
+        assert!(message.contains("music.m4a"), "{message}");
+    }
+
+    #[test]
+    fn an_unreadable_title_card_is_named_before_rendering() {
+        let scrap = Scrap::new("title-missing");
+        let mut edit_list = reel();
+        edit_list.title = Some(TitleCard {
+            image: scrap.dir.join("title.png"),
+            seconds: 2.0,
+        });
+
+        let error = edit_list.validate(&source()).expect_err("must be rejected");
+        let message = error.to_string();
+        assert!(message.contains("title card image"), "{message}");
+        assert!(message.contains("title.png"), "{message}");
+    }
+
+    #[test]
+    fn a_readable_overlay_title_and_music_are_accepted() {
+        let scrap = Scrap::new("present");
+        let mut edit_list = reel();
+        edit_list.clips[0].overlay = Some(scrap.file("overlay.png"));
+        edit_list.title = Some(TitleCard {
+            image: scrap.file("title.png"),
+            seconds: 2.0,
+        });
+        edit_list.music = Some(scrap.file("music.m4a"));
+
+        edit_list
+            .validate(&source())
+            .expect("everything is readable");
+        assert!(edit_list.has_music());
+    }
+
+    #[test]
+    fn padding_is_clamped_to_the_recording() {
+        let mut edit_list = reel();
+        edit_list.lead_in_seconds = 1.0;
+        edit_list.lead_out_seconds = 1.0;
+
+        // Inside the recording, padding is applied on both sides.
+        assert_eq!(edit_list.padded_span(&edit_list.clips[0], 10.0), (3.0, 7.0));
+
+        // At either edge, the span stops at the recording rather than running
+        // past it, which is what lets a clip at the very start or end render.
+        let first = EditClip {
+            start_seconds: 0.2,
+            end_seconds: 2.0,
+            overlay: None,
+        };
+        assert_eq!(edit_list.padded_span(&first, 10.0), (0.0, 3.0));
+
+        let last = EditClip {
+            start_seconds: 8.0,
+            end_seconds: 9.8,
+            overlay: None,
+        };
+        assert_eq!(edit_list.padded_span(&last, 10.0), (7.0, 10.0));
+    }
+}

@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:sportcut/src/bridge/sportcut_engine.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:sportcut/src/features/export/data/audio_file_picker.dart';
 import 'package:sportcut/src/features/library/data/media_engine.dart';
 import 'package:sportcut/src/features/library/data/video_file_picker.dart';
 import 'package:sportcut/src/features/library/presentation/playback_controller.dart';
@@ -16,7 +17,7 @@ class FakeMediaEngine implements MediaEngine {
   FakeMediaEngine({this.failure, this.durationSeconds = 90.5});
 
   /// Error thrown by every call, when set.
-  final Object? failure;
+  Object? failure;
 
   /// Duration reported by [probe].
   final double durationSeconds;
@@ -42,12 +43,18 @@ class FakeMediaEngine implements MediaEngine {
   /// Reason [jobStatus] reports when [jobState] is failed.
   String? jobError;
 
+  /// Stage [jobStatus] reports, and therefore the label a screen shows.
+  String? jobStage = 'frames';
+
   /// Number of status and cancel calls.
   int jobStatusCalls = 0;
   int jobCancelCalls = 0;
 
   /// Match directory passed to the last manifest call.
   String? lastManifestDir;
+
+  /// Artifacts [manifest] reports, when a test needs more than the default.
+  List<ArtifactDto>? manifestArtifacts;
 
   /// Calibration the last save call was given.
   CourtCalibrationDto? lastSavedCalibration;
@@ -100,17 +107,22 @@ class FakeMediaEngine implements MediaEngine {
   @override
   Future<ArtifactManifestDto> manifest(String matchDir) async {
     lastManifestDir = matchDir;
+    final error = failure;
+    if (error != null) {
+      throw error;
+    }
     return ArtifactManifestDto(
       matchId: lastMatchId ?? 'match-1',
       originalPath: 'original.mp4',
-      artifacts: <ArtifactDto>[
-        ArtifactDto(
-          kind: 'proxy',
-          relativePath: 'proxy/proxy.mp4',
-          state: ArtifactStateDto.final_,
-          sizeBytes: BigInt.from(2048),
-        ),
-      ],
+      artifacts: manifestArtifacts ??
+          <ArtifactDto>[
+            ArtifactDto(
+              kind: 'proxy',
+              relativePath: 'proxy/proxy.mp4',
+              state: ArtifactStateDto.final_,
+              sizeBytes: BigInt.from(2048),
+            ),
+          ],
       missingKinds: const <String>[],
       notRebuildableKinds: const <String>[],
       originalPresent: true,
@@ -186,7 +198,7 @@ class FakeMediaEngine implements MediaEngine {
       jobId: jobId,
       matchId: lastMatchId ?? 'match-1',
       state: jobState,
-      stage: 'frames',
+      stage: jobStage,
       progress: null,
       error: jobError,
       completedStages: const <String>['probe', 'proxy', 'audio', 'frames'],
@@ -239,6 +251,28 @@ class FakeVideoFilePicker implements VideoFilePicker {
     if (gate != null) {
       await gate.future;
     }
+    final error = failure;
+    if (error != null) {
+      throw error;
+    }
+    return result;
+  }
+}
+
+/// Audio picker double returning a scripted track.
+class FakeAudioFilePicker implements AudioFilePicker {
+  /// Result returned by [pickAudio]; `null` means the user cancelled.
+  PickedAudio? result;
+
+  /// Error thrown instead of returning a result, when set.
+  Object? failure;
+
+  /// Number of pick attempts.
+  int calls = 0;
+
+  @override
+  Future<PickedAudio?> pickAudio() async {
+    calls += 1;
     final error = failure;
     if (error != null) {
       throw error;

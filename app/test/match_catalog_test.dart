@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sportcut/src/features/calibration/domain/court_calibration.dart';
 import 'package:sportcut/src/features/library/data/match_catalog.dart';
 import 'package:sportcut/src/features/library/domain/match_record.dart';
 
@@ -286,6 +287,108 @@ void main() {
     expect(await db.query('rallies'), isEmpty);
     expect(await db.query('score_events'), isEmpty);
     expect(await db.query('highlight_clips'), isEmpty);
+    await catalog.close();
+  });
+
+  test('a court calibration is stored on the match and read back', () async {
+    final catalog = await MatchCatalog.open(
+      factory: databaseFactoryFfi,
+      path: databasePath,
+    );
+    final calibration = CourtCalibration.fromCorners(
+      corners: const <CourtCorner>[
+        CourtCorner(x: 0.10, y: 0.90),
+        CourtCorner(x: 0.90, y: 0.90),
+        CourtCorner(x: 0.70, y: 0.40),
+        CourtCorner(x: 0.30, y: 0.40),
+      ],
+      orientation: CourtOrientation.across,
+    );
+    await catalog.insertMatch(
+      sampleMatch().copyWith(courtCalibration: calibration),
+    );
+    await catalog.close();
+
+    // The catalog is the source of truth: the calibration is there when the
+    // application starts again, without asking the engine for it.
+    final reopened = await MatchCatalog.open(
+      factory: databaseFactoryFfi,
+      path: databasePath,
+    );
+    final stored = (await reopened.listMatches()).single;
+    await reopened.close();
+
+    expect(stored.isCalibrated, isTrue);
+    final segment = stored.courtCalibration!.firstSegment!;
+    expect(segment.orientation, CourtOrientation.across);
+    expect(segment.corners, hasLength(4));
+    expect(segment.corners.first.x, 0.10);
+    expect(segment.corners.first.y, 0.90);
+    expect(segment.fromMs, 0);
+  });
+
+  test('a match that was never calibrated loads with no calibration', () async {
+    final catalog = await MatchCatalog.open(
+      factory: databaseFactoryFfi,
+      path: databasePath,
+    );
+    await catalog.insertMatch(sampleMatch());
+    await catalog.close();
+
+    final reopened = await MatchCatalog.open(
+      factory: databaseFactoryFfi,
+      path: databasePath,
+    );
+    final stored = (await reopened.listMatches()).single;
+    await reopened.close();
+
+    expect(stored.courtCalibration, isNull);
+    expect(stored.isCalibrated, isFalse);
+  });
+
+  test('a calibration that cannot be read is reported as no calibration',
+      () async {
+    final catalog = await MatchCatalog.open(
+      factory: databaseFactoryFfi,
+      path: databasePath,
+    );
+    await catalog.insertMatch(sampleMatch());
+    await catalog.database.update(
+      'matches',
+      <String, Object?>{'court_calibration': 'not json at all'},
+      where: 'id = ?',
+      whereArgs: <Object?>['match-1'],
+    );
+
+    final stored = (await catalog.listMatches()).single;
+    await catalog.close();
+
+    // Nothing is invented from a value that cannot be read.
+    expect(stored.courtCalibration, isNull);
+    expect(stored.isCalibrated, isFalse);
+  });
+
+  test('deleting a match removes its calibration with it', () async {
+    final catalog = await MatchCatalog.open(
+      factory: databaseFactoryFfi,
+      path: databasePath,
+    );
+    await catalog.insertMatch(
+      sampleMatch().copyWith(
+        courtCalibration: CourtCalibration.fromCorners(
+          corners: const <CourtCorner>[
+            CourtCorner(x: 0.10, y: 0.90),
+            CourtCorner(x: 0.90, y: 0.90),
+            CourtCorner(x: 0.70, y: 0.40),
+            CourtCorner(x: 0.30, y: 0.40),
+          ],
+        ),
+      ),
+    );
+
+    await catalog.deleteMatch('match-1');
+
+    expect(await catalog.listMatches(), isEmpty);
     await catalog.close();
   });
 }

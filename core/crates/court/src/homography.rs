@@ -179,3 +179,142 @@ fn invert(matrix: &[[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
 
     Some(inverse)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The unit square in image coordinates: the calibration that should be an
+    /// identity mapping.
+    fn unit_square() -> [ImagePoint; 4] {
+        [
+            ImagePoint::new(0.0, 0.0),
+            ImagePoint::new(1.0, 0.0),
+            ImagePoint::new(1.0, 1.0),
+            ImagePoint::new(0.0, 1.0),
+        ]
+    }
+
+    /// A court seen from behind a baseline: the near edge is wider than the far
+    /// one, so the mapping has to be genuinely projective.
+    fn trapezoid() -> [ImagePoint; 4] {
+        [
+            ImagePoint::new(0.10, 0.90),
+            ImagePoint::new(0.90, 0.90),
+            ImagePoint::new(0.70, 0.40),
+            ImagePoint::new(0.30, 0.40),
+        ]
+    }
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < 1e-9,
+            "expected {expected}, got {actual}"
+        );
+    }
+
+    /// Where two line segments cross, for the diagonal invariant below.
+    fn crossing(a: ImagePoint, b: ImagePoint, c: ImagePoint, d: ImagePoint) -> ImagePoint {
+        let determinant = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
+        assert!(
+            determinant.abs() > 1e-12,
+            "the lines are parallel, so there is no crossing"
+        );
+        let first = a.x * b.y - a.y * b.x;
+        let second = c.x * d.y - c.y * d.x;
+        ImagePoint::new(
+            (first * (c.x - d.x) - (a.x - b.x) * second) / determinant,
+            (first * (c.y - d.y) - (a.y - b.y) * second) / determinant,
+        )
+    }
+
+    #[test]
+    fn the_unit_square_maps_to_itself_with_the_first_corner_as_the_origin() {
+        let mapping = CourtMapping::from_corners(&unit_square()).expect("a square defines a court");
+
+        let origin = mapping
+            .to_court(ImagePoint::new(0.0, 0.0))
+            .expect("the origin maps");
+        assert_close(origin.u, 0.0);
+        assert_close(origin.v, 0.0);
+
+        let corner = mapping
+            .to_court(ImagePoint::new(0.25, 0.75))
+            .expect("an interior point maps");
+        assert_close(corner.u, 0.25);
+        assert_close(corner.v, 0.75);
+
+        let back = mapping
+            .to_image(CourtPoint::new(0.25, 0.75))
+            .expect("the court maps back");
+        assert_close(back.x, 0.25);
+        assert_close(back.y, 0.75);
+    }
+
+    #[test]
+    fn mapping_a_projected_court_round_trips() {
+        let mapping =
+            CourtMapping::from_corners(&trapezoid()).expect("a trapezoid defines a court");
+
+        for (u, v) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.5, 0.5)] {
+            let image = mapping
+                .to_image(CourtPoint::new(u, v))
+                .unwrap_or_else(|| panic!("court point ({u}, {v}) maps to the image"));
+            let court = mapping
+                .to_court(image)
+                .unwrap_or_else(|| panic!("image point {image:?} maps back to the court"));
+            assert!(
+                (court.u - u).abs() < 1e-9 && (court.v - v).abs() < 1e-9,
+                "({u}, {v}) round-tripped to {court:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_court_centre_is_where_the_marked_quadrilaterals_diagonals_cross() {
+        // A projective map is not affine, so the centre of the court is *not*
+        // the middle of the quadrilateral's bounding box. It is the crossing of
+        // its diagonals, which is the invariant a wrong homography breaks.
+        let corners = trapezoid();
+        let mapping = CourtMapping::from_corners(&corners).expect("a trapezoid defines a court");
+
+        let centre = mapping
+            .to_image(CourtPoint::new(0.5, 0.5))
+            .expect("the court centre maps");
+        let expected = crossing(corners[0], corners[2], corners[1], corners[3]);
+
+        assert!(
+            (centre.x - expected.x).abs() < 1e-9 && (centre.y - expected.y).abs() < 1e-9,
+            "expected {expected:?}, got {centre:?}"
+        );
+        // And it is genuinely off the bounding box's middle, so the assertion
+        // above is not passing by way of an affine mapping.
+        assert!(
+            (centre.y - 0.65).abs() > 1e-3,
+            "the centre should not sit halfway down the image: {centre:?}"
+        );
+    }
+
+    #[test]
+    fn a_parallelogram_is_mapped_without_projective_terms() {
+        // The projective terms vanish here, which is the branch the general case
+        // divides by; a square sheared into a parallelogram still has to map.
+        let sheared = [
+            ImagePoint::new(0.20, 0.80),
+            ImagePoint::new(0.80, 0.80),
+            ImagePoint::new(1.00, 0.30),
+            ImagePoint::new(0.40, 0.30),
+        ];
+        let mapping =
+            CourtMapping::from_corners(&sheared).expect("a parallelogram defines a court");
+
+        let court = mapping
+            .to_court(ImagePoint::new(0.5, 0.55))
+            .expect("the point maps");
+        let back = mapping.to_image(court).expect("the point maps back");
+        assert!(
+            (back.x - 0.5).abs() < 1e-9 && (back.y - 0.55).abs() < 1e-9,
+            "{back:?}"
+        );
+    }
+}
