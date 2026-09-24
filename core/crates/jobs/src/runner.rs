@@ -200,7 +200,12 @@ fn finish_cancelled(
     if plan.resumes() {
         checkpoints.set_state(session.id(), &plan.match_id, JobState::Cancelled)?;
     }
-    mark_artifacts_non_final(checkpoints.match_dir())?;
+    // Import stages can leave intermediate artifacts that need marking. Jobs
+    // without resume (export and rally analysis) publish only on success; a
+    // cancelled run must not downgrade artifacts from earlier completed jobs.
+    if plan.resumes() {
+        mark_artifacts_non_final(checkpoints.match_dir())?;
+    }
     Err(error)
 }
 

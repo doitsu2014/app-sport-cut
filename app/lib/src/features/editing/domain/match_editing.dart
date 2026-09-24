@@ -2,6 +2,7 @@ import '../../library/domain/match_record.dart';
 import 'export_settings.dart';
 import 'match_edit.dart';
 import 'rally.dart';
+import 'suggestion_decision.dart';
 
 /// Raised when a review action cannot be applied.
 ///
@@ -34,6 +35,28 @@ abstract interface class MatchEditing {
     MatchRecord match, {
     required double startSeconds,
     required double endSeconds,
+  });
+
+  /// Decisions already made for one analysis generation.
+  Future<List<SuggestionDecision>> suggestionDecisions(
+    MatchRecord match, {
+    required String generationId,
+  });
+
+  /// Accept a proposal as an unscored rally, optionally with edited boundaries.
+  Future<void> acceptSuggestion(
+    MatchRecord match, {
+    required String generationId,
+    required String candidateId,
+    required double startSeconds,
+    required double endSeconds,
+  });
+
+  /// Hide a proposal for this generation without creating a rally.
+  Future<void> dismissSuggestion(
+    MatchRecord match, {
+    required String generationId,
+    required String candidateId,
   });
 
   /// Move a rally's start or end.

@@ -26,6 +26,11 @@ The app should instead use a human-in-the-loop workflow:
 4. The score updates automatically.
 5. The user exports a polished video.
 
+Suggested boundaries are review aids. If local tracking or analysis is
+unavailable, the user can mark rallies manually. A proposed rally does not
+change the score or highlight reel; only a user-accepted rally becomes part of
+the match, and only a confirmed winner advances the score.
+
 This provides real value early while collecting labeled data for future model improvements.
 
 ## 3. Target User

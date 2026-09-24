@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::thread;
 
 use anyhow::{anyhow, Result};
+use serde::Deserialize;
 use sportcut_common::{CancelToken, SportcutError};
 use sportcut_court::{CalibrationSegment, CourtCalibration};
 use sportcut_export::{render, EditClip, EditList, ExportContext, TitleCard, EXPORT_RELATIVE_PATH};
@@ -23,15 +24,17 @@ use sportcut_media::{
     probe, regenerate_missing, run_stage, MediaToolchain, PipelineContext, PipelineOptions, STAGES,
     STAGE_PROBE,
 };
+use sportcut_rally::{segment_with_cancel, SegmentationConfig, SegmentationInput};
 use sportcut_storage::{
-    load_calibration, save_calibration, ArtifactKind, ArtifactManifest, ArtifactState,
-    MatchDirectory,
+    load_calibration, load_rally_suggestions, save_calibration, save_rally_suggestions,
+    ArtifactKind, ArtifactManifest, ArtifactState, MatchDirectory, RallySuggestions,
+    SuggestionInputs, CALIBRATION_RELATIVE_PATH,
 };
 
 use crate::dto::{
     ArtifactManifestDto, CalibrationSaveDto, CalibrationSaveRequestDto, CalibrationSegmentDto,
     CourtCalibrationDto, CourtGeometryDto, ExportRequestDto, JobHandleDto, JobStatusDto,
-    MediaImportRequestDto, MediaMetadataDto,
+    MediaImportRequestDto, MediaMetadataDto, RallySegmentationRequestDto, RallySuggestionsDto,
 };
 use crate::jobs;
 
@@ -49,6 +52,19 @@ const REGENERATE_STAGE: &str = "regenerate";
 /// running. The job's own label is what a failure before the first of them is
 /// recorded against.
 const EXPORT_STAGE: &str = "export";
+
+/// Stage label for deriving rally suggestions from player tracks.
+const RALLY_SEGMENTATION_STAGE: &str = "rally_segmentation";
+
+/// Provisional track-artifact path until the Wave 2 producer is implemented.
+const PLAYER_TRACKS_RELATIVE_PATH: &str = "tracks/player_tracks.json";
+
+/// Versioned input envelope supplied by a future player-tracking stage.
+#[derive(Debug, Deserialize)]
+struct TrackArtifact {
+    schema_version: u32,
+    input: SegmentationInput,
+}
 
 /// Stages of a media import, in order.
 pub fn media_import_stages() -> Vec<String> {
@@ -105,6 +121,39 @@ pub fn start_regenerate_match_media(match_dir: String, sampling_rate: f64) -> Re
     })?;
 
     Ok(handle)
+}
+
+/// Start motion-first rally analysis from a completed local track artifact.
+///
+/// Until Wave 2 writes `tracks/player_tracks.json`, this returns an actionable
+/// unavailable-input error and does not claim that the match contains no rallies.
+pub fn start_rally_segmentation(request: RallySegmentationRequestDto) -> Result<JobHandleDto> {
+    let match_dir = MatchDirectory::new(&request.match_dir);
+    let config = SegmentationConfig::from(&request.config);
+    config.validate().map_err(to_anyhow)?;
+    let (manifest, input, identity) = load_track_input(&match_dir, config)?;
+
+    let session = JobSession::new(manifest.match_id.clone(), CancelToken::new());
+    let lease = jobs::open(&session, match_dir.root(), false)?;
+    let handle = handle_for(&session);
+    spawn_worker(
+        "rally-segmentation",
+        &session,
+        lease,
+        move |session, lease| run_rally_segmentation(&match_dir, input, identity, session, lease),
+    )?;
+    Ok(handle)
+}
+
+/// Read only suggestions produced for the current tracks and configuration.
+pub fn match_rally_suggestions(
+    request: RallySegmentationRequestDto,
+) -> Result<Option<RallySuggestionsDto>> {
+    let match_dir = MatchDirectory::new(&request.match_dir);
+    let config = SegmentationConfig::from(&request.config);
+    let (_, _, identity) = load_track_input(&match_dir, config)?;
+    let suggestions = load_rally_suggestions(&match_dir, &identity).map_err(to_anyhow)?;
+    Ok(suggestions.as_ref().map(RallySuggestionsDto::from))
 }
 
 /// Read the current state of a job.
@@ -340,6 +389,130 @@ fn run_regenerate(
     })
     .map(|_run| ())
     .map_err(to_anyhow)
+}
+
+fn run_rally_segmentation(
+    match_dir: &MatchDirectory,
+    input: SegmentationInput,
+    identity: SuggestionInputs,
+    session: &Arc<JobSession>,
+    lease: JobLease,
+) -> Result<()> {
+    let checkpoints = CheckpointStore::new(match_dir);
+    let plan =
+        JobPlan::new(session.match_id().to_string(), [RALLY_SEGMENTATION_STAGE]).without_resume();
+    execute_admitted(lease, session, &checkpoints, &plan, |_stage, context| {
+        context.check_cancelled()?;
+        context.report(
+            RALLY_SEGMENTATION_STAGE,
+            0.1,
+            Some("analyzing player motion".to_string()),
+        );
+        let result = segment_with_cancel(&input, identity.config, &context.cancel_token())?;
+        context.check_cancelled()?;
+        context.report(
+            RALLY_SEGMENTATION_STAGE,
+            0.9,
+            Some("publishing rally suggestions".to_string()),
+        );
+        let (_, _, current) = load_track_input(match_dir, identity.config)
+            .map_err(|error| SportcutError::Artifact(error.to_string()))?;
+        if current != identity {
+            return Err(SportcutError::Artifact(
+                "tracking or calibration changed during rally analysis; run it again".to_string(),
+            ));
+        }
+        context.check_cancelled()?;
+        let suggestions = RallySuggestions::from_result(identity.clone(), result)?;
+        session.commit_final(|| save_rally_suggestions(match_dir, &suggestions))?;
+        context.report(RALLY_SEGMENTATION_STAGE, 1.0, None);
+        Ok(())
+    })
+    .map(|_run| ())
+    .map_err(to_anyhow)
+}
+
+fn load_track_input(
+    match_dir: &MatchDirectory,
+    config: SegmentationConfig,
+) -> Result<(ArtifactManifest, SegmentationInput, SuggestionInputs)> {
+    let manifest = ArtifactManifest::load(&match_dir.manifest_path()).map_err(to_anyhow)?;
+    let calibration = manifest.entry(ArtifactKind::Calibration).ok_or_else(|| {
+        anyhow!("court calibration is unavailable; mark the court before rally analysis")
+    })?;
+    if calibration.state != ArtifactState::Final
+        || calibration.relative_path != CALIBRATION_RELATIVE_PATH
+        || !match_dir.resolve(CALIBRATION_RELATIVE_PATH).is_file()
+    {
+        return Err(anyhow!(
+            "court calibration is unavailable; restore it before rally analysis"
+        ));
+    }
+    let tracks = manifest.entry(ArtifactKind::Tracks).ok_or_else(|| {
+        anyhow!("player tracks are unavailable; run player tracking before rally analysis")
+    })?;
+    if tracks.state != ArtifactState::Final || tracks.relative_path != PLAYER_TRACKS_RELATIVE_PATH {
+        return Err(anyhow!(
+            "player tracks are not a completed supported artifact; run player tracking again"
+        ));
+    }
+    let path = match_dir.resolve(PLAYER_TRACKS_RELATIVE_PATH);
+    let bytes = std::fs::read(&path)
+        .map_err(|error| anyhow!("cannot read player tracks at {}: {error}", path.display()))?;
+    let artifact: TrackArtifact = serde_json::from_slice(&bytes).map_err(|error| {
+        anyhow!(
+            "player tracks at {} are unreadable: {error}",
+            path.display()
+        )
+    })?;
+    if artifact.schema_version != 1 {
+        return Err(anyhow!(
+            "player track schema {} is unsupported; expected 1",
+            artifact.schema_version
+        ));
+    }
+    if let Some(recorded_duration) = manifest.original.duration_seconds {
+        let track_duration = artifact.input.duration_ms as f64 / 1000.0;
+        if !recorded_duration.is_finite() || (track_duration - recorded_duration).abs() > 0.5 {
+            return Err(anyhow!(
+                "player tracks do not match the recording duration; run tracking again"
+            ));
+        }
+    }
+    let calibration_path = match_dir.resolve(CALIBRATION_RELATIVE_PATH);
+    let calibration_bytes = std::fs::read(&calibration_path).map_err(|error| {
+        anyhow!(
+            "cannot read court calibration at {}: {error}",
+            calibration_path.display()
+        )
+    })?;
+    if artifact.input.calibration_id != content_fingerprint(&calibration_bytes) {
+        return Err(anyhow!(
+            "player tracks were produced for a different court calibration; run tracking again"
+        ));
+    }
+    let audio_fingerprint = artifact
+        .input
+        .audio
+        .as_ref()
+        .map(|audio| serde_json::to_vec(audio).map(|bytes| content_fingerprint(&bytes)))
+        .transpose()?;
+    let identity = SuggestionInputs {
+        duration_ms: artifact.input.duration_ms,
+        tracks_fingerprint: content_fingerprint(&bytes),
+        calibration_id: artifact.input.calibration_id.clone(),
+        audio_fingerprint,
+        config,
+    };
+    identity.validate().map_err(to_anyhow)?;
+    Ok((manifest, artifact.input, identity))
+}
+
+fn content_fingerprint(bytes: &[u8]) -> String {
+    let hash = bytes.iter().fold(0xcbf29ce484222325_u64, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+    });
+    format!("fnv1a64:{hash:016x}")
 }
 
 fn run_export(

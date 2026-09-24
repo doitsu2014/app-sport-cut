@@ -12,5 +12,6 @@ workspace = true
 [dependencies]
 sportcut-common = { workspace = true }
 sportcut-court = { workspace = true }
+sportcut-rally = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

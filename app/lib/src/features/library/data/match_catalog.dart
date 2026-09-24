@@ -32,13 +32,14 @@ class MatchCatalog {
   final Database _database;
 
   /// Schema version written by this build.
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
 
   /// All migrations, in ascending version order.
   static const List<Migration> defaultMigrations = <Migration>[
     Migration(version: 1, apply: _createInitialSchema),
     Migration(version: 2, apply: _addRecordingOrigin),
     Migration(version: 3, apply: _addEditingRecords),
+    Migration(version: 4, apply: _addSuggestionDecisions),
   ];
 
   /// Open (and migrate) the catalog.
@@ -120,6 +121,11 @@ class MatchCatalog {
   Future<void> deleteMatch(String id) async {
     await _database.transaction((txn) async {
       final args = <Object?>[id];
+      await txn.delete(
+        'rally_suggestion_decisions',
+        where: 'match_id = ?',
+        whereArgs: args,
+      );
       await txn.delete(
         'highlight_clips',
         where: 'match_id = ?',
@@ -281,6 +287,27 @@ class MatchCatalog {
         updated_at INTEGER NOT NULL
       )
     ''');
+  }
+
+  /// User decisions about a particular generation of engine suggestions.
+  ///
+  /// This is separate from `rallies`: a proposed boundary is not a rally until
+  /// accepted, and a dismissed proposal never contributes to the score.
+  static Future<void> _addSuggestionDecisions(Database db) async {
+    await db.execute('''
+      CREATE TABLE rally_suggestion_decisions (
+        match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+        generation_id TEXT NOT NULL,
+        candidate_id TEXT NOT NULL,
+        decision TEXT NOT NULL CHECK (decision IN ('accepted', 'dismissed')),
+        rally_id TEXT REFERENCES rallies(id) ON DELETE SET NULL,
+        PRIMARY KEY (match_id, generation_id, candidate_id)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX idx_rally_suggestion_decisions_rally '
+      'ON rally_suggestion_decisions(rally_id)',
+    );
   }
 
   static Map<String, Object?> _matchToRow(MatchRecord match) =>

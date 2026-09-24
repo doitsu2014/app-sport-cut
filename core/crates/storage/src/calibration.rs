@@ -27,10 +27,11 @@ const WRITE_SUFFIX: &str = ".writing";
 
 /// Artifact kinds that stop describing a match when its court changes.
 ///
-/// Tracks are positions in court coordinates, so a new court makes the old ones
-/// meaningless. They are dropped from the manifest rather than deleted from
+/// Tracks are positions in court coordinates, and rally suggestions are based
+/// on those tracks. They are dropped from the manifest rather than deleted from
 /// disk, so a cancelled rebuild still leaves the bytes behind for diagnosis.
-const DERIVED_FROM_CALIBRATION: [ArtifactKind; 1] = [ArtifactKind::Tracks];
+const DERIVED_FROM_CALIBRATION: [ArtifactKind; 2] =
+    [ArtifactKind::Tracks, ArtifactKind::RallySuggestions];
 
 /// What saving a calibration did.
 #[derive(Debug, Clone, PartialEq)]

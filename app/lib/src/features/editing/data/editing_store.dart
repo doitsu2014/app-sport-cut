@@ -2,8 +2,10 @@ import 'package:sqflite/sqflite.dart';
 
 import '../domain/export_settings.dart';
 import '../domain/highlight_clip.dart';
+import '../domain/match_editing.dart';
 import '../domain/rally.dart';
 import '../domain/score_event.dart';
+import '../domain/suggestion_decision.dart';
 
 /// Typed access to the records a review session produces.
 ///
@@ -53,11 +55,126 @@ class EditingStore {
 
   /// Remove a rally. Clips made from it survive, detached from it.
   Future<void> deleteRally(String rallyId) async {
-    await _database.delete(
-      'rallies',
-      where: 'id = ?',
-      whereArgs: <Object?>[rallyId],
+    await _database.transaction((txn) async {
+      await txn.delete(
+        'rally_suggestion_decisions',
+        where: 'rally_id = ?',
+        whereArgs: <Object?>[rallyId],
+      );
+      await txn.delete(
+        'rallies',
+        where: 'id = ?',
+        whereArgs: <Object?>[rallyId],
+      );
+    });
+  }
+
+  /// Decisions for one exact analysis generation.
+  Future<List<SuggestionDecision>> listSuggestionDecisions(
+    String matchId,
+    String generationId,
+  ) async {
+    final rows = await _database.query(
+      'rally_suggestion_decisions',
+      where: 'match_id = ? AND generation_id = ?',
+      whereArgs: <Object?>[matchId, generationId],
+      orderBy: 'candidate_id ASC',
     );
+    return rows
+        .map(
+          (row) => SuggestionDecision(
+            generationId: row['generation_id']! as String,
+            candidateId: row['candidate_id']! as String,
+            kind: row['decision'] == 'accepted'
+                ? SuggestionDecisionKind.accepted
+                : SuggestionDecisionKind.dismissed,
+            rallyId: row['rally_id'] as String?,
+          ),
+        )
+        .toList();
+  }
+
+  /// Accept a proposal and create its unscored rally atomically.
+  Future<void> acceptSuggestion({
+    required Rally rally,
+    required String generationId,
+    required String candidateId,
+  }) async {
+    await _database.transaction((txn) async {
+      final existing = await txn.query(
+        'rally_suggestion_decisions',
+        columns: <String>['decision', 'rally_id'],
+        where: 'match_id = ? AND generation_id = ? AND candidate_id = ?',
+        whereArgs: <Object?>[rally.matchId, generationId, candidateId],
+        limit: 1,
+      );
+      if (existing.isNotEmpty &&
+          existing.first['decision'] == 'accepted' &&
+          existing.first['rally_id'] != null) {
+        return;
+      }
+      final overlaps = await txn.query(
+        'rallies',
+        columns: <String>['id'],
+        where: 'match_id = ? AND start_seconds < ? AND end_seconds > ?',
+        whereArgs: <Object?>[
+          rally.matchId,
+          rally.endSeconds,
+          rally.startSeconds,
+        ],
+        limit: 1,
+      );
+      if (overlaps.isNotEmpty) {
+        throw MatchEditingException(
+          'That suggestion overlaps a rally already in the match.',
+        );
+      }
+      await txn.insert('rallies', _rallyToRow(rally));
+      await txn.insert(
+        'rally_suggestion_decisions',
+        <String, Object?>{
+          'match_id': rally.matchId,
+          'generation_id': generationId,
+          'candidate_id': candidateId,
+          'decision': 'accepted',
+          'rally_id': rally.id,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    });
+  }
+
+  /// Hide a proposal for one generation without creating a rally.
+  Future<void> dismissSuggestion({
+    required String matchId,
+    required String generationId,
+    required String candidateId,
+  }) async {
+    await _database.transaction((txn) async {
+      final existing = await txn.query(
+        'rally_suggestion_decisions',
+        columns: <String>['decision'],
+        where: 'match_id = ? AND generation_id = ? AND candidate_id = ?',
+        whereArgs: <Object?>[matchId, generationId, candidateId],
+        limit: 1,
+      );
+      if (existing.isNotEmpty && existing.first['decision'] == 'accepted') {
+        throw MatchEditingException(
+          'An accepted suggestion cannot be dismissed while its rally remains.',
+        );
+      }
+      await txn.insert(
+        'rally_suggestion_decisions',
+        <String, Object?>{
+          'match_id': matchId,
+          'generation_id': generationId,
+          'candidate_id': candidateId,
+          'decision': 'dismissed',
+          'rally_id': null,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    });
   }
 
   /// Every clip for a match, in the order the user put them in.
@@ -269,8 +386,7 @@ class EditingStore {
         matchId: row['match_id']! as String,
         rallyId: row['rally_id']! as String,
         timestampSeconds: (row['timestamp_seconds']! as num).toDouble(),
-        winnerSide:
-            WinnerSide.fromWire(row['winner_side']) ?? WinnerSide.left,
+        winnerSide: WinnerSide.fromWire(row['winner_side']) ?? WinnerSide.left,
         leftScore: (row['left_score']! as num).toInt(),
         rightScore: (row['right_score']! as num).toInt(),
       );
@@ -280,14 +396,11 @@ class EditingStore {
         matchId: row['match_id']! as String,
         title: row['title'] as String?,
         musicPath: row['music_path'] as String?,
-        musicGain:
-            (row['music_gain'] as num?)?.toDouble() ??
-                ExportSettings.defaultMusicGain,
-        leadInSeconds:
-            (row['lead_in_seconds'] as num?)?.toDouble() ??
-                ExportSettings.defaultLeadInSeconds,
-        leadOutSeconds:
-            (row['lead_out_seconds'] as num?)?.toDouble() ??
-                ExportSettings.defaultLeadOutSeconds,
+        musicGain: (row['music_gain'] as num?)?.toDouble() ??
+            ExportSettings.defaultMusicGain,
+        leadInSeconds: (row['lead_in_seconds'] as num?)?.toDouble() ??
+            ExportSettings.defaultLeadInSeconds,
+        leadOutSeconds: (row['lead_out_seconds'] as num?)?.toDouble() ??
+            ExportSettings.defaultLeadOutSeconds,
       );
 }

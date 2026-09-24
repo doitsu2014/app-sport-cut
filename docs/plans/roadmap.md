@@ -126,6 +126,15 @@ Three deliberate limits are worth recording while the wave is fresh:
 The product principle holds throughout: these features suggest, and the user
 confirms. Nothing here may claim to officiate.
 
+The rally-segmentation change now has a motion-first engine, a versioned
+suggestion artifact, a cancellable job and bridge surface, and review decisions
+that stay separate from confirmed rallies. Its review controls are gated until
+Wave 2 produces court-aware player tracks and representative footage has been
+used to select thresholds. Manual rally marking and score confirmation remain
+the available path. The score-suggestion and highlight-ranking change follows
+segmentation; neither feature is active yet, and a proposed boundary never
+implies a winner.
+
 ## Wave 4 — polish and reach
 
 | Feature | Delivers | Depends on | Gate |

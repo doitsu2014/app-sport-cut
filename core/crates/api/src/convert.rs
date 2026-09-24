@@ -6,13 +6,67 @@ use sportcut_common::{Result, SportcutError};
 use sportcut_court::{CalibrationSegment, CourtCalibration, CourtOrientation, ImagePoint};
 use sportcut_jobs::{JobProgress, JobState, JobStatus};
 use sportcut_media::{MediaMetadata, Orientation, REBUILDABLE_KINDS};
-use sportcut_storage::{ArtifactManifest, ArtifactState};
+use sportcut_rally::{SegmentationConfig, SpanKind};
+use sportcut_storage::{ArtifactManifest, ArtifactState, RallySuggestions};
 
 use crate::dto::{
     ArtifactDto, ArtifactManifestDto, ArtifactStateDto, CalibrationSegmentDto, CourtCalibrationDto,
     CourtCornerDto, CourtGeometryDto, CourtOrientationDto, JobProgressDto, JobStateDto,
-    JobStatusDto, MediaMetadataDto, OrientationDto,
+    JobStatusDto, MediaMetadataDto, OrientationDto, RallyActivitySpanDto,
+    RallySegmentationConfigDto, RallySuggestionDto, RallySuggestionsDto,
 };
+
+impl From<&RallySegmentationConfigDto> for SegmentationConfig {
+    fn from(config: &RallySegmentationConfigDto) -> Self {
+        Self {
+            bin_ms: config.bin_ms,
+            max_track_gap_ms: config.max_track_gap_ms,
+            enter_motion_per_second: config.enter_motion_per_second,
+            exit_motion_per_second: config.exit_motion_per_second,
+            audio_intensity_threshold: config.audio_intensity_threshold,
+            min_rally_ms: config.min_rally_ms,
+            min_rest_ms: config.min_rest_ms,
+            min_usable_coverage: config.min_usable_coverage,
+        }
+    }
+}
+
+impl From<&RallySuggestions> for RallySuggestionsDto {
+    fn from(suggestions: &RallySuggestions) -> Self {
+        Self {
+            schema_version: suggestions.schema_version,
+            algorithm_version: suggestions.algorithm_version,
+            generation_id: suggestions.generation_id.clone(),
+            candidates: suggestions
+                .candidates
+                .iter()
+                .map(|stored| RallySuggestionDto {
+                    id: stored.id.clone(),
+                    start_seconds: stored.candidate.time.start_ms as f64 / 1000.0,
+                    end_seconds: stored.candidate.time.end_ms as f64 / 1000.0,
+                    quality: stored.candidate.quality,
+                    audio_available: stored.candidate.audio_available,
+                })
+                .collect(),
+            timeline: suggestions
+                .timeline
+                .iter()
+                .map(|span| RallyActivitySpanDto {
+                    start_seconds: span.time.start_ms as f64 / 1000.0,
+                    end_seconds: span.time.end_ms as f64 / 1000.0,
+                    kind: match span.kind {
+                        SpanKind::Rally => "rally",
+                        SpanKind::Rest => "rest",
+                        SpanKind::Unknown => "unknown",
+                    }
+                    .to_string(),
+                })
+                .collect(),
+            usable_coverage: suggestions.usable_coverage,
+            audio_available: suggestions.audio_available,
+        }
+    }
+}
 
 impl From<&MediaMetadata> for MediaMetadataDto {
     fn from(metadata: &MediaMetadata) -> Self {

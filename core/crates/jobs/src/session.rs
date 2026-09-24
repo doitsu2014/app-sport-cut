@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use sportcut_common::{CancelToken, ProgressEvent, ProgressSink, Result};
+use sportcut_common::{CancelToken, ProgressEvent, ProgressSink, Result, SportcutError};
 
 use crate::id::JobId;
 use crate::state::{JobProgress, JobState, JobStatus};
@@ -151,6 +151,27 @@ impl JobSession {
         if let Some(progress) = state.progress.as_mut() {
             progress.value = 1.0;
         }
+    }
+
+    /// Publish a final result while synchronizing with cancellation.
+    ///
+    /// A cancel request that reaches the session first prevents publication.
+    /// Once publication begins, cancellation waits for the result and observes
+    /// the completed state, so no cancelled job can leave a new final artifact.
+    pub fn commit_final<F>(&self, publish: F) -> Result<()>
+    where
+        F: FnOnce() -> Result<()>,
+    {
+        let mut state = self.lock_state();
+        if self.cancel.is_cancelled() || state.state.map(JobState::is_terminal).unwrap_or(true) {
+            return Err(SportcutError::Cancelled);
+        }
+        publish()?;
+        state.state = Some(JobState::Completed);
+        if let Some(progress) = state.progress.as_mut() {
+            progress.value = 1.0;
+        }
+        Ok(())
     }
 
     /// Mark the job failed, naming the stage and the reason.

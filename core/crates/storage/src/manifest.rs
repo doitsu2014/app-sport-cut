@@ -28,6 +28,8 @@ pub enum ArtifactKind {
     Calibration,
     /// Per-frame track data.
     Tracks,
+    /// Derived rally and rest suggestions.
+    RallySuggestions,
     /// A rendered highlight video.
     Export,
 }
@@ -41,6 +43,7 @@ impl ArtifactKind {
             Self::Frames => "frames",
             Self::Calibration => "calibration",
             Self::Tracks => "tracks",
+            Self::RallySuggestions => "tracks",
             Self::Export => "export",
         }
     }
@@ -53,6 +56,7 @@ impl ArtifactKind {
             Self::Frames => "frames",
             Self::Calibration => "calibration",
             Self::Tracks => "tracks",
+            Self::RallySuggestions => "rally_suggestions",
             Self::Export => "export",
         }
     }
@@ -66,6 +70,7 @@ impl std::fmt::Display for ArtifactKind {
             Self::Frames => "frames",
             Self::Calibration => "calibration",
             Self::Tracks => "tracks",
+            Self::RallySuggestions => "rally_suggestions",
             Self::Export => "export",
         })
     }
@@ -147,12 +152,12 @@ pub struct ManifestSummary {
 impl ArtifactManifest {
     /// Schema version written by this build.
     ///
-    /// Version 2 added [`ArtifactKind::Export`]. The bump is not bookkeeping:
+    /// Version 3 adds [`ArtifactKind::RallySuggestions`]. The bump is not bookkeeping:
     /// serde rejects an unknown enum variant, so a build from before this change
-    /// would fail to parse `"kind": "export"` and report an unreadable manifest.
+    /// would fail to parse the new kind and report an unreadable manifest.
     /// Raising the version turns that into the explicit "written by a newer
     /// engine" error below instead.
-    pub const SCHEMA_VERSION: u32 = 2;
+    pub const SCHEMA_VERSION: u32 = 3;
 
     /// Create an empty manifest for a match.
     pub fn new(match_id: impl Into<String>, original: &Path) -> Self {
@@ -192,13 +197,16 @@ impl ArtifactManifest {
 
     /// Write the manifest to disk, updating `updated_at`.
     pub fn save(&mut self, path: &Path) -> Result<()> {
+        self.schema_version = Self::SCHEMA_VERSION;
         self.updated_at = now_rfc3339();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| SportcutError::io(parent, e))?;
         }
         let json = serde_json::to_vec_pretty(self)
             .map_err(|e| SportcutError::Artifact(format!("could not serialize manifest: {e}")))?;
-        std::fs::write(path, json).map_err(|e| SportcutError::io(path, e))?;
+        let temporary = path.with_extension("json.writing");
+        std::fs::write(&temporary, json).map_err(|e| SportcutError::io(&temporary, e))?;
+        std::fs::rename(&temporary, path).map_err(|e| SportcutError::io(path, e))?;
         Ok(())
     }
 
@@ -210,6 +218,12 @@ impl ArtifactManifest {
         state: ArtifactState,
         size_bytes: Option<u64>,
     ) {
+        // New tracks or analysis audio make any boundaries derived from the
+        // previous signal generation stale. The user's accepted rallies live in
+        // SQLite and are deliberately outside this manifest.
+        if matches!(kind, ArtifactKind::Tracks | ArtifactKind::AnalysisAudio) {
+            self.forget(&[ArtifactKind::RallySuggestions]);
+        }
         let relative_path = relative_path.into();
         self.artifacts.retain(|entry| entry.kind != kind);
         self.artifacts.push(ArtifactEntry {

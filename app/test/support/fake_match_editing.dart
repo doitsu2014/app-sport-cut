@@ -16,6 +16,7 @@ import 'package:sportcut/src/features/editing/domain/match_edit.dart';
 import 'package:sportcut/src/features/editing/domain/match_editing.dart';
 import 'package:sportcut/src/features/editing/domain/rally.dart';
 import 'package:sportcut/src/features/editing/domain/score_timeline.dart';
+import 'package:sportcut/src/features/editing/domain/suggestion_decision.dart';
 import 'package:sportcut/src/features/library/domain/match_record.dart';
 
 class FakeMatchEditing implements MatchEditing {
@@ -41,6 +42,8 @@ class FakeMatchEditing implements MatchEditing {
 
   /// Names of the actions the screen asked for, in order.
   final List<String> calls = <String>[];
+
+  final List<SuggestionDecision> _suggestionDecisions = <SuggestionDecision>[];
 
   int _sequence = 0;
 
@@ -88,6 +91,60 @@ class FakeMatchEditing implements MatchEditing {
         matchId: match.id,
         startSeconds: startSeconds,
         endSeconds: endSeconds,
+      ),
+    );
+  }
+
+  @override
+  Future<List<SuggestionDecision>> suggestionDecisions(
+    MatchRecord match, {
+    required String generationId,
+  }) async {
+    calls.add('suggestionDecisions');
+    _throwIfFailing();
+    return _suggestionDecisions
+        .where((decision) => decision.generationId == generationId)
+        .toList();
+  }
+
+  @override
+  Future<void> acceptSuggestion(
+    MatchRecord match, {
+    required String generationId,
+    required String candidateId,
+    required double startSeconds,
+    required double endSeconds,
+  }) async {
+    calls.add('acceptSuggestion');
+    _throwIfFailing();
+    await addRally(
+      match,
+      startSeconds: startSeconds,
+      endSeconds: endSeconds,
+    );
+    _suggestionDecisions.add(
+      SuggestionDecision(
+        generationId: generationId,
+        candidateId: candidateId,
+        kind: SuggestionDecisionKind.accepted,
+        rallyId: rallies.last.id,
+      ),
+    );
+  }
+
+  @override
+  Future<void> dismissSuggestion(
+    MatchRecord match, {
+    required String generationId,
+    required String candidateId,
+  }) async {
+    calls.add('dismissSuggestion');
+    _throwIfFailing();
+    _suggestionDecisions.add(
+      SuggestionDecision(
+        generationId: generationId,
+        candidateId: candidateId,
+        kind: SuggestionDecisionKind.dismissed,
       ),
     );
   }

@@ -11,3 +11,4 @@ workspace = true
 
 [dependencies]
 sportcut-common = { workspace = true }
+serde = { workspace = true }

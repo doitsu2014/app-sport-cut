@@ -5,6 +5,7 @@ import '../domain/match_edit.dart';
 import '../domain/match_editing.dart';
 import '../domain/rally.dart';
 import '../domain/score_timeline.dart';
+import '../domain/suggestion_decision.dart';
 import 'editing_store.dart';
 
 /// Reads and writes a match's review, and derives the score from it.
@@ -14,7 +15,8 @@ import 'editing_store.dart';
 /// disagree with them.
 class EditingRepository implements MatchEditing {
   /// Build a repository over an open store.
-  EditingRepository({required EditingStore store, String Function()? idGenerator})
+  EditingRepository(
+      {required EditingStore store, String Function()? idGenerator})
       : _store = store,
         _idGenerator = idGenerator ?? _defaultIdGenerator;
 
@@ -76,6 +78,49 @@ class EditingRepository implements MatchEditing {
         startSeconds: startSeconds,
         endSeconds: endSeconds,
       ),
+    );
+  }
+
+  @override
+  Future<List<SuggestionDecision>> suggestionDecisions(
+    MatchRecord match, {
+    required String generationId,
+  }) =>
+      _store.listSuggestionDecisions(match.id, generationId);
+
+  @override
+  Future<void> acceptSuggestion(
+    MatchRecord match, {
+    required String generationId,
+    required String candidateId,
+    required double startSeconds,
+    required double endSeconds,
+  }) async {
+    _validateSuggestionIdentity(generationId, candidateId);
+    _validateRallyRange(match, startSeconds, endSeconds);
+    await _store.acceptSuggestion(
+      rally: Rally(
+        id: _idGenerator(),
+        matchId: match.id,
+        startSeconds: startSeconds,
+        endSeconds: endSeconds,
+      ),
+      generationId: generationId,
+      candidateId: candidateId,
+    );
+  }
+
+  @override
+  Future<void> dismissSuggestion(
+    MatchRecord match, {
+    required String generationId,
+    required String candidateId,
+  }) async {
+    _validateSuggestionIdentity(generationId, candidateId);
+    await _store.dismissSuggestion(
+      matchId: match.id,
+      generationId: generationId,
+      candidateId: candidateId,
     );
   }
 
@@ -167,8 +212,8 @@ class EditingRepository implements MatchEditing {
 
     final start = (startSeconds ?? clip.effectiveStartSeconds)
         .clamp(clip.startSeconds, clip.endSeconds);
-    final end =
-        (endSeconds ?? clip.effectiveEndSeconds).clamp(clip.startSeconds, clip.endSeconds);
+    final end = (endSeconds ?? clip.effectiveEndSeconds)
+        .clamp(clip.startSeconds, clip.endSeconds);
     if (end <= start) {
       throw MatchEditingException('A clip has to end after it starts.');
     }
@@ -201,5 +246,31 @@ class EditingRepository implements MatchEditing {
     final rallies = await _store.listRallies(matchId);
     final timeline = ScoreTimeline.fromRallies(matchId, rallies);
     await _store.replaceScoreEvents(matchId, timeline.events);
+  }
+
+  static void _validateSuggestionIdentity(
+    String generationId,
+    String candidateId,
+  ) {
+    if (generationId.trim().isEmpty || candidateId.trim().isEmpty) {
+      throw MatchEditingException('That suggestion has no analysis identity.');
+    }
+  }
+
+  static void _validateRallyRange(
+    MatchRecord match,
+    double startSeconds,
+    double endSeconds,
+  ) {
+    if (!startSeconds.isFinite || !endSeconds.isFinite) {
+      throw MatchEditingException(
+          'That rally has a boundary that is not a number.');
+    }
+    if (endSeconds <= startSeconds ||
+        startSeconds < 0 ||
+        endSeconds > match.durationSeconds) {
+      throw MatchEditingException(
+          'That rally is outside the recording or has no duration.');
+    }
   }
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../bridge/sportcut_engine.dart';
 import '../../editing/domain/match_edit.dart';
 import '../../editing/domain/rally.dart';
 import '../../editing/domain/score_event.dart';
@@ -11,6 +12,7 @@ import '../../library/domain/match_record.dart';
 import '../../library/presentation/formatters.dart';
 import '../../library/presentation/library_providers.dart';
 import '../../library/presentation/playback_controller.dart';
+import '../../rally/presentation/rally_review_providers.dart';
 
 /// The rally timeline: mark a point, say who won it, watch the score follow.
 ///
@@ -53,6 +55,9 @@ class _ScoreScreenState extends ConsumerState<ScoreScreen> {
       unawaited(
         ref.read(editingControllerProvider.notifier).open(widget.match),
       );
+      unawaited(
+        ref.read(rallyReviewControllerProvider.notifier).open(widget.match),
+      );
     });
   }
 
@@ -69,6 +74,8 @@ class _ScoreScreenState extends ConsumerState<ScoreScreen> {
     final state = ref.watch(editingControllerProvider);
     final edit = state.edit;
     final problem = state.problem;
+    final review = ref.watch(rallyReviewControllerProvider);
+    final canAnalyze = ref.watch(rallySegmentationConfigProvider) != null;
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.match.title)),
@@ -93,9 +100,8 @@ class _ScoreScreenState extends ConsumerState<ScoreScreen> {
               playback: playback,
               pendingStart: _pendingStart,
               busy: state.busy,
-              onPlayPause: () => playback.isPlaying
-                  ? _controller.pause()
-                  : _controller.play(),
+              onPlayPause: () =>
+                  playback.isPlaying ? _controller.pause() : _controller.play(),
               onSeek: (progress) {
                 if (playback.duration.inMilliseconds == 0) {
                   return;
@@ -118,6 +124,23 @@ class _ScoreScreenState extends ConsumerState<ScoreScreen> {
                       ),
               onCancel: () => setState(() => _pendingStart = null),
             ),
+          ),
+          _RallySuggestionsPanel(
+            review: review,
+            canAnalyze: canAnalyze,
+            rallies: edit?.rallies ?? const <Rally>[],
+            busy: state.busy,
+            onAnalyze: () =>
+                ref.read(rallyReviewControllerProvider.notifier).analyze(),
+            onCancel: () =>
+                ref.read(rallyReviewControllerProvider.notifier).cancel(),
+            onAccept: (candidate) => ref
+                .read(rallyReviewControllerProvider.notifier)
+                .accept(candidate),
+            onAdjust: _adjustSuggestion,
+            onDismiss: (candidate) => ref
+                .read(rallyReviewControllerProvider.notifier)
+                .dismiss(candidate),
           ),
           if (edit != null)
             Expanded(
@@ -151,6 +174,188 @@ class _ScoreScreenState extends ConsumerState<ScoreScreen> {
           startSeconds: startSeconds,
           endSeconds: endSeconds,
         );
+  }
+
+  Future<void> _adjustSuggestion(RallySuggestionDto candidate) async {
+    var range = RangeValues(candidate.startSeconds, candidate.endSeconds);
+    final adjusted = await showDialog<RangeValues>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Adjust suggested rally'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                '${formatDuration(range.start)}–${formatDuration(range.end)}',
+              ),
+              RangeSlider(
+                values: range,
+                min: 0,
+                max: widget.match.durationSeconds,
+                divisions:
+                    widget.match.durationSeconds.ceil().clamp(1, 1000).toInt(),
+                onChanged: (next) => setDialogState(() => range = next),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: range.end > range.start
+                  ? () => Navigator.pop(dialogContext, range)
+                  : null,
+              child: const Text('Accept rally'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (adjusted == null || !mounted) {
+      return;
+    }
+    await ref.read(rallyReviewControllerProvider.notifier).accept(
+          candidate,
+          startSeconds: adjusted.start,
+          endSeconds: adjusted.end,
+        );
+  }
+}
+
+class _RallySuggestionsPanel extends StatelessWidget {
+  const _RallySuggestionsPanel({
+    required this.review,
+    required this.canAnalyze,
+    required this.rallies,
+    required this.busy,
+    required this.onAnalyze,
+    required this.onCancel,
+    required this.onAccept,
+    required this.onAdjust,
+    required this.onDismiss,
+  });
+
+  final RallyReviewState review;
+  final bool canAnalyze;
+  final List<Rally> rallies;
+  final bool busy;
+  final VoidCallback onAnalyze;
+  final VoidCallback onCancel;
+  final ValueChanged<RallySuggestionDto> onAccept;
+  final ValueChanged<RallySuggestionDto> onAdjust;
+  final ValueChanged<RallySuggestionDto> onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final suggestions = review.suggestions;
+    final pending = review.pending;
+    final restCount =
+        suggestions?.timeline.where((span) => span.kind == 'rest').length ?? 0;
+    final unknownCount =
+        suggestions?.timeline.where((span) => span.kind == 'unknown').length ??
+            0;
+
+    return ExpansionTile(
+      title: Text(
+          'Rally suggestions${pending.isEmpty ? '' : ' (${pending.length})'}'),
+      subtitle: Text(
+        review.running
+            ? 'Analyzing player motion…'
+            : suggestions == null
+                ? 'Manual marking is available'
+                : '$restCount rest · $unknownCount unknown intervals',
+        style: theme.textTheme.bodySmall,
+      ),
+      children: <Widget>[
+        if (review.problem != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(review.problem!, style: theme.textTheme.bodySmall),
+          ),
+        if (review.running) ...<Widget>[
+          LinearProgressIndicator(value: review.progress),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(review.stage ?? 'Preparing analysis…'),
+              ),
+              TextButton(onPressed: onCancel, child: const Text('Cancel')),
+            ],
+          ),
+        ] else
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: canAnalyze ? onAnalyze : null,
+              icon: const Icon(Icons.auto_awesome_outlined),
+              label: const Text('Analyze rallies'),
+            ),
+          ),
+        if (suggestions != null && pending.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child:
+                Text('No unreviewed suggestions. You can still mark rallies.'),
+          ),
+        if (pending.isNotEmpty)
+          SizedBox(
+            height: 220,
+            child: ListView.builder(
+              itemCount: pending.length,
+              itemBuilder: (context, index) {
+                final candidate = pending[index];
+                final overlaps = rallies.any(
+                  (rally) =>
+                      rally.startSeconds < candidate.endSeconds &&
+                      rally.endSeconds > candidate.startSeconds,
+                );
+                return ListTile(
+                  title: Text(
+                    '${formatDuration(candidate.startSeconds)}–'
+                    '${formatDuration(candidate.endSeconds)}',
+                  ),
+                  subtitle: Text(
+                    overlaps
+                        ? 'Overlaps a reviewed rally · adjust or dismiss'
+                        : 'Signal quality ${(candidate.quality * 100).round()}%'
+                            '${candidate.audioAvailable ? ' · audio available' : ' · motion only'}',
+                  ),
+                  trailing: Wrap(
+                    spacing: 0,
+                    children: <Widget>[
+                      IconButton(
+                        tooltip: 'Accept suggestion',
+                        onPressed: busy || review.busy || overlaps
+                            ? null
+                            : () => onAccept(candidate),
+                        icon: const Icon(Icons.check),
+                      ),
+                      IconButton(
+                        tooltip: 'Adjust and accept',
+                        onPressed: busy || review.busy
+                            ? null
+                            : () => onAdjust(candidate),
+                        icon: const Icon(Icons.tune),
+                      ),
+                      IconButton(
+                        tooltip: 'Dismiss suggestion',
+                        onPressed: busy || review.busy
+                            ? null
+                            : () => onDismiss(candidate),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
   }
 }
 
@@ -419,8 +624,7 @@ class _WinnerButton extends StatelessWidget {
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
           padding: EdgeInsets.zero,
-          backgroundColor:
-              selected ? theme.colorScheme.primaryContainer : null,
+          backgroundColor: selected ? theme.colorScheme.primaryContainer : null,
         ),
         child: Text(label),
       ),

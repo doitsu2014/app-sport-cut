@@ -6,6 +6,81 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Explicit thresholds for motion-first rally analysis.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RallySegmentationConfigDto {
+    /// Width of one activity bin in milliseconds.
+    pub bin_ms: i64,
+    /// Largest track gap from which motion can be measured.
+    pub max_track_gap_ms: i64,
+    /// Motion required to start a proposed rally.
+    pub enter_motion_per_second: f64,
+    /// Motion required to continue a proposed rally.
+    pub exit_motion_per_second: f64,
+    /// Audio intensity that may support weak motion.
+    pub audio_intensity_threshold: f64,
+    /// Minimum accepted rally duration.
+    pub min_rally_ms: i64,
+    /// Rest shorter than this is joined between rallies.
+    pub min_rest_ms: i64,
+    /// Minimum fraction of the recording with usable tracks.
+    pub min_usable_coverage: f64,
+}
+
+/// Start a local rally-analysis job for a match with a completed track artifact.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RallySegmentationRequestDto {
+    /// Match artifact directory.
+    pub match_dir: String,
+    /// Explicit, footage-tuned thresholds.
+    pub config: RallySegmentationConfigDto,
+}
+
+/// One proposed rally, never an accepted or scored point by itself.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RallySuggestionDto {
+    /// Stable identity within the analysis generation.
+    pub id: String,
+    /// Start on the original recording timeline, in seconds.
+    pub start_seconds: f64,
+    /// End on the original recording timeline, in seconds.
+    pub end_seconds: f64,
+    /// Heuristic quality from zero to one; not winner confidence.
+    pub quality: f64,
+    /// Whether supporting audio evidence was supplied.
+    pub audio_available: bool,
+}
+
+/// One classified span of the recording.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RallyActivitySpanDto {
+    /// Start on the original recording timeline, in seconds.
+    pub start_seconds: f64,
+    /// End on the original recording timeline, in seconds.
+    pub end_seconds: f64,
+    /// `rally`, `rest`, or `unknown`.
+    pub kind: String,
+}
+
+/// Current completed suggestion set for a match.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RallySuggestionsDto {
+    /// File format version.
+    pub schema_version: u32,
+    /// Segmenter version.
+    pub algorithm_version: u32,
+    /// Stable identity of the exact input generation.
+    pub generation_id: String,
+    /// Rally proposals in recording order.
+    pub candidates: Vec<RallySuggestionDto>,
+    /// Rally, rest, and unknown partition.
+    pub timeline: Vec<RallyActivitySpanDto>,
+    /// Fraction supported by usable tracks.
+    pub usable_coverage: f64,
+    /// Whether audio evidence was supplied.
+    pub audio_available: bool,
+}
+
 /// Lifecycle state of a job, mirrored for the client.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

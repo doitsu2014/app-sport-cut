@@ -10,7 +10,7 @@
 /// ```dart
 /// await SportcutEngine.initialize();
 /// final metadata = await SportcutEngine.instance.probe('/path/to/match.mp4');
- /// final job = await SportcutEngine.instance.startImport(
+/// final job = await SportcutEngine.instance.startImport(
 ///   matchId: 'match-1',
 ///   originalPath: '/path/to/match.mp4',
 ///   matchDir: '/path/to/matches/match-1',
@@ -48,7 +48,12 @@ export 'generated/dto.dart'
         JobStatusDto,
         MediaImportRequestDto,
         MediaMetadataDto,
-        OrientationDto;
+        OrientationDto,
+        RallyActivitySpanDto,
+        RallySegmentationConfigDto,
+        RallySegmentationRequestDto,
+        RallySuggestionDto,
+        RallySuggestionsDto;
 
 /// Raised when the engine rejects a request or fails while working on one.
 ///
@@ -192,6 +197,34 @@ class SportcutEngine {
       _guard(() async => rust.startRegenerateMatchMedia(
             matchDir: matchDir,
             samplingRate: samplingRate,
+          ));
+
+  /// Start rally-boundary analysis from a completed local track artifact.
+  ///
+  /// The call reports an unavailable-input error while player tracking has not
+  /// produced a supported artifact. [config] is explicit until representative
+  /// footage establishes a supported preset.
+  Future<JobHandleDto> startRallySegmentation({
+    required String matchDir,
+    required RallySegmentationConfigDto config,
+  }) =>
+      _guard(() async => rust.startRallySegmentation(
+            request: RallySegmentationRequestDto(
+              matchDir: matchDir,
+              config: config,
+            ),
+          ));
+
+  /// Read suggestions only when their tracks and thresholds are still current.
+  Future<RallySuggestionsDto?> matchRallySuggestions({
+    required String matchDir,
+    required RallySegmentationConfigDto config,
+  }) =>
+      _guard(() async => rust.matchRallySuggestions(
+            request: RallySegmentationRequestDto(
+              matchDir: matchDir,
+              config: config,
+            ),
           ));
 
   /// Read the current state of a job that was started earlier.

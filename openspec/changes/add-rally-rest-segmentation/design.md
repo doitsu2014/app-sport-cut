@@ -25,6 +25,27 @@ The engine owns regenerable analysis artifacts in the match directory. The app o
 
 The segmenter consumes monotonically timestamped per-player positions in normalized displayed-frame or calibrated court coordinates, an explicit track coverage interval, and a calibration/input version. It estimates activity from displacement and participation across sampled times. Audio intensity can support an activity transition but cannot create a rally on its own. If tracks, calibration, or usable coverage are missing, the job returns an actionable unavailable result; it does not claim that the recording has zero rallies. If audio is absent, motion-only analysis proceeds and records that limitation in the output.
 
+The provisional Rust consumer contract is `duration_ms`, a calibration identity,
+ordered coverage intervals, and ordered `(timestamp_ms, track_id, u, v)` samples
+on the normalized court plane. Optional audio samples carry a timestamp and a
+normalized intensity. The eventual tracking adapter must supply a content
+fingerprint for its track artifact; the artifact writer uses that fingerprint,
+the calibration identity, the audio fingerprint, and the explicit segmentation
+configuration to identify one suggestion generation. Wave 2 tracking has not
+committed its producer schema yet, so task 1.1 remains open until the adapter is
+checked against that producer.
+
+For the callable integration, the facade reads the provisional version-1 JSON
+envelope at `tracks/player_tracks.json`, recorded as a final `Tracks` manifest
+artifact. The envelope contains the consumer contract above. The facade hashes
+the bytes it reads rather than trusting a producer-supplied fingerprint, and
+rejects a missing, partial, or unsupported track artifact. This path is an
+adapter format for the unfinished Wave 2 producer; it is not a claim that
+tracking exists. Audio intensities are optional in the envelope until a local
+feature extractor supplies them. The envelope's calibration identity is the
+`fnv1a64:<hex>` content label of `calibration/calibration.json`; the facade
+rejects tracks if that label differs from the current calibration artifact.
+
 This follows the roadmap's dependency on tracking. Audio-only segmentation would be easy to scaffold today, but background voices, music, and hall noise can produce plausible false rallies without any visual support.
 
 ### D2: Use a bounded state machine, not point-by-point labels
