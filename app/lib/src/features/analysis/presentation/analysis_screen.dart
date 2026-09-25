@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../bridge/sportcut_engine.dart';
+import '../../../app/router.dart';
 import '../../library/domain/match_record.dart';
 import '../../library/presentation/formatters.dart';
 import 'analysis_providers.dart';
@@ -88,6 +89,15 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
               ),
             ),
           const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).pushNamed(
+              AppRoutes.playerTracking,
+              arguments: widget.match,
+            ),
+            icon: const Icon(Icons.person_search_outlined),
+            label: const Text('Review player analysis'),
+          ),
+          const SizedBox(height: 16),
           Text('Artifacts', style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           if (!state.loaded)
@@ -113,8 +123,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
       formatDuration(match.durationSeconds),
       if (match.videoWidth != null && match.videoHeight != null)
         '${match.videoWidth}×${match.videoHeight}',
-      if (match.frameRate != null)
-        '${match.frameRate!.toStringAsFixed(2)} fps',
+      if (match.frameRate != null) '${match.frameRate!.toStringAsFixed(2)} fps',
       if (match.hasAudio) 'audio',
     ];
     return parts.join('  ·  ');

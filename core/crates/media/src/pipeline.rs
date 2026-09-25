@@ -307,6 +307,13 @@ fn run_stages(
     } else {
         context.cancel.check()?;
         let sampling_input = proxy_output.clone().unwrap_or_else(|| proxy_path.clone());
+        manifest.record_artifact(
+            ArtifactKind::Frames,
+            FRAMES_RELATIVE_PATH,
+            ArtifactState::NonFinal,
+            None,
+        );
+        manifest.save(&match_dir.manifest_path())?;
         sampled = frames::sample_frames_reported(
             &sampling_input,
             &frames_dir,
@@ -357,7 +364,7 @@ pub fn regenerate_missing(
     }
 
     let manifest = ArtifactManifest::load(&manifest_path)?;
-    let (rebuilt, not_rebuildable): (Vec<ArtifactKind>, Vec<ArtifactKind>) = manifest
+    let (mut rebuilt, not_rebuildable): (Vec<ArtifactKind>, Vec<ArtifactKind>) = manifest
         .missing_artifacts(match_dir.root())
         .into_iter()
         .partition(|kind| REBUILDABLE_KINDS.contains(kind));
@@ -376,6 +383,9 @@ pub fn regenerate_missing(
     let proxy_path = match_dir.resolve(PROXY_RELATIVE_PATH);
     let needs_proxy = missing.contains(&ArtifactKind::Proxy)
         || (missing.contains(&ArtifactKind::Frames) && !proxy_path.is_file());
+    if needs_proxy && !rebuilt.contains(&ArtifactKind::Frames) {
+        rebuilt.push(ArtifactKind::Frames);
+    }
     let needs_audio = missing.contains(&ArtifactKind::AnalysisAudio);
     if !needs_proxy {
         skip.push(STAGE_PROXY.to_string());
@@ -383,7 +393,7 @@ pub fn regenerate_missing(
     if !needs_audio {
         skip.push(STAGE_AUDIO.to_string());
     }
-    if !missing.contains(&ArtifactKind::Frames) {
+    if !missing.contains(&ArtifactKind::Frames) && !needs_proxy {
         skip.push(STAGE_FRAMES.to_string());
     }
 

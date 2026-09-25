@@ -51,6 +51,16 @@ Required by the `project-bootstrap` capability
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `serde` | library | 1.0.229 | crates.io | MIT OR Apache-2.0 | shippable | engine | Serialization for DTOs, manifest, and checkpoints. |
 | `serde_json` | library | 1.0.151 | crates.io | MIT OR Apache-2.0 | shippable | engine | Manifest, checkpoint, and probe-output parsing. |
+| `image` (JPEG-only build) | library | 0.24.9 (pinned, `=`) | crates.io | MIT OR Apache-2.0 | shippable | engine | Decodes locally sampled JPEG frames into RGB8 for person inference. Default codecs are disabled. Rust MSRV 1.63. |
+| `tflite-c-rs` | library | 0.0.1 (pinned, `=`, optional) | crates.io | MIT OR Apache-2.0 | unresolved | macOS evaluation feature | Safe API over a dynamically loaded TFLite C library; requires API and packaging review before shipping. The default engine build does not enable it. |
+| `libloading` | library | 0.8.9 | crates.io (`tflite-c-rs` transitive) | ISC | shippable | macOS evaluation feature | Loads the local TFLite C runtime; no download at runtime. |
+| `thiserror` / `thiserror-impl` 1.x | library | 1.0.69 | crates.io (`tflite-c-rs` transitive) | MIT OR Apache-2.0 | shippable | macOS evaluation feature | Error definitions for the optional inference wrapper; separate from workspace `thiserror` 2.x. |
+| `bytemuck` | library | 1.25.2 | crates.io (`image` transitive) | Zlib OR Apache-2.0 OR MIT | shippable | engine | Pixel-buffer conversion used by the JPEG-only `image` build. |
+| `byteorder` | library | 1.5.0 | crates.io (`image` transitive) | Unlicense OR MIT | shippable | engine | Byte-order helpers used by `image`. |
+| `color_quant` | library | 1.1.0 | crates.io (`image` transitive) | MIT | shippable | engine | Color helper pulled by `image` with default features disabled. |
+| `jpeg-decoder` | library | 0.3.2 | crates.io (`image` transitive) | MIT OR Apache-2.0 | shippable | engine | Pure-Rust JPEG decoding for sampled analysis frames. |
+| `num-traits` | library | 0.2.19 | crates.io (`image` transitive) | MIT OR Apache-2.0 | shippable | engine | Numeric helpers used by `image`. |
+| `autocfg` | library | 1.5.1 | crates.io (`num-traits` build dependency) | Apache-2.0 OR MIT | shippable | build-time | Build helper; not bundled in the app. |
 | `thiserror` | library | 2.0.20 | crates.io | MIT OR Apache-2.0 | shippable | engine | Derives the shared `SportcutError`. |
 | `anyhow` | library | 1.0.104 | crates.io | MIT OR Apache-2.0 | shippable | engine | Error type at the facade boundary, where the client only needs a message. |
 | `clap` | library | 4.6.7 | crates.io | MIT OR Apache-2.0 | shippable | engine (dev-only use) | Argument parsing for `sportcut-cli`; the binary is not shipped in the app. |
@@ -101,9 +111,10 @@ crate that is not listed is treated as unaudited.
 
 | Component | Kind | Version | Source | License | Distribution verdict | Shipped in | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| TensorFlow Lite | runtime | unresolved | tensorflow.org | Apache-2.0 | unresolved | none-yet | Intended default on-device runtime; not introduced in this change. |
-| Person/pose model weights | model | none | not selected | n/a | unresolved | none-yet | No model ships yet. Weights carry their own license, separate from the runtime. Ultralytics YOLO weights are AGPL-3.0 and are excluded unless the project relicenses or buys a commercial license. |
-| Training datasets | dataset | none | not selected | n/a | unresolved | none-yet | Any dataset used to produce shipped weights must be listed with its own terms. |
+| TensorFlow Lite C runtime, EdgeFirst macOS build | runtime | 2.19.0 evaluation candidate | [EdgeFirstAI release](https://github.com/EdgeFirstAI/tflite-rs/releases/tag/tflite-v2.19.0) | Apache-2.0 upstream; binary provenance still under review | unresolved | none-yet | Local trial only; downloaded archive SHA-256 `1de9594d626f2a8c6500739acd0691d46f920f295ba1daf95c02adcccf73ad33`, extracted dylib SHA-256 `bd96fa2035fe06f52941e598e7281d1d59e84a4a1d63912698a5093b516c7d6a`. No build-time or product-time download is enabled. |
+| EfficientDet-Lite0 Task Library int8 weights | model | 1 evaluation candidate | [Google model file](https://storage.googleapis.com/download.tensorflow.org/models/tflite/task_library/object_detection/rpi/lite-model_efficientdet_lite0_detection_metadata_1.tflite) | Weight redistribution terms not yet verified | unresolved | none-yet | Local trial only; SHA-256 `2e04c53bfeac0ac2a30c057c7e2a777594ce39baaac35a92f74fb1e8c4fc4e0b`; unlike the MediaPipe download, exposes the four `DetectionPostProcess` outputs. |
+| COCO 2017 training images/annotations | dataset | provenance for EfficientDet-Lite0 candidate | [COCO dataset](https://cocodataset.org/) | Dataset and individual-image terms require review | unresolved | none-yet | The candidate model documentation identifies COCO as training data; no dataset bytes are bundled. Review terms before approving derived weights for distribution. |
+| Person/pose model weights | model | none selected for distribution | not selected | n/a | unresolved | none-yet | No model ships yet. Weights carry their own license, separate from the runtime. Ultralytics YOLO weights are AGPL-3.0 and are excluded unless the project relicenses or buys a commercial license. |
 
 ### Fonts, music, and other bundled assets
 

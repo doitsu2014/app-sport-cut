@@ -114,6 +114,25 @@ pub fn sample_frames_reported(
     std::fs::create_dir_all(output_dir).map_err(|e| SportcutError::io(output_dir, e))?;
     cancel.check()?;
 
+    // A rerun at a lower rate may produce fewer numbered frames. Remove only
+    // the previous sampler outputs so stale high-numbered JPEGs cannot enter
+    // the new track generation.
+    for entry in std::fs::read_dir(output_dir).map_err(|e| SportcutError::io(output_dir, e))? {
+        let entry = entry.map_err(|e| SportcutError::io(output_dir, e))?;
+        let path = entry.path();
+        let is_sample = path
+            .file_name()
+            .map(|name| {
+                let name = name.to_string_lossy();
+                name.starts_with(FRAME_PREFIX) && name.ends_with(FRAME_SUFFIX)
+            })
+            .unwrap_or(false);
+        if is_sample && path.is_file() {
+            std::fs::remove_file(&path).map_err(|e| SportcutError::io(&path, e))?;
+        }
+    }
+    cancel.check()?;
+
     let expected = expected_frame_count(metadata, options.rate);
     progress.report(ProgressEvent::new("frames", 0.0).with_message(format!(
         "sampling at {:.3} fps, about {expected} frames",

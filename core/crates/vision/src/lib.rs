@@ -10,7 +10,28 @@
 
 #![forbid(unsafe_code)]
 
+use serde::{Deserialize, Serialize};
 use sportcut_common::Result;
+
+mod court_candidates;
+mod frames;
+mod pipeline;
+mod tracking;
+
+#[cfg(all(target_os = "macos", feature = "macos-tflite-eval"))]
+mod tflite_detector;
+
+pub use court_candidates::{
+    classify_detections, CandidateDecision, ClassifiedDetection, CourtCandidateConfig,
+};
+pub use frames::{decode_sampled_jpeg, DecodedRgbFrame};
+pub use pipeline::analyze_sampled_frames;
+#[cfg(all(target_os = "macos", feature = "macos-tflite-eval"))]
+pub use tflite_detector::TflitePersonDetector;
+pub use tracking::{
+    track_detections, CountAssessment, FrameDetections, FrameTracking, ObservedCount, PlayerGap,
+    TimeSpan, TrackedDetection, TrackingConfig, TrackingResult,
+};
 
 /// A sampled frame handed to an inference backend.
 ///
@@ -29,7 +50,7 @@ pub struct FrameView<'a> {
 }
 
 /// Axis-aligned box in image coordinates.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct BoundingBox {
     /// Left edge, in pixels.
     pub x: f32,
@@ -42,7 +63,7 @@ pub struct BoundingBox {
 }
 
 /// One detected person.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Detection {
     /// Box around the detected person.
     pub bbox: BoundingBox,

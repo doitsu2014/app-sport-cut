@@ -48,12 +48,23 @@ export 'generated/dto.dart'
         JobStatusDto,
         MediaImportRequestDto,
         MediaMetadataDto,
+        ObservedPlayerCountDto,
         OrientationDto,
+        PersonSelectionDto,
+        PlayerCourtSideDto,
+        PlayerGapDto,
+        PlayerObservationDto,
+        PlayerTrackFrameDto,
+        PlayerTrackWindowRequestDto,
+        PlayerTrackingConfigDto,
+        PlayerTrackingRequestDto,
+        PlayerTracksDto,
         RallyActivitySpanDto,
         RallySegmentationConfigDto,
         RallySegmentationRequestDto,
         RallySuggestionDto,
-        RallySuggestionsDto;
+        RallySuggestionsDto,
+        TrackIntervalDto;
 
 /// Raised when the engine rejects a request or fails while working on one.
 ///
@@ -222,6 +233,34 @@ class SportcutEngine {
   }) =>
       _guard(() async => rust.matchRallySuggestions(
             request: RallySegmentationRequestDto(
+              matchDir: matchDir,
+              config: config,
+            ),
+          ));
+
+  /// Read player observations in one playback window from final, current tracks.
+  /// Returns `null` when the match has no track artifact yet.
+  Future<PlayerTracksDto?> matchPlayerTracks({
+    required String matchDir,
+    required double startSeconds,
+    required double endSeconds,
+  }) =>
+      _guard(() async => rust.matchPlayerTracks(
+            request: PlayerTrackWindowRequestDto(
+              matchDir: matchDir,
+              startSeconds: startSeconds,
+              endSeconds: endSeconds,
+            ),
+          ));
+
+  /// Start local player analysis using the macOS trial runtime configured for
+  /// this development build. Parameters remain explicit until footage tuning.
+  Future<JobHandleDto> startPlayerTracking({
+    required String matchDir,
+    required PlayerTrackingConfigDto config,
+  }) =>
+      _guard(() async => rust.startPlayerTracking(
+            request: PlayerTrackingRequestDto(
               matchDir: matchDir,
               config: config,
             ),

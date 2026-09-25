@@ -8,10 +8,11 @@ import '../features/library/domain/match_record.dart';
 import '../features/library/presentation/library_screen.dart';
 import '../features/library/presentation/player_screen.dart';
 import '../features/score/presentation/score_screen.dart';
+import '../features/tracking/presentation/player_tracking_screen.dart';
 
 /// Named routes of the application.
 ///
-/// Navigation is deliberately a plain route table: the shell has seven screens
+/// Navigation is deliberately a plain route table: the shell has eight screens
 /// and no deep links yet, so a routing package would add a dependency without
 /// removing code. This table is the single place to change if that stops being
 /// true.
@@ -27,6 +28,9 @@ abstract final class AppRoutes {
 
   /// Analysis progress and review (later phase).
   static const String analysis = '/match/analysis';
+
+  /// Read-only court-aware player analysis and its local job.
+  static const String playerTracking = '/match/player-tracking';
 
   /// Score confirmation (later phase).
   static const String score = '/match/score';
@@ -51,6 +55,9 @@ abstract final class AppRouter {
         return _route(settings, CalibrationScreen(match: matchFrom(settings)));
       case AppRoutes.analysis:
         return _route(settings, AnalysisScreen(match: matchFrom(settings)));
+      case AppRoutes.playerTracking:
+        return _route(
+            settings, PlayerTrackingScreen(match: matchFrom(settings)));
       case AppRoutes.score:
         return _route(settings, ScoreScreen(match: matchFrom(settings)));
       case AppRoutes.highlights:

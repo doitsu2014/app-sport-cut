@@ -8,13 +8,151 @@ use sportcut_jobs::{JobProgress, JobState, JobStatus};
 use sportcut_media::{MediaMetadata, Orientation, REBUILDABLE_KINDS};
 use sportcut_rally::{SegmentationConfig, SpanKind};
 use sportcut_storage::{ArtifactManifest, ArtifactState, RallySuggestions};
+use sportcut_vision::{CandidateDecision, CourtCandidateConfig, ObservedCount, TrackingConfig};
 
 use crate::dto::{
     ArtifactDto, ArtifactManifestDto, ArtifactStateDto, CalibrationSegmentDto, CourtCalibrationDto,
     CourtCornerDto, CourtGeometryDto, CourtOrientationDto, JobProgressDto, JobStateDto,
-    JobStatusDto, MediaMetadataDto, OrientationDto, RallyActivitySpanDto,
-    RallySegmentationConfigDto, RallySuggestionDto, RallySuggestionsDto,
+    JobStatusDto, MediaMetadataDto, ObservedPlayerCountDto, OrientationDto, PersonSelectionDto,
+    PlayerCourtSideDto, PlayerGapDto, PlayerObservationDto, PlayerTrackFrameDto,
+    PlayerTrackingConfigDto, PlayerTracksDto, RallyActivitySpanDto, RallySegmentationConfigDto,
+    RallySuggestionDto, RallySuggestionsDto, TrackIntervalDto,
 };
+use crate::track_artifact::TrackArtifact;
+
+impl PlayerTracksDto {
+    pub(crate) fn from_artifact_window(
+        artifact: &TrackArtifact,
+        start_ms: i64,
+        end_ms: i64,
+    ) -> Result<Self> {
+        let review = artifact.review.as_ref().ok_or_else(|| {
+            SportcutError::Artifact("player track review evidence is missing".to_string())
+        })?;
+        let mut frames = Vec::new();
+        for frame in &review.frames {
+            if frame.timestamp_ms < start_ms || frame.timestamp_ms >= end_ms {
+                continue;
+            }
+            if frame.width == 0 || frame.height == 0 {
+                return Err(SportcutError::Artifact(
+                    "player track frame dimensions are zero".to_string(),
+                ));
+            }
+            let width = f64::from(frame.width);
+            let height = f64::from(frame.height);
+            let people = frame
+                .people
+                .iter()
+                .map(|person| {
+                    let box_in_frame = person.candidate.detection.bbox;
+                    let ground = person.candidate.ground_point;
+                    let court = person.candidate.court_point;
+                    PlayerObservationDto {
+                        track_id: person.track_id,
+                        confidence: person.candidate.detection.confidence,
+                        box_x: f64::from(box_in_frame.x) / width,
+                        box_y: f64::from(box_in_frame.y) / height,
+                        box_width: f64::from(box_in_frame.width) / width,
+                        box_height: f64::from(box_in_frame.height) / height,
+                        ground_x: ground.map(|point| point.x),
+                        ground_y: ground.map(|point| point.y),
+                        court_u: court.map(|point| point.u),
+                        court_v: court.map(|point| point.v),
+                        side: match person.candidate.side {
+                            Some(sportcut_court::CourtSide::First) => PlayerCourtSideDto::First,
+                            Some(sportcut_court::CourtSide::Second) => PlayerCourtSideDto::Second,
+                            None => PlayerCourtSideDto::Unknown,
+                        },
+                        selection: match person.candidate.decision {
+                            CandidateDecision::OnCourt => PersonSelectionDto::OnCourt,
+                            CandidateDecision::LowConfidence => PersonSelectionDto::LowConfidence,
+                            CandidateDecision::InvalidBox => PersonSelectionDto::InvalidBox,
+                            CandidateDecision::MissingCalibration => {
+                                PersonSelectionDto::MissingCalibration
+                            }
+                            CandidateDecision::ProjectionFailed => {
+                                PersonSelectionDto::ProjectionFailed
+                            }
+                            CandidateDecision::Borderline => PersonSelectionDto::Borderline,
+                            CandidateDecision::OffCourt => PersonSelectionDto::OffCourt,
+                        },
+                        association_ambiguous: person.association_ambiguous,
+                    }
+                })
+                .collect();
+            frames.push(PlayerTrackFrameDto {
+                timestamp_seconds: frame.timestamp_ms as f64 / 1000.0,
+                people,
+            });
+        }
+        Ok(Self {
+            schema_version: artifact.schema_version,
+            model_id: artifact
+                .provenance
+                .as_ref()
+                .map_or_else(|| "unknown".to_string(), |value| value.model_id.clone()),
+            count: match review.count.count {
+                ObservedCount::Two => ObservedPlayerCountDto::Two,
+                ObservedCount::Four => ObservedPlayerCountDto::Four,
+                ObservedCount::Unknown => ObservedPlayerCountDto::Unknown,
+            },
+            count_quality: review.count.quality,
+            count_evidence: TrackIntervalDto {
+                start_seconds: review.count.evidence.start_ms as f64 / 1000.0,
+                end_seconds: review.count.evidence.end_ms as f64 / 1000.0,
+            },
+            coverage: review
+                .coverage
+                .iter()
+                .map(|span| TrackIntervalDto {
+                    start_seconds: span.start_ms as f64 / 1000.0,
+                    end_seconds: span.end_ms as f64 / 1000.0,
+                })
+                .collect(),
+            usable_coverage: review
+                .usable_coverage
+                .iter()
+                .map(|span| TrackIntervalDto {
+                    start_seconds: span.start_ms as f64 / 1000.0,
+                    end_seconds: span.end_ms as f64 / 1000.0,
+                })
+                .collect(),
+            gaps: review
+                .gaps
+                .iter()
+                .filter(|gap| gap.time.end_ms > start_ms && gap.time.start_ms < end_ms)
+                .map(|gap| PlayerGapDto {
+                    track_id: gap.track_id,
+                    time: TrackIntervalDto {
+                        start_seconds: gap.time.start_ms as f64 / 1000.0,
+                        end_seconds: gap.time.end_ms as f64 / 1000.0,
+                    },
+                })
+                .collect(),
+            frames,
+        })
+    }
+}
+
+impl From<&PlayerTrackingConfigDto> for TrackingConfig {
+    fn from(config: &PlayerTrackingConfigDto) -> Self {
+        Self {
+            court: CourtCandidateConfig {
+                min_confidence: config.min_confidence,
+                court_margin: config.court_margin,
+                net_margin: config.net_margin,
+            },
+            max_track_gap_ms: config.max_track_gap_ms,
+            max_frame_gap_ms: config.max_frame_gap_ms,
+            max_ground_speed_per_second: config.max_ground_speed_per_second,
+            ambiguity_margin: config.ambiguity_margin,
+            min_track_observations: config.min_track_observations as usize,
+            min_count_frames: config.min_count_frames as usize,
+            min_count_fraction: config.min_count_fraction,
+        }
+    }
+}
 
 impl From<&RallySegmentationConfigDto> for SegmentationConfig {
     fn from(config: &RallySegmentationConfigDto) -> Self {

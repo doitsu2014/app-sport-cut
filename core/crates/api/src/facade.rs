@@ -15,7 +15,6 @@ use std::sync::Arc;
 use std::thread;
 
 use anyhow::{anyhow, Result};
-use serde::Deserialize;
 use sportcut_common::{CancelToken, SportcutError};
 use sportcut_court::{CalibrationSegment, CourtCalibration};
 use sportcut_export::{render, EditClip, EditList, ExportContext, TitleCard, EXPORT_RELATIVE_PATH};
@@ -34,9 +33,11 @@ use sportcut_storage::{
 use crate::dto::{
     ArtifactManifestDto, CalibrationSaveDto, CalibrationSaveRequestDto, CalibrationSegmentDto,
     CourtCalibrationDto, CourtGeometryDto, ExportRequestDto, JobHandleDto, JobStatusDto,
-    MediaImportRequestDto, MediaMetadataDto, RallySegmentationRequestDto, RallySuggestionsDto,
+    MediaImportRequestDto, MediaMetadataDto, PlayerTrackWindowRequestDto, PlayerTrackingRequestDto,
+    PlayerTracksDto, RallySegmentationRequestDto, RallySuggestionsDto,
 };
 use crate::jobs;
+use crate::track_artifact::{content_fingerprint, TrackArtifact, PLAYER_TRACKS_RELATIVE_PATH};
 
 /// Stage label a repair job carries.
 ///
@@ -55,16 +56,6 @@ const EXPORT_STAGE: &str = "export";
 
 /// Stage label for deriving rally suggestions from player tracks.
 const RALLY_SEGMENTATION_STAGE: &str = "rally_segmentation";
-
-/// Provisional track-artifact path until the Wave 2 producer is implemented.
-const PLAYER_TRACKS_RELATIVE_PATH: &str = "tracks/player_tracks.json";
-
-/// Versioned input envelope supplied by a future player-tracking stage.
-#[derive(Debug, Deserialize)]
-struct TrackArtifact {
-    schema_version: u32,
-    input: SegmentationInput,
-}
 
 /// Stages of a media import, in order.
 pub fn media_import_stages() -> Vec<String> {
@@ -154,6 +145,54 @@ pub fn match_rally_suggestions(
     let (_, _, identity) = load_track_input(&match_dir, config)?;
     let suggestions = load_rally_suggestions(&match_dir, &identity).map_err(to_anyhow)?;
     Ok(suggestions.as_ref().map(RallySuggestionsDto::from))
+}
+
+/// Read a bounded playback window from the completed player-track artifact.
+pub fn match_player_tracks(
+    request: PlayerTrackWindowRequestDto,
+) -> Result<Option<PlayerTracksDto>> {
+    if !request.start_seconds.is_finite()
+        || !request.end_seconds.is_finite()
+        || request.start_seconds < 0.0
+        || request.end_seconds <= request.start_seconds
+    {
+        return Err(anyhow!(
+            "player track window must have a finite positive duration"
+        ));
+    }
+    let match_dir = MatchDirectory::new(&request.match_dir);
+    let Some((_, _, artifact)) = read_track_artifact(&match_dir, false)? else {
+        return Ok(None);
+    };
+    let start_ms = (request.start_seconds * 1000.0).round() as i64;
+    let end_ms = (request.end_seconds * 1000.0).round() as i64;
+    if start_ms >= artifact.input.duration_ms {
+        return Err(anyhow!(
+            "player track window begins after the recording ends"
+        ));
+    }
+    let dto = PlayerTracksDto::from_artifact_window(
+        &artifact,
+        start_ms,
+        end_ms.min(artifact.input.duration_ms),
+    )
+    .map_err(to_anyhow)?;
+    Ok(Some(dto))
+}
+
+/// Start macOS player analysis when its local trial runtime is enabled.
+pub fn start_player_tracking(request: PlayerTrackingRequestDto) -> Result<JobHandleDto> {
+    #[cfg(all(target_os = "macos", feature = "macos-tflite-eval"))]
+    {
+        crate::player_tracking_job::start(request)
+    }
+    #[cfg(not(all(target_os = "macos", feature = "macos-tflite-eval")))]
+    {
+        let _ = request;
+        Err(anyhow!(
+            "player detection runtime is unavailable in this build; enable the local macOS trial runtime"
+        ))
+    }
 }
 
 /// Read the current state of a job.
@@ -273,7 +312,7 @@ pub fn match_manifest(match_dir: String) -> Result<ArtifactManifestDto> {
     ))
 }
 
-fn handle_for(session: &Arc<JobSession>) -> JobHandleDto {
+pub(crate) fn handle_for(session: &Arc<JobSession>) -> JobHandleDto {
     JobHandleDto {
         job_id: session.id().to_string(),
         match_id: session.match_id().to_string(),
@@ -286,7 +325,7 @@ fn handle_for(session: &Arc<JobSession>) -> JobHandleDto {
 /// before any stage could report it — is recorded here as a failure, and the job
 /// is moved to the finished set even if the worker panics, so a client polling
 /// the handle can never be left watching a job that has stopped.
-fn spawn_worker<F>(
+pub(crate) fn spawn_worker<F>(
     label: &'static str,
     session: &Arc<JobSession>,
     lease: JobLease,
@@ -436,7 +475,34 @@ fn load_track_input(
     match_dir: &MatchDirectory,
     config: SegmentationConfig,
 ) -> Result<(ArtifactManifest, SegmentationInput, SuggestionInputs)> {
+    let (manifest, bytes, artifact) = read_track_artifact(match_dir, true)?.ok_or_else(|| {
+        anyhow!("player tracks are unavailable; run player tracking before rally analysis")
+    })?;
+    let audio_fingerprint = artifact
+        .input
+        .audio
+        .as_ref()
+        .map(|audio| serde_json::to_vec(audio).map(|bytes| content_fingerprint(&bytes)))
+        .transpose()?;
+    let identity = SuggestionInputs {
+        duration_ms: artifact.input.duration_ms,
+        tracks_fingerprint: content_fingerprint(&bytes),
+        calibration_id: artifact.input.calibration_id.clone(),
+        audio_fingerprint,
+        config,
+    };
+    identity.validate().map_err(to_anyhow)?;
+    Ok((manifest, artifact.input, identity))
+}
+
+fn read_track_artifact(
+    match_dir: &MatchDirectory,
+    verify_media_bytes: bool,
+) -> Result<Option<(ArtifactManifest, Vec<u8>, TrackArtifact)>> {
     let manifest = ArtifactManifest::load(&match_dir.manifest_path()).map_err(to_anyhow)?;
+    let Some(tracks) = manifest.entry(ArtifactKind::Tracks) else {
+        return Ok(None);
+    };
     let calibration = manifest.entry(ArtifactKind::Calibration).ok_or_else(|| {
         anyhow!("court calibration is unavailable; mark the court before rally analysis")
     })?;
@@ -448,9 +514,6 @@ fn load_track_input(
             "court calibration is unavailable; restore it before rally analysis"
         ));
     }
-    let tracks = manifest.entry(ArtifactKind::Tracks).ok_or_else(|| {
-        anyhow!("player tracks are unavailable; run player tracking before rally analysis")
-    })?;
     if tracks.state != ArtifactState::Final || tracks.relative_path != PLAYER_TRACKS_RELATIVE_PATH {
         return Err(anyhow!(
             "player tracks are not a completed supported artifact; run player tracking again"
@@ -491,28 +554,29 @@ fn load_track_input(
             "player tracks were produced for a different court calibration; run tracking again"
         ));
     }
-    let audio_fingerprint = artifact
-        .input
-        .audio
-        .as_ref()
-        .map(|audio| serde_json::to_vec(audio).map(|bytes| content_fingerprint(&bytes)))
-        .transpose()?;
-    let identity = SuggestionInputs {
-        duration_ms: artifact.input.duration_ms,
-        tracks_fingerprint: content_fingerprint(&bytes),
-        calibration_id: artifact.input.calibration_id.clone(),
-        audio_fingerprint,
-        config,
-    };
-    identity.validate().map_err(to_anyhow)?;
-    Ok((manifest, artifact.input, identity))
-}
-
-fn content_fingerprint(bytes: &[u8]) -> String {
-    let hash = bytes.iter().fold(0xcbf29ce484222325_u64, |hash, byte| {
-        (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
-    });
-    format!("fnv1a64:{hash:016x}")
+    if let Some(provenance) = &artifact.provenance {
+        if provenance.calibration_id != artifact.input.calibration_id {
+            return Err(anyhow!(
+                "player track provenance disagrees with its court calibration; run tracking again"
+            ));
+        }
+        // The media pipeline removes track entries when it rebuilds proxy or
+        // frames. Rally analysis rechecks content bytes before consuming them;
+        // a playback-window read relies on that manifest invalidation to avoid
+        // rehashing the whole recording on every scrub.
+        if verify_media_bytes {
+            provenance
+                .validate_current_media(match_dir, &manifest)
+                .map_err(to_anyhow)?;
+        }
+        #[cfg(all(target_os = "macos", feature = "macos-tflite-eval"))]
+        if !crate::player_tracking_job::configured_backend_is_current(provenance)? {
+            return Err(anyhow!(
+                "player tracks were produced with a different inference runtime or model; run tracking again"
+            ));
+        }
+    }
+    Ok(Some((manifest, bytes, artifact)))
 }
 
 fn run_export(

@@ -81,6 +81,173 @@ pub struct RallySuggestionsDto {
     pub audio_available: bool,
 }
 
+/// Read only the sampled observations needed for a playback window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlayerTrackWindowRequestDto {
+    /// Match artifact directory.
+    pub match_dir: String,
+    /// Inclusive start on the original recording timeline, in seconds.
+    pub start_seconds: f64,
+    /// Exclusive end on the original recording timeline, in seconds.
+    pub end_seconds: f64,
+}
+
+/// Explicit, provisional thresholds for macOS player tracking.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlayerTrackingConfigDto {
+    /// Frame sampling rate in frames per second.
+    pub sampling_rate: f64,
+    /// Minimum confidence for a person box to enter tracking.
+    pub min_confidence: f32,
+    /// Margin outside the marked court used to label borderline boxes.
+    pub court_margin: f64,
+    /// Court distance from the net where side is unknown.
+    pub net_margin: f64,
+    /// Longest gap over which an old player ID may be reused.
+    pub max_track_gap_ms: i64,
+    /// Longest interval between frames counted as continuous coverage.
+    pub max_frame_gap_ms: i64,
+    /// Maximum normalized image-plane ground-point travel per second.
+    pub max_ground_speed_per_second: f64,
+    /// Association cost difference below which identity stays ambiguous.
+    pub ambiguity_margin: f64,
+    /// Minimum observations on a track before it supports count.
+    pub min_track_observations: u32,
+    /// Minimum adequately observed frames supporting a count.
+    pub min_count_frames: u32,
+    /// Fraction of sampled frames required for a count assessment.
+    pub min_count_fraction: f64,
+}
+
+/// Start a local player-analysis job for an already imported match.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlayerTrackingRequestDto {
+    /// Match artifact directory.
+    pub match_dir: String,
+    /// Explicit trial parameters, to be tuned on representative footage.
+    pub config: PlayerTrackingConfigDto,
+}
+
+/// Sustained number of on-court players supported by the sampled evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservedPlayerCountDto {
+    /// One observed player on each side.
+    Two,
+    /// Two observed players on each side.
+    Four,
+    /// The evidence does not support either count.
+    Unknown,
+}
+
+/// Geometric half of the calibrated net, or an uncertain side.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerCourtSideDto {
+    /// Half containing the calibration's first corner.
+    First,
+    /// Half containing the calibration's third corner.
+    Second,
+    /// No reliable assignment.
+    Unknown,
+}
+
+/// Why a detected person was or was not selected for tracking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PersonSelectionDto {
+    /// Ground point falls within the calibrated court.
+    OnCourt,
+    /// Detector confidence is too low.
+    LowConfidence,
+    /// Bounding box cannot locate a person in the frame.
+    InvalidBox,
+    /// No calibration covers the frame.
+    MissingCalibration,
+    /// Image-to-court projection is undefined.
+    ProjectionFailed,
+    /// Ground point lies within the margin just outside the court.
+    Borderline,
+    /// Ground point lies beyond the court margin.
+    OffCourt,
+}
+
+/// One interval of attempted or usable tracking, in seconds.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TrackIntervalDto {
+    /// Inclusive start.
+    pub start_seconds: f64,
+    /// Exclusive end.
+    pub end_seconds: f64,
+}
+
+/// One interrupted player track.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PlayerGapDto {
+    /// Identity within this track generation.
+    pub track_id: u64,
+    /// Interval without a reliable observation.
+    pub time: TrackIntervalDto,
+}
+
+/// A detected person in one upright sampled frame.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlayerObservationDto {
+    /// Identity within this track generation, if association was reliable.
+    pub track_id: Option<u64>,
+    /// Detector confidence from zero to one.
+    pub confidence: f32,
+    /// Box origin and size normalized to the upright displayed frame.
+    pub box_x: f64,
+    pub box_y: f64,
+    pub box_width: f64,
+    pub box_height: f64,
+    /// Estimated ground contact, when the box is valid.
+    pub ground_x: Option<f64>,
+    pub ground_y: Option<f64>,
+    /// Projected court position, when available.
+    pub court_u: Option<f64>,
+    pub court_v: Option<f64>,
+    /// Side remains unknown when projection or net proximity is ambiguous.
+    pub side: PlayerCourtSideDto,
+    /// Selection decision for the box.
+    pub selection: PersonSelectionDto,
+    /// Whether multiple existing tracks could match this person.
+    pub association_ambiguous: bool,
+}
+
+/// Detected people and track assignments in one sampled frame.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlayerTrackFrameDto {
+    /// Position on the original recording timeline, in seconds.
+    pub timestamp_seconds: f64,
+    /// All detected people, including rejected off-court candidates.
+    pub people: Vec<PlayerObservationDto>,
+}
+
+/// Read-only review evidence for one completed track generation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlayerTracksDto {
+    /// Version of the track artifact.
+    pub schema_version: u32,
+    /// Exact detector name and version recorded by the producer.
+    pub model_id: String,
+    /// Sustained count or unknown.
+    pub count: ObservedPlayerCountDto,
+    /// Fraction of sampled frames supporting the count.
+    pub count_quality: f64,
+    /// Interval evaluated for the count.
+    pub count_evidence: TrackIntervalDto,
+    /// Intervals where calibrated frames attempted to observe the court.
+    pub coverage: Vec<TrackIntervalDto>,
+    /// Intervals with observed players on both sides.
+    pub usable_coverage: Vec<TrackIntervalDto>,
+    /// Player-specific observation gaps.
+    pub gaps: Vec<PlayerGapDto>,
+    /// Sampled observations within the requested playback window.
+    pub frames: Vec<PlayerTrackFrameDto>,
+}
+
 /// Lifecycle state of a job, mirrored for the client.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -218,11 +218,24 @@ impl ArtifactManifest {
         state: ArtifactState,
         size_bytes: Option<u64>,
     ) {
-        // New tracks or analysis audio make any boundaries derived from the
-        // previous signal generation stale. The user's accepted rallies live in
-        // SQLite and are deliberately outside this manifest.
-        if matches!(kind, ArtifactKind::Tracks | ArtifactKind::AnalysisAudio) {
-            self.forget(&[ArtifactKind::RallySuggestions]);
+        // Rebuilding upstream media makes court-aware tracks stale. Tracks and
+        // analysis audio in turn make rally suggestions stale. The user's
+        // accepted rallies live in SQLite and are outside this manifest.
+        match kind {
+            ArtifactKind::Proxy => {
+                self.forget(&[
+                    ArtifactKind::Frames,
+                    ArtifactKind::Tracks,
+                    ArtifactKind::RallySuggestions,
+                ]);
+            }
+            ArtifactKind::Frames => {
+                self.forget(&[ArtifactKind::Tracks, ArtifactKind::RallySuggestions]);
+            }
+            ArtifactKind::Tracks | ArtifactKind::AnalysisAudio => {
+                self.forget(&[ArtifactKind::RallySuggestions]);
+            }
+            _ => {}
         }
         let relative_path = relative_path.into();
         self.artifacts.retain(|entry| entry.kind != kind);

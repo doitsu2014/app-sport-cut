@@ -27,6 +27,7 @@ sportcut-media = { workspace = true }
 sportcut-rally = { workspace = true }
 sportcut-storage = { workspace = true }
 sportcut-jobs = { workspace = true }
+sportcut-vision = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
@@ -35,6 +36,7 @@ default = []
 # Enable when building the library that the Flutter app links against.
 # Requires tools/generate-bridge.sh to have produced frb_generated.rs.
 bridge = ["dep:flutter_rust_bridge"]
+macos-tflite-eval = ["sportcut-vision/macos-tflite-eval"]
 
 [dev-dependencies]
 tempfile = { workspace = true }

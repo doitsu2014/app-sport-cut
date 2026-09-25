@@ -37,9 +37,14 @@ fi
 
 cd "${REPO_ROOT}/core/crates/api"
 
-echo "==> cargo build -p sportcut-api --features bridge ${PROFILE_FLAG}"
+FEATURES="bridge"
+if [ "${SPORTCUT_MACOS_TFLITE_EVAL:-0}" = "1" ]; then
+  FEATURES="bridge,macos-tflite-eval"
+fi
+
+echo "==> cargo build -p sportcut-api --features ${FEATURES} ${PROFILE_FLAG}"
 # shellcheck disable=SC2086
-cargo build -p sportcut-api --features bridge --target-dir target ${PROFILE_FLAG}
+cargo build -p sportcut-api --features "${FEATURES}" --target-dir target ${PROFILE_FLAG}
 
 echo "==> built into core/crates/api/target/(debug|release)"
 ls -1 "${REPO_ROOT}/core/crates/api/target"/*/libsportcut_api.* 2>/dev/null || true

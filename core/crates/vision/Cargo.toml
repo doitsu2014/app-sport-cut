@@ -10,4 +10,13 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+image = { workspace = true }
+serde = { workspace = true }
 sportcut-common = { workspace = true }
+sportcut-court = { workspace = true }
+sportcut-media = { workspace = true }
+tflite-c-rs = { workspace = true, optional = true }
+
+[features]
+default = []
+macos-tflite-eval = ["dep:tflite-c-rs"]
