@@ -85,8 +85,25 @@ The alternative of clearing the whole review on recalibration would erase user w
 
 Add the suggestion-decision table through the next catalog migration; existing matches load with no decisions. Add the new artifact kind with a manifest schema bump and migration/read compatibility for existing match directories. Rollout can leave the analysis action unavailable until tracks exist, while manual review continues. Rollback must preserve the existing rallies and score data even if a build ignores suggestions.
 
+## Acceptance target and resolved inputs
+
+The Wave 2 track schema is confirmed: `sportcut-api` writes
+`tracks/player_tracks.json` directly into `sportcut_rally::SegmentationInput`
+(schema version 1 — original-timeline `duration_ms`, `fnv1a64` calibration
+identity, ordered coverage spans, and timestamped `(track_id, u, v)` court
+positions). The consumer shares that type, so the D1 contract holds with no
+design change.
+
+Initial boundary-quality target: rally/rest boundaries within ±2 s of labeled
+ground truth on at least 85% of boundaries, and no more than 5% confidently
+wrong rest/rally classification. Intervals with insufficient track coverage are
+reported as unknown, not scored.
+
+Consented footage: doubles clip `c1` (`~/Downloads/IMG_1194.mov`, off-angle,
+fixed camera, registered during the tracking change). Singles, silent-video, and
+sparse-track footage are deferred until such recordings are available.
+
 ## Open Questions
 
-- What exact track schema and coverage quality will the Wave 2 tracking change commit to? The segmenter adapter must be finalized against that change before implementation.
-- What representative, consented footage can be used to choose thresholds and measure boundary error for singles, doubles, fixed baseline views, and silent recordings?
-- Whether the first UI should show an explicit rest lane, or only shaded gaps between rally candidates. The artifact records rest and unknown either way.
+- Whether the first UI should show an explicit rest lane, or only shaded gaps
+  between rally candidates. The artifact records rest and unknown either way.

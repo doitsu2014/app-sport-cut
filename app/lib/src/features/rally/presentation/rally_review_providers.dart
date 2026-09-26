@@ -6,13 +6,22 @@ import '../../editing/domain/suggestion_decision.dart';
 import '../../editing/presentation/editing_providers.dart';
 import '../../library/domain/match_record.dart';
 
-/// A tuned analysis configuration, once representative footage establishes it.
+/// Segmentation thresholds, first pass tuned on the c1 doubles clip.
 ///
-/// Until then the manual review remains available and the analysis control is
-/// unavailable. The future tracking integration can provide this value without
-/// putting threshold sliders in the user's review flow.
+/// ponytail: enter/exit raised well above the summed-motion noise floor
+/// (median ~2.2 court-units/s) so rest is not mislabeled as rally. Still
+/// unverified against ground-truth labels — task 4.2 re-checks these.
 final rallySegmentationConfigProvider = Provider<RallySegmentationConfigDto?>(
-  (ref) => null,
+  (ref) => const RallySegmentationConfigDto(
+    binMs: 500,
+    maxTrackGapMs: 2000,
+    enterMotionPerSecond: 4.0,
+    exitMotionPerSecond: 2.0,
+    audioIntensityThreshold: 0.5,
+    minRallyMs: 1500,
+    minRestMs: 3000,
+    minUsableCoverage: 0.40,
+  ),
 );
 
 /// The local analysis result and the decisions made about its candidates.

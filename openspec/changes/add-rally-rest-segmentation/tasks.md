@@ -1,7 +1,19 @@
 ## 1. Resolve inputs and shipping gates
 
-- [ ] 1.1 Confirm the Wave 2 tracking artifact schema, timestamp space, player coverage semantics, and calibration identity; update this change's design if that contract differs from the assumed input.
-- [ ] 1.2 Obtain consented representative footage and document an initial boundary-quality acceptance target for singles, doubles, silent video, and sparse tracks before tuning thresholds.
+- [x] 1.1 Confirm the Wave 2 tracking artifact schema, timestamp space, player coverage semantics, and calibration identity; update this change's design if that contract differs from the assumed input.
+
+Confirmed: the archived Wave 2 producer writes `tracks/player_tracks.json`
+directly into `sportcut_rally::SegmentationInput` (schema 1, original-timeline
+`duration_ms`, `fnv1a64` calibration identity, ordered coverage spans, ordered
+`(timestamp_ms, track_id, u, v)` court positions). The consumer shares that
+type, so the D1 contract matches; no design change needed.
+
+- [x] 1.2 Obtain consented representative footage and document an initial boundary-quality acceptance target for singles, doubles, silent video, and sparse tracks before tuning thresholds.
+
+Target recorded in the design: boundaries within ±2 s on at least 85% of
+boundaries, at most 5% confidently wrong rest/rally, unknown coverage reported
+not scored. Footage: doubles clip `c1` (off-angle, fixed camera). Singles,
+silent-video, and sparse-track footage are deferred.
 - [x] 1.3 Review any newly selected runtime, weights, media dependency, or codec in `docs/legal/dependency-register.md` before adding it to a shipping path.
 
 No new runtime, weights, dataset, codec, or third-party library was selected in
