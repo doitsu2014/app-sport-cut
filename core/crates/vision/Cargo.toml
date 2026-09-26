@@ -20,3 +20,7 @@ tflite-c-rs = { workspace = true, optional = true }
 [features]
 default = []
 macos-tflite-eval = ["dep:tflite-c-rs"]
+
+[[example]]
+name = "bench_detect"
+required-features = ["macos-tflite-eval"]

@@ -9,7 +9,7 @@ pub type Result<T, E = SportcutError> = std::result::Result<T, E>;
 ///
 /// Variants are deliberately coarse: callers decide how to present a failure,
 /// and the message always names the input and the reason so a surface (CLI or
-/// mobile UI) can show something actionable without re-deriving context.
+/// app UI) can show something actionable without re-deriving context.
 #[derive(Debug, thiserror::Error)]
 pub enum SportcutError {
     /// A filesystem operation failed, with the path that caused it.

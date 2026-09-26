@@ -24,12 +24,12 @@ tools/build-engine-lib.sh        # engine library the bindings load
 cd app
 flutter pub get
 flutter analyze                  # static analysis
-flutter run                      # needs a simulator/emulator or device
+flutter run -d macos             # desktop run
 ```
 
 Set `SPORTCUT_FLUTTER_BIN` to the directory containing the `flutter` executable
-when the SDK is not on `PATH`. `tools/preflight.sh --profile mobile` reports what
-is missing.
+when the SDK is not on `PATH`. `tools/preflight.sh --profile macos` reports what
+is missing for the macOS client.
 
 ## Structure
 

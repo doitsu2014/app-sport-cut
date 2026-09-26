@@ -3,8 +3,8 @@
 //! The reel is described by an [`EditList`] — ordered clips, their padding, the
 //! score to show, a title, and music — and rendered by a backend that reads
 //! local files only. Today that backend is the `ffmpeg` the media layer already
-//! uses, which is a development path: the mobile platforms cannot execute a
-//! toolchain, and a GPL build cannot ship. The edit list is deliberately
+//! uses, which is a development path: a GPL build cannot ship, and a packaged
+//! macOS app needs a platform-native renderer. The edit list is deliberately
 //! independent of the backend so a platform-native renderer can replace it
 //! without the client or the catalog changing.
 

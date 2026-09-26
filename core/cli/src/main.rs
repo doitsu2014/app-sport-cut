@@ -1,7 +1,7 @@
 //! `sportcut-cli` — the headless harness for the engine.
 //!
-//! The difficult media work is developed and benchmarked here before any mobile
-//! UI exists: probe a recording, build a proxy, extract analysis audio, sample
+//! The difficult media work is developed and benchmarked here before the
+//! Flutter UI exists: probe a recording, build a proxy, extract analysis audio, sample
 //! frames, run the whole import pipeline into a match directory, and inspect or
 //! regenerate what is stored there.
 

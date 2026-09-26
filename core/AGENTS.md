@@ -6,9 +6,9 @@ inside `core/`.
 
 ## Ground rules
 
-- The engine builds, lints, and tests **without** the mobile toolchain. It must
-  stay that way: never add a dependency that needs Flutter, Xcode, the Android
-  SDK, or a JDK to a crate reachable from the pipeline.
+- The engine builds, lints, and tests **without** the Flutter/Xcode client
+  toolchain. It must stay that way: never add a dependency that needs Flutter,
+  Xcode, or a JDK to a crate reachable from the pipeline.
 - `unsafe` is denied workspace-wide. The only exception is the generated FFI
   module in `sportcut-api`, which is not committed.
 - `clippy::dbg_macro` and `clippy::todo` are denied. Warnings fail the lint run.

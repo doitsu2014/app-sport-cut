@@ -2,9 +2,8 @@
 #
 # Run the Flutter client on macOS, for development on a workstation.
 #
-# macOS is not a shipping target for this project (see the design's non-goals);
-# this script exists so the app can be run and reviewed without an iOS
-# simulator or an Android emulator.
+# macOS is the product's shipping target; this script runs the client on the
+# desktop for development and review.
 #
 # What it does:
 #   1. checks that the bridge bindings have been generated;

@@ -1,8 +1,8 @@
-# Mobile Client
+# macOS Client
 
-The Flutter client for iOS and Android: match library, import, playback, and the
-typed wrappers over the generated engine bridge. The project is scaffolded with
-`flutter create --platforms=ios,android --org com.sportcut`.
+The Flutter client for macOS: match library, import, playback, and the typed
+wrappers over the generated engine bridge. The project is scaffolded with
+`flutter create --platforms=macos --org com.sportcut`.
 
 ## Structure
 
@@ -22,7 +22,7 @@ app/
         score/                    score confirmation (later phase)
         highlights/               highlight review (later phase)
         export/                   export settings (later phase)
-  ios/  android/                  platform projects
+  macos/                         platform project
   test/                           widget and catalog tests
 ```
 
@@ -39,14 +39,13 @@ tools/build-engine-lib.sh    # core/crates/api/target/release/libsportcut_api.*
 
 cd app
 flutter pub get
-flutter run                  # needs a simulator/emulator or device
+flutter run -d macos            # desktop run
 ```
 
-### Running on macOS (development only)
+### Running on macOS
 
-macOS is not a shipping target for this project — the design lists a desktop
-product as a non-goal — but it is the fastest way to see the app running
-without a simulator or an emulator.
+macOS is the shipping target; the debug runner is the fastest way to run and
+review the app.
 
 ```bash
 tools/generate-bridge.sh      # once, and after engine API changes
@@ -88,12 +87,12 @@ flutter test
 `flutter test` includes `test/bridge_test.dart`, which loads the real engine
 library and drives the facade, so the native boundary is exercised without a
 device. Running the app itself still requires the platform toolchains:
-`tools/preflight.sh --profile mobile` reports what is missing.
+`tools/preflight.sh --profile macos` reports what is missing.
 
 ## Dependencies
 
 Every package added to `pubspec.yaml` gets a row in
-[`docs/legal/dependency-register.md`](../docs/legal/dependency-register.md)
+[`docs/external-dependencies.md`](../docs/external-dependencies.md)
 before the change that introduces it is complete. `flutter_rust_bridge` must
 stay pinned to the same version as `core/crates/api/Cargo.toml` and
 `tools/generate-bridge.sh`.

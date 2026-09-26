@@ -35,7 +35,7 @@ generate-bridge: dart is not on PATH.
 Install the Flutter SDK (which bundles Dart) or the standalone Dart SDK, then
 run this script again. The generator formats the Dart bindings it emits.
 
-Run tools/preflight.sh --profile mobile to see what else is missing.
+Run tools/preflight.sh --profile macos to see what else is missing.
 EOF
   exit 1
 fi

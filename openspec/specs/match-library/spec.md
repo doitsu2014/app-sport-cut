@@ -68,7 +68,7 @@ The application SHALL play back an imported recording from local storage with st
 - **AND** the match remains listed in the library
 
 ### Requirement: Local catalog ownership and schema
-The application SHALL own the local catalog and SHALL store match, rally, score event, highlight clip, export settings, and exported video records in a versioned local database schema consistent with the product data model.
+The application SHALL own the local catalog and SHALL store match, court calibration, rally, score event, highlight clip, export settings, and exported video records in a versioned local database schema consistent with the product data model.
 
 #### Scenario: Schema changes are versioned
 - **WHEN** the catalog schema changes
@@ -80,9 +80,19 @@ The application SHALL own the local catalog and SHALL store match, rally, score 
 - **THEN** all catalog operations succeed
 
 #### Scenario: Editing records belong to their match
-- **WHEN** a rally, score event, clip, or export setting is written
+- **WHEN** a rally, score event, clip, export setting, or court calibration is written
 - **THEN** it is associated with the match it belongs to
 - **AND** a record cannot be created for a match that does not exist
+
+#### Scenario: Court calibration owned by the catalog
+- **WHEN** a match is calibrated
+- **THEN** the calibration is stored as part of that match's record
+- **AND** it is readable without opening the engine or reading the match's artifact directory
+
+#### Scenario: Existing matches load without a calibration
+- **WHEN** a stored match that was created before calibration existed is loaded
+- **THEN** it loads normally and reports that it has no calibration
+- **AND** no other field of that match changes
 
 #### Scenario: Clip records a clip's order and origin
 - **WHEN** a highlight clip is stored
@@ -95,7 +105,7 @@ The application SHALL own the local catalog and SHALL store match, rally, score 
 
 #### Scenario: Match deletion
 - **WHEN** a user deletes a match
-- **THEN** its catalog records are removed
+- **THEN** its catalog records are removed, including its court calibration
 - **AND** the user is asked whether to also delete the associated derived artifacts
 - **AND** the user is asked whether to also delete the app-owned copy of the recording
 - **AND** the file the user originally selected is never deleted

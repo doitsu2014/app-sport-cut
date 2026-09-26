@@ -1,4 +1,4 @@
-//! The calls the mobile client makes.
+//! The calls the Flutter client makes.
 //!
 //! Each one is a thin, typed wrapper over the engine: no business logic lives
 //! here, so the contract the client depends on is exactly the contract the
@@ -7,7 +7,7 @@
 //! Long work is started, not awaited. A `start_*` call admits the job, hands it
 //! to a worker thread, and returns a handle; [`job_status`] and [`job_cancel`]
 //! take that handle back. Blocking for the whole run instead would give up
-//! progress and cancellation on both mobile platforms, which suspend a
+//! progress and cancellation on macOS, which can suspend a
 //! backgrounded application.
 
 use std::path::{Path, PathBuf};

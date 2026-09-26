@@ -63,6 +63,7 @@ class LibraryScreen extends ConsumerWidget {
                           _calibrate(context, ref, entry),
                       onGenerate: (entry) =>
                           _generateArtifacts(context, ref, entry),
+                      onPlayers: (entry) => _players(context, entry),
                       onDelete: (entry) => _confirmDelete(context, ref, entry),
                     ),
             ),
@@ -123,6 +124,14 @@ class LibraryScreen extends ConsumerWidget {
       return;
     }
     Navigator.of(context).pushNamed(AppRoutes.player, arguments: entry.match);
+  }
+
+  /// Open the player-analysis review: detect people, follow tracks, assign sides.
+  void _players(BuildContext context, MatchListEntry entry) {
+    Navigator.of(context).pushNamed(
+      AppRoutes.playerTracking,
+      arguments: entry.match,
+    );
   }
 
   /// Open the review session: marking rallies, confirming winners, scoring.
@@ -303,6 +312,7 @@ class _MatchList extends StatelessWidget {
     required this.onReview,
     required this.onCalibrate,
     required this.onGenerate,
+    required this.onPlayers,
     required this.onDelete,
   });
 
@@ -311,6 +321,7 @@ class _MatchList extends StatelessWidget {
   final void Function(MatchListEntry) onReview;
   final void Function(MatchListEntry) onCalibrate;
   final void Function(MatchListEntry) onGenerate;
+  final void Function(MatchListEntry) onPlayers;
   final void Function(MatchListEntry) onDelete;
 
   @override
@@ -343,6 +354,8 @@ class _MatchList extends StatelessWidget {
                   onCalibrate(entry);
                 case 'generate':
                   onGenerate(entry);
+                case 'players':
+                  onPlayers(entry);
                 case 'delete':
                   onDelete(entry);
               }
@@ -360,6 +373,10 @@ class _MatchList extends StatelessWidget {
               PopupMenuItem<String>(
                 value: 'generate',
                 child: Text('Prepare analysis files'),
+              ),
+              PopupMenuItem<String>(
+                value: 'players',
+                child: Text('Player analysis'),
               ),
               PopupMenuItem<String>(value: 'delete', child: Text('Delete')),
             ],

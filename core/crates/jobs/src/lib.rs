@@ -1,7 +1,7 @@
 //! The long-running job model.
 //!
-//! Mobile operating systems suspend backgrounded applications, and analysing a
-//! 30–60 minute recording outlives a foreground session. A single long-running
+//! A suspended macOS application can lose a long foreground job, and analysing
+//! a 30–60 minute recording outlives a foreground session. A single long-running
 //! function call would be lost on suspension, with no progress and no way to
 //! cancel it. Everything here exists to avoid that:
 //!

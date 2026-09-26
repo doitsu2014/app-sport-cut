@@ -11,6 +11,12 @@
 # core/crates/api/src/frb_generated.rs, which only exists after
 # tools/generate-bridge.sh has run.
 #
+# The `macos-tflite-eval` feature compiles the local TFLite detector. It is
+# enabled by default on macOS (the shipping target) and needs the matching
+# local runtime/model paths in SPORTCUT_TFLITE_LIBRARY and
+# SPORTCUT_PERSON_MODEL at run time. Set SPORTCUT_MACOS_TFLITE_EVAL=0 to build
+# without it.
+#
 # Usage:
 #   tools/build-engine-lib.sh [--debug]
 
@@ -38,7 +44,7 @@ fi
 cd "${REPO_ROOT}/core/crates/api"
 
 FEATURES="bridge"
-if [ "${SPORTCUT_MACOS_TFLITE_EVAL:-0}" = "1" ]; then
+if [ "$(uname -s)" = "Darwin" ] && [ "${SPORTCUT_MACOS_TFLITE_EVAL:-1}" = "1" ]; then
   FEATURES="bridge,macos-tflite-eval"
 fi
 

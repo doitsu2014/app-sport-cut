@@ -1,7 +1,7 @@
 # Developer Tools
 
 Scripts in this directory are the supported entry points for development. They
-work from a checkout without requiring the mobile toolchain unless stated
+work from a checkout without requiring the client toolchain unless stated
 otherwise.
 
 | Script | Purpose | Requires |
@@ -10,9 +10,9 @@ otherwise.
 | `verify-engine.sh` | The single engine verification command: format check, lint, and test across the Rust workspace. | Rust toolchain, media toolchain |
 | `generate-bridge.sh` | Regenerates the `flutter_rust_bridge` bindings on both sides. Generated files are not committed. | Flutter SDK, Dart, `flutter_rust_bridge_codegen` |
 | `build-engine-lib.sh` | Builds `sportcut-api` with the `bridge` feature into the crate's own target directory, which is where the generated Dart bindings load the library from. | Rust toolchain, generated bindings |
-| `run-macos.sh` | Development run of the Flutter client on macOS: builds the engine library, then runs `flutter run -d macos`. macOS is not a shipping target. | Flutter SDK, Xcode, CocoaPods, Rust toolchain, generated bindings |
+| `run-macos.sh` | Development run of the Flutter client on macOS: builds the engine library, then runs `flutter run -d macos`. macOS is the shipping target. | Flutter SDK, Xcode, CocoaPods, Rust toolchain, generated bindings |
 
-Run `preflight.sh --profile engine` for engine-only work and `--profile mobile`
+Run `preflight.sh --profile engine` for engine-only work and `--profile macos`
 for client work. `--profile all` is the default.
 
 Flutter and Dart are located through, in order: `SPORTCUT_FLUTTER_BIN` (the
@@ -22,7 +22,7 @@ common install locations `~/flutter/bin`, `~/development/flutter/bin`,
 you would rather not change your shell profile:
 
 ```bash
-SPORTCUT_FLUTTER_BIN=/path/to/flutter/bin tools/preflight.sh --profile mobile
+SPORTCUT_FLUTTER_BIN=/path/to/flutter/bin tools/preflight.sh --profile macos
 ```
 
 Exit codes for `preflight.sh`:

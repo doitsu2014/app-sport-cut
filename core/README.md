@@ -1,6 +1,6 @@
 # Sportcut Native Engine
 
-The engine is a Rust workspace that builds, lints, and tests without any mobile
+The engine is a Rust workspace that builds, lints, and tests without any client
 toolchain installed. It owns the media foundation, the job model, and the single
 facade the Flutter client talks to.
 

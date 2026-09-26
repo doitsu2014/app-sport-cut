@@ -8,7 +8,7 @@
 # missing.
 #
 # Usage:
-#   tools/preflight.sh [--profile engine|mobile|all] [--strict-license]
+#   tools/preflight.sh [--profile engine|macos|all] [--strict-license]
 #
 # Flutter is located through, in order: SPORTCUT_FLUTTER_BIN (a directory
 # containing the flutter executable), FLUTTER_ROOT, PATH, then the common
@@ -18,7 +18,7 @@
 #
 # Profiles:
 #   engine   components needed to build, lint, and test core/
-#   mobile   components needed to build the Flutter client in app/
+#   macos    components needed to build the Flutter client in app/
 #   all      everything (default)
 #
 # Exit codes:
@@ -38,7 +38,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --profile)
       if [ $# -lt 2 ]; then
-        echo "preflight: --profile requires a value (engine|mobile|all)" >&2
+        echo "preflight: --profile requires a value (engine|macos|all)" >&2
         exit 64
       fi
       PROFILE="$2"
@@ -65,9 +65,9 @@ while [ $# -gt 0 ]; do
 done
 
 case "$PROFILE" in
-  engine|mobile|all) ;;
+  engine|macos|all) ;;
   *)
-    echo "preflight: unknown profile: $PROFILE (expected engine|mobile|all)" >&2
+    echo "preflight: unknown profile: $PROFILE (expected engine|macos|all)" >&2
     exit 64
     ;;
 esac
@@ -91,7 +91,7 @@ MISSING_COUNT=0
 LICENSE_CONFLICT=0
 
 wants() {
-  # wants <engine|mobile>: is this component in the selected profile?
+  # wants <engine|macos>: is this component in the selected profile?
   case "$PROFILE" in
     all) return 0 ;;
     "$1") return 0 ;;
@@ -135,7 +135,7 @@ printf 'Host: %s %s (%s)\n' "$(uname -s)" "$(uname -r)" "$(uname -m)"
 rule
 
 # ---------------------------------------------------------------- Rust ------
-if wants engine || wants mobile; then
+if wants engine || wants macos; then
   if has rustc; then
     RUSTC_VERSION=$(rustc --version 2>/dev/null | head -n 1)
     print_ok "Rust toolchain" "$RUSTC_VERSION"
@@ -182,9 +182,9 @@ if wants engine || wants mobile; then
         LICENSE_CONFLICT=1
         print_note "Media licensing" "GPL components detected: ${GPL_FLAGS% }"
         printf '          %s%s%s\n' "$C_DIM" \
-          "conflict: GPL components cannot be linked into a proprietary mobile distribution." "$C_OFF"
+          "conflict: GPL components cannot be linked into a proprietary macOS distribution." "$C_OFF"
         printf '          %s%s%s\n' "$C_DIM" \
-          "remediation: use this build for local development only; ship with platform-native media APIs (AVFoundation/VideoToolbox, MediaCodec/Media3) or an LGPL-configured FFmpeg with GPL-only parts disabled. See docs/legal/dependency-register.md." "$C_OFF"
+          "remediation: use this build for local development only; ship with platform-native media APIs (AVFoundation/VideoToolbox) or an LGPL-configured FFmpeg with GPL-only parts disabled. See docs/external-dependencies.md." "$C_OFF"
       else
         print_ok "Media licensing" "no GPL-only components detected in the build configuration"
       fi
@@ -201,8 +201,8 @@ if wants engine || wants mobile; then
   fi
 fi
 
-# -------------------------------------------------------------- Mobile ------
-if wants mobile; then
+# ----------------------------------------------------------- macOS client ---
+if wants macos; then
   # --- Flutter / Dart location ------------------------------------------------
   # The Flutter SDK bundles Dart, so both resolve from one directory.
   FLUTTER_BIN_DIR=""
@@ -284,69 +284,6 @@ if wants mobile; then
     record_missing "Xcode (full installation)" "install Xcode from the App Store, then: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer"
   fi
 
-  # --- Android SDK -----------------------------------------------------------
-  ANDROID_SDK=""
-  if [ -n "${ANDROID_HOME:-}" ] && [ -d "${ANDROID_HOME}" ]; then
-    ANDROID_SDK="${ANDROID_HOME}"
-  elif [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -d "${ANDROID_SDK_ROOT}" ]; then
-    ANDROID_SDK="${ANDROID_SDK_ROOT}"
-  elif [ -d "${HOME}/Library/Android/sdk" ]; then
-    ANDROID_SDK="${HOME}/Library/Android/sdk"
-  fi
-
-  if [ -z "$ANDROID_SDK" ] && has adb; then
-    ANDROID_SDK=$(dirname "$(dirname "$(command -v adb)")")
-  fi
-
-  if [ -n "$ANDROID_SDK" ] && [ -d "$ANDROID_SDK" ]; then
-    print_ok "Android SDK" "$ANDROID_SDK"
-    if [ -d "$ANDROID_SDK/platform-tools" ]; then
-      printf '          %splatform-tools present%s\n' "$C_DIM" "$C_OFF"
-    else
-      print_note "Android SDK" "platform-tools directory missing under $ANDROID_SDK"
-    fi
-    if [ -d "$ANDROID_SDK/cmdline-tools" ] || has sdkmanager; then
-      printf '          %scmdline-tools present%s\n' "$C_DIM" "$C_OFF"
-    else
-      print_note "Android SDK" "cmdline-tools missing; install via Android Studio's SDK Manager if you need sdkmanager"
-    fi
-  else
-    print_missing "Android SDK" "not found (checked ANDROID_HOME, ANDROID_SDK_ROOT, ~/Library/Android/sdk, adb)" \
-      "install Android Studio or the Android command-line tools, set ANDROID_HOME, and accept the SDK licenses"
-    record_missing "Android SDK" "install Android Studio or the Android command-line tools, set ANDROID_HOME, accept the licenses"
-  fi
-
-  # --- JDK -------------------------------------------------------------------
-  JDK_OK=0
-  JDK_VERSION=""
-  JAVA_HOME_DETECTED=$(/usr/libexec/java_home 2>/dev/null || true)
-  if has java; then
-    JAVA_OUTPUT=$(java -version 2>&1 | head -n 3)
-    case "$JAVA_OUTPUT" in
-      *"Unable to locate a Java Runtime"*|*"No Java runtime present"*) JDK_OK=0 ;;
-      *version*) JDK_OK=1 ;;
-      *) JDK_OK=0 ;;
-    esac
-    if [ "$JDK_OK" -eq 1 ]; then
-      JDK_VERSION=$(printf '%s' "$JAVA_OUTPUT" | head -n 1)
-    fi
-  fi
-  if [ "$JDK_OK" -eq 1 ] && [ -n "$JAVA_HOME_DETECTED" ]; then
-    JDK_VERSION="${JDK_VERSION} (JAVA_HOME: ${JAVA_HOME_DETECTED})"
-  fi
-
-  if [ "$JDK_OK" -eq 1 ]; then
-    print_ok "JDK" "$JDK_VERSION"
-  else
-    if has java; then
-      DETAIL="java is on PATH but no Java runtime is installed (macOS stub)"
-    else
-      DETAIL="not found"
-    fi
-    print_missing "JDK" "$DETAIL" \
-      "install a JDK 17 or newer (macOS: brew install --cask temurin; or use the JDK bundled with Android Studio) and set JAVA_HOME"
-    record_missing "JDK" "install a JDK 17+ (brew install --cask temurin) and set JAVA_HOME"
-  fi
 fi
 
 rule
@@ -367,7 +304,7 @@ if [ "$LICENSE_CONFLICT" -eq 1 ]; then
   printf '  Developer use: fine.\n'
   printf '  Shipped target: blocked until the media path uses license-clean components\n'
   printf '  (platform-native APIs or an LGPL-configured FFmpeg).\n'
-  printf '  Register entry: docs/legal/dependency-register.md\n'
+  printf '  Register entry: docs/external-dependencies.md\n'
 fi
 
 printf '\n'

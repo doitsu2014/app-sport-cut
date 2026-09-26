@@ -14,14 +14,13 @@ device, and no cloud or online-API dependency may be introduced.
 
 The product is deliberately semi-automatic. The app proposes rally boundaries
 and a suggested winner; the user confirms. Do not build features that claim
-fully automatic officiating — the reasoning is in `docs/README.md` (section 2,
-"Product Principle").
+fully automatic officiating — the reasoning is in `docs/architecture.md`.
 
 ## Stack
 
 | Layer | Choice |
 | --- | --- |
-| Mobile client | Flutter / Dart 3, iOS and Android |
+| Client | Flutter / Dart 3, macOS desktop |
 | Client state | Riverpod (`flutter_riverpod`) |
 | Native engine | Rust workspace, edition 2021, `rust-version = 1.80` |
 | Language boundary | `flutter_rust_bridge` v2, pinned to **2.13.0** |
@@ -32,11 +31,11 @@ fully automatic officiating — the reasoning is in `docs/README.md` (section 2,
 
 | Path | Responsibility |
 | --- | --- |
-| `core/` | Rust engine: media foundation, job model, and the single FFI facade. Builds, lints, and tests with no mobile toolchain installed. |
+| `core/` | Rust engine: media foundation, job model, and the single FFI facade. Builds, lints, and tests with no client toolchain installed. |
 | `app/` | Flutter client: match library, import, playback, and the typed bridge wrapper. |
 | `models/` | Model assets and weights that ship with the app, plus the notes mapping each to its license-register entry. |
 | `tools/` | Supported developer entry points: preflight, engine verification, bridge generation, engine library build, macOS run. |
-| `docs/` | Product plan (`docs/README.md`), implementation plan (`docs/plans/`), verification records (`docs/verification/`), legal records (`docs/legal/`). |
+| `docs/` | Architecture (`docs/architecture.md`), feature list and road map (`docs/features-roadmap.md`), external dependencies (`docs/external-dependencies.md`), data and storage models (`docs/data-storage-models.md`), verification records (`docs/verification/`). |
 | `openspec/` | Change artifacts. Specs in `openspec/specs/`, active changes in `openspec/changes/`, finished ones in `openspec/changes/archive/`. |
 | `flutter_rust_bridge.yaml` | Codegen configuration. Generated files are never committed. |
 
@@ -44,11 +43,11 @@ fully automatic officiating — the reasoning is in `docs/README.md` (section 2,
 
 Work is split into an **engine track** (`core/`) and a **client track** (`app/`)
 that meet at the bridge. The engine must stay buildable on a machine with no
-Flutter, Xcode, Android SDK, or JDK.
+Flutter, Xcode, or JDK.
 
 ```bash
 tools/preflight.sh --profile engine   # what the engine needs
-tools/preflight.sh --profile mobile   # what the client needs
+tools/preflight.sh --profile macos   # what the macOS client needs
 tools/preflight.sh                    # everything (default)
 
 tools/verify-engine.sh                # cargo fmt --check, clippy, test
@@ -97,9 +96,9 @@ and/or `flutter test` in `app/` at that point (see "OpenSpec workflow" below).
   unrelated one.
 - Only `sportcut-api` crosses the language boundary. Internal crates are free to
   change because the bridge only sees that facade.
-- Keep everything reachable from the media pipeline free of the mobile
-  toolchain. Don't add a dependency that only builds on macOS/iOS/Android to a
-  shared crate.
+- Keep everything reachable from the media pipeline free of the Flutter/Xcode
+  client toolchain. Don't add a dependency that requires Xcode or the Flutter
+  SDK to a shared crate; the engine builds with only Rust and ffmpeg.
 
 ### Flutter client (`app/`)
 
@@ -134,8 +133,8 @@ and/or `flutter test` in `app/` at that point (see "OpenSpec workflow" below).
   the app-owned copy of each imported recording.
 - Import takes custody of a recording: the picked file is copied into
   `SportcutRecordings/<matchId>` and that copy is what the match records, because
-  the platform pickers hand back a file they made in a directory they may purge
-  (`NSTemporaryDirectory()` on iOS, the app cache on Android). The file the user
+  the platform picker may hand back a file in a directory the app does not own
+  and cannot rely on. The file the user
   selected is never copied, moved, renamed, or modified — it is not ours to
   touch.
 - Given a match directory, the engine writes `manifest.json`,
@@ -158,7 +157,7 @@ and/or `flutter test` in `app/` at that point (see "OpenSpec workflow" below).
 ### Licensing gate
 
 Every third-party dependency, model, pretrained weight, dataset, font, audio
-asset, and codec gets a row in `docs/legal/dependency-register.md` **before** the
+asset, and codec gets a row in `docs/external-dependencies.md` **before** the
 change that introduces it is complete. A component that cannot ship in a
 proprietary build is recorded as `not-shippable` with the specific conflict
 named. GPL FFmpeg builds are not shippable — `tools/preflight.sh` flags them.
@@ -171,7 +170,7 @@ redistribute.
 - No `unsafe` in hand-written Rust.
 - No GPL-licensed component on a shipping path.
 - No secrets, tokens, or machine-specific absolute paths committed to the repo.
-- Keep `main` working: the engine builds and lints without the mobile toolchain.
+- Keep `main` working: the engine builds and lints without the Flutter/Xcode client toolchain.
 
 ## Definition of done
 

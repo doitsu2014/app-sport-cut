@@ -108,7 +108,7 @@ class SportcutEngine {
   ///
   /// Call once during startup, after `WidgetsFlutterBinding.ensureInitialized()`.
   /// The shared library is located by the generated loader configuration, so
-  /// iOS, Android, and host-side tests all use the same call.
+  /// macOS and host-side tests all use the same call.
   static Future<SportcutEngine> initialize() async {
     final existing = _instance;
     if (existing != null) {

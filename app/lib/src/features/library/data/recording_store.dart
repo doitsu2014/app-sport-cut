@@ -28,13 +28,12 @@ class CustodiedRecording {
 
 /// Takes durable custody of the recording a user picked.
 ///
-/// The platform pickers hand back a copy they made themselves, in a directory
-/// the operating system is free to empty — `NSTemporaryDirectory()` on iOS and
-/// the app cache on Android. The picked path is therefore an *input* to this
-/// copy and never a value worth storing: a match that pointed at it would stop
-/// playing the first time the system reclaimed that space.
+/// The platform picker hands back a file the app does not own, so the picked
+/// path is an *input* to this copy and never a value worth storing: a match
+/// that pointed at it would stop playing the first time the system reclaimed
+/// that space.
 ///
-/// What is copied is the platform's temporary hand-off, not the user's file.
+/// What is copied is the platform's hand-off, not the user's file.
 /// The file the user selected is never written to, moved, renamed, or deleted.
 class RecordingStore {
   /// Take custody of recordings under the given paths.

@@ -17,9 +17,8 @@ class PickedVideo {
 
 /// Source of a recording to import.
 ///
-/// Abstracted so the library screen can be tested, and so a future platform
-/// picker (for example a photo-library picker on iOS) can be swapped in without
-/// touching the screen.
+/// Abstracted so the library screen can be tested, and so a future macOS-native
+/// picker can be swapped in without touching the screen.
 abstract interface class VideoFilePicker {
   /// Ask the user for a video, or return `null` when they cancel.
   Future<PickedVideo?> pickVideo();
@@ -53,16 +52,6 @@ class SystemVideoFilePicker implements VideoFilePicker {
   }
 }
 
-// Platform note: on iOS the picker offers both the photo library
-// (`PHPickerViewController`) and the document picker, and both return their
-// result through this one class. On Android a video is requested with
-// `Intent.ACTION_GET_CONTENT` for `video/*` (android_file_picker 2.0.0), a
-// Storage Access Framework picker that grants read access to the chosen file,
-// so no runtime media permission is needed and the Android manifest declares
-// none.
-//
-// Whichever entry point is used, the path handed back is a copy the platform
-// made in a directory it may later purge — `NSTemporaryDirectory()` on iOS, the
-// app cache on Android — and on Android the underlying URI grant does not
-// outlive the process. That is why `RecordingStore` takes custody of the file
-// before anything is stored.
+// On macOS the system file chooser returns the selected file's path directly.
+// `RecordingStore` still takes custody of the file before anything is stored,
+// so a match never depends on the original location surviving.
