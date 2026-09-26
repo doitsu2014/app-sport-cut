@@ -46,7 +46,7 @@ highlights, then exports a short video with music and a scoreboard.
 | --- | --- | --- | --- |
 | 0 | Research and proof of concept | Test footage, court-calibration prototype, frame extraction, person detection and player count, rally-vs-rest classifier, benchmark report | Footage and inference gates partially open; latency/memory benchmark recorded, accuracy still unmeasured |
 | 1 | Video editing MVP | Import, manual trim/clips, manual score timeline, overlay, music, FFmpeg export | Done (`add-manual-editing-and-export`) |
-| 2 | Automatic rally detection | Court calibration, player count, tracking, active/inactive segments, suggested cuts, editable timeline | Court calibration done (`add-court-calibration`); detection/tracking implemented (`add-player-detection-tracking`); rally segmentation in progress (`add-rally-rest-segmentation`) |
+| 2 | Automatic rally detection | Court calibration, player count, tracking, active/inactive segments, suggested cuts, editable timeline | Done: court calibration (`add-court-calibration`), detection/tracking (`add-player-detection-tracking`), rally/rest segmentation (`add-rally-rest-segmentation`, thresholds first-pass on c1) |
 | 3 | Semi-automatic scoring | Rally confirmation UI, left/right selection, score timeline, serving-side heuristic | Partially done (manual score timeline) |
 | 4 | Highlight intelligence | Highlight scoring, audio intensity, motion ranking, templates, favorites | Not started |
 | 5 | Advanced computer vision | Shuttlecock/racket detection, shot classification, serve detection, shot speed | Deferred — starts only after enough consented labeled data |

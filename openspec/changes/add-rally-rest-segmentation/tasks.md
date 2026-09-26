@@ -37,5 +37,11 @@ entries in the dependency register; the Wave 2 inference gate remains open.
 ## 4. Verification and documentation
 
 - [x] 4.1 Run `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, and `flutter analyze` for the touched tracks; resolve findings without changing unrelated work.
-- [ ] 4.2 Review representative local footage against the boundary-quality target, including missing audio and sparse tracks; record the limitation and result under `docs/verification/` when the change is explicitly verified or closed.
+- [x] 4.2 Review representative local footage against the boundary-quality target, including missing audio and sparse tracks; record the limitation and result under `docs/verification/` when the change is explicitly verified or closed.
+
+Recorded in `docs/verification/rally-rest-segmentation.md`: end-to-end on the c1
+doubles clip works, thresholds tuned to enter 4.0 / exit 2.0 (35 rallies,
+median 4 s, max 19 s). Limitation: the ±2 s boundary-quality target is not yet
+measured against labeled ground truth, and audio support is inactive (no audio
+intensities from the track producer).
 - [x] 4.3 Update the Wave 3 roadmap status and user-facing guidance to describe suggestions, manual fallback, and the absence of automatic winner decisions.

@@ -40,6 +40,12 @@ Rallies, score events, and clip selections are user-authored and preserved
 across reanalysis. Derived evidence (tracks, suggested rallies) is regenerable
 and may be invalidated and replaced.
 
+A small `rally_suggestion_decisions` table records accepted/dismissed choices
+per suggestion generation. Accepting a candidate creates an unscored rally in
+the same SQLite transaction; dismissing records only the decision. Decisions are
+keyed by generation, so a rerun with the same inputs keeps them while a changed
+input starts a new generation.
+
 ## Match directory (engine artifacts)
 
 Inside a match directory the engine writes:
@@ -51,7 +57,7 @@ proxy/                 low-resolution analysis proxy
 audio/                 low-bitrate analysis audio
 frames/                upright, timestamped sampled JPEGs
 calibration/           court calibration
-tracks/                player_tracks.json (versioned producer envelope)
+tracks/                player_tracks.json + rally_suggestions.json
 export/                rendered highlight output
 ```
 
@@ -95,6 +101,15 @@ schema-1 `input` carries the rally-segmentation contract:
 A separate producer section adds detector/model/config identity, per-frame
 boxes, count assessment, side and quality information, and explicit gaps, so the
 raw evidence stays inspectable without changing the downstream contract.
+
+## Rally suggestions artifact
+
+`tracks/rally_suggestions.json` is the versioned `RallySuggestions` artifact. It
+holds the input fingerprint, algorithm version, deterministic candidate IDs,
+rally intervals, rest/unknown intervals, quality values, and signal provenance.
+It is written atomically and published final only on success; a cancelled run
+leaves no final suggestion set. The segmentation is motion-first and optional
+audio, and its thresholds are recorded so a result can be reproduced.
 
 ## Model and runtime bytes
 
