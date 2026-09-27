@@ -42,6 +42,9 @@ export 'generated/dto.dart'
         EditClipDto,
         EditTitleDto,
         ExportRequestDto,
+        HighlightRankDto,
+        HighlightRallyDto,
+        HighlightRankingRequestDto,
         JobHandleDto,
         JobProgressDto,
         JobStateDto,
@@ -60,10 +63,14 @@ export 'generated/dto.dart'
         PlayerTrackingRequestDto,
         PlayerTracksDto,
         RallyActivitySpanDto,
+        RallyOutcomeDto,
         RallySegmentationConfigDto,
         RallySegmentationRequestDto,
+        RallySideDto,
         RallySuggestionDto,
         RallySuggestionsDto,
+        ServingSideDto,
+        ServingSideRequestDto,
         TrackIntervalDto;
 
 /// Raised when the engine rejects a request or fails while working on one.
@@ -275,6 +282,28 @@ class SportcutEngine {
   /// Cancellation is cooperative, so the returned status may still be running.
   Future<JobStatusDto> jobCancel(String jobId) =>
       _guard(() async => rust.jobCancel(jobId: jobId));
+
+  /// Derive who served each rally from the confirmed winners.
+  ///
+  /// The result is used to propose the server as a tentative winner on
+  /// unscored rallies and to show who serves next on the scoreboard.
+  Future<List<ServingSideDto>> servingSides(
+    List<RallyOutcomeDto> rallies,
+  ) =>
+      _guard(() async => rust.servingSides(
+            request: ServingSideRequestDto(rallies: rallies),
+          ));
+
+  /// Rank rallies into a suggested highlight order.
+  ///
+  /// A pure, deterministic call over the signals the application already
+  /// holds. Returns one score and rank per rally, best first.
+  Future<List<HighlightRankDto>> rankHighlights(
+    List<HighlightRallyDto> rallies,
+  ) =>
+      _guard(() async => rust.rankHighlights(
+            request: HighlightRankingRequestDto(rallies: rallies),
+          ));
 
   /// Start rendering a match's highlight video from an edit decision list.
   ///

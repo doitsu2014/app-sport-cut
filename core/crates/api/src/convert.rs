@@ -4,19 +4,22 @@ use std::path::Path;
 
 use sportcut_common::{Result, SportcutError};
 use sportcut_court::{CalibrationSegment, CourtCalibration, CourtOrientation, ImagePoint};
+use sportcut_highlight::{HighlightRally, HighlightRank};
 use sportcut_jobs::{JobProgress, JobState, JobStatus};
 use sportcut_media::{MediaMetadata, Orientation, REBUILDABLE_KINDS};
 use sportcut_rally::{SegmentationConfig, SpanKind};
+use sportcut_score::{RallyOutcome, ServingSide, Side};
 use sportcut_storage::{ArtifactManifest, ArtifactState, RallySuggestions};
 use sportcut_vision::{CandidateDecision, CourtCandidateConfig, ObservedCount, TrackingConfig};
 
 use crate::dto::{
     ArtifactDto, ArtifactManifestDto, ArtifactStateDto, CalibrationSegmentDto, CourtCalibrationDto,
-    CourtCornerDto, CourtGeometryDto, CourtOrientationDto, JobProgressDto, JobStateDto,
-    JobStatusDto, MediaMetadataDto, ObservedPlayerCountDto, OrientationDto, PersonSelectionDto,
-    PlayerCourtSideDto, PlayerGapDto, PlayerObservationDto, PlayerTrackFrameDto,
-    PlayerTrackingConfigDto, PlayerTracksDto, RallyActivitySpanDto, RallySegmentationConfigDto,
-    RallySuggestionDto, RallySuggestionsDto, TrackIntervalDto,
+    CourtCornerDto, CourtGeometryDto, CourtOrientationDto, HighlightRallyDto, HighlightRankDto,
+    JobProgressDto, JobStateDto, JobStatusDto, MediaMetadataDto, ObservedPlayerCountDto,
+    OrientationDto, PersonSelectionDto, PlayerCourtSideDto, PlayerGapDto, PlayerObservationDto,
+    PlayerTrackFrameDto, PlayerTrackingConfigDto, PlayerTracksDto, RallyActivitySpanDto,
+    RallyOutcomeDto, RallySegmentationConfigDto, RallySideDto, RallySuggestionDto,
+    RallySuggestionsDto, ServingSideDto, TrackIntervalDto,
 };
 use crate::track_artifact::TrackArtifact;
 
@@ -202,6 +205,64 @@ impl From<&RallySuggestions> for RallySuggestionsDto {
                 .collect(),
             usable_coverage: suggestions.usable_coverage,
             audio_available: suggestions.audio_available,
+        }
+    }
+}
+
+impl From<&HighlightRallyDto> for HighlightRally {
+    fn from(dto: &HighlightRallyDto) -> Self {
+        Self {
+            id: dto.rally_id.clone(),
+            start_ms: (dto.start_seconds * 1000.0).round() as i64,
+            end_ms: (dto.end_seconds * 1000.0).round() as i64,
+            motion: dto.motion,
+            score_context: dto.score_context,
+        }
+    }
+}
+
+impl From<&HighlightRank> for HighlightRankDto {
+    fn from(rank: &HighlightRank) -> Self {
+        Self {
+            rally_id: rank.id.clone(),
+            score: rank.score,
+            rank: rank.rank,
+        }
+    }
+}
+
+impl From<RallySideDto> for Side {
+    fn from(side: RallySideDto) -> Self {
+        match side {
+            RallySideDto::Left => Side::Left,
+            RallySideDto::Right => Side::Right,
+        }
+    }
+}
+
+impl From<&RallyOutcomeDto> for RallyOutcome {
+    fn from(dto: &RallyOutcomeDto) -> Self {
+        Self {
+            id: dto.rally_id.clone(),
+            winner: dto.winner.map(Side::from),
+        }
+    }
+}
+
+impl From<Side> for RallySideDto {
+    fn from(side: Side) -> Self {
+        match side {
+            Side::Left => RallySideDto::Left,
+            Side::Right => RallySideDto::Right,
+        }
+    }
+}
+
+impl From<&ServingSide> for ServingSideDto {
+    fn from(serving: &ServingSide) -> Self {
+        Self {
+            rally_id: serving.id.clone(),
+            side: serving.side.map(RallySideDto::from),
         }
     }
 }

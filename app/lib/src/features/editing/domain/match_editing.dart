@@ -44,12 +44,16 @@ abstract interface class MatchEditing {
   });
 
   /// Accept a proposal as an unscored rally, optionally with edited boundaries.
+  ///
+  /// [quality] is the proposal's motion quality, recorded on the rally as its
+  /// confidence so later highlight ranking has a real motion signal.
   Future<void> acceptSuggestion(
     MatchRecord match, {
     required String generationId,
     required String candidateId,
     required double startSeconds,
     required double endSeconds,
+    required double quality,
   });
 
   /// Hide a proposal for this generation without creating a rally.

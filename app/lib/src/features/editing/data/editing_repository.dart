@@ -95,6 +95,7 @@ class EditingRepository implements MatchEditing {
     required String candidateId,
     required double startSeconds,
     required double endSeconds,
+    required double quality,
   }) async {
     _validateSuggestionIdentity(generationId, candidateId);
     _validateRallyRange(match, startSeconds, endSeconds);
@@ -104,6 +105,7 @@ class EditingRepository implements MatchEditing {
         matchId: match.id,
         startSeconds: startSeconds,
         endSeconds: endSeconds,
+        confidence: quality,
       ),
       generationId: generationId,
       candidateId: candidateId,

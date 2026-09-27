@@ -210,6 +210,7 @@ class RallyReviewController extends Notifier<RallyReviewState> {
         candidateId: candidate.id,
         startSeconds: startSeconds ?? candidate.startSeconds,
         endSeconds: endSeconds ?? candidate.endSeconds,
+        quality: candidate.quality,
       );
       await ref.read(editingControllerProvider.notifier).open(match);
       await _reload(match);

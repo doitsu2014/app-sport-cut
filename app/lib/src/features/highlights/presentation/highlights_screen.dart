@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/router.dart';
+import '../../../bridge/sportcut_engine.dart';
 import '../../editing/domain/highlight_clip.dart';
 import '../../editing/domain/match_edit.dart';
 import '../../editing/domain/rally.dart';
 import '../../editing/presentation/editing_providers.dart';
 import '../../library/domain/match_record.dart';
 import '../../library/presentation/formatters.dart';
+import 'highlight_ranking_providers.dart';
 
 /// The highlight reel: which points made it, in what order, trimmed how.
 class HighlightsScreen extends ConsumerStatefulWidget {
@@ -38,6 +41,8 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
     final state = ref.watch(editingControllerProvider);
     final edit = state.edit;
     final controller = ref.read(editingControllerProvider.notifier);
+    final ranking = ref.watch(highlightRankingProvider).value ??
+        const <String, HighlightRankDto>{};
     final theme = Theme.of(context);
 
     if (edit == null) {
@@ -51,8 +56,8 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
       );
     }
 
-    final leftOut =
-        edit.rallies.where((rally) => !edit.isKept(rally)).toList();
+    final leftOut = edit.rallies.where((rally) => !edit.isKept(rally)).toList()
+      ..sort((a, b) => _rankFor(a, ranking).compareTo(_rankFor(b, ranking)));
 
     return Scaffold(
       appBar: AppBar(
@@ -67,6 +72,14 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
                 style: theme.textTheme.labelLarge,
               ),
             ),
+          ),
+          IconButton(
+            tooltip: 'Export',
+            onPressed: () => Navigator.of(context).pushNamed(
+              AppRoutes.export,
+              arguments: widget.match,
+            ),
+            icon: const Icon(Icons.ios_share),
           ),
         ],
       ),
@@ -118,8 +131,10 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
           if (leftOut.isNotEmpty)
             _LeftOut(
               rallies: leftOut,
+              ranking: ranking,
               busy: state.busy,
               onAdd: (rally) => controller.setKept(rally, true),
+              onKeepBest: () => _keepBest(leftOut),
             ),
         ],
       ),
@@ -154,7 +169,23 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
           endSeconds: range.end,
         );
   }
+
+  /// Keep the best-ranked rallies that are not yet in the reel.
+  ///
+  /// [leftOut] is already sorted best-first, so taking the first ten keeps the
+  /// strongest candidates. Each keep reloads the edit, so they run one at a
+  /// time rather than racing the busy guard.
+  Future<void> _keepBest(List<Rally> leftOut) async {
+    final controller = ref.read(editingControllerProvider.notifier);
+    for (final rally in leftOut.take(10)) {
+      await controller.setKept(rally, true);
+    }
+  }
 }
+
+/// A rally's suggested rank, or a value that sorts it last when unranked.
+int _rankFor(Rally rally, Map<String, HighlightRankDto> ranking) =>
+    ranking[rally.id]?.rank ?? 1 << 30;
 
 class _ClipTile extends StatelessWidget {
   const _ClipTile({
@@ -280,13 +311,17 @@ class _EmptyReel extends StatelessWidget {
 class _LeftOut extends StatelessWidget {
   const _LeftOut({
     required this.rallies,
+    required this.ranking,
     required this.busy,
     required this.onAdd,
+    required this.onKeepBest,
   });
 
   final List<Rally> rallies;
+  final Map<String, HighlightRankDto> ranking;
   final bool busy;
   final ValueChanged<Rally> onAdd;
+  final VoidCallback onKeepBest;
 
   @override
   Widget build(BuildContext context) {
@@ -296,9 +331,19 @@ class _LeftOut extends StatelessWidget {
       children: <Widget>[
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Text(
-            'Left out (${rallies.length})',
-            style: theme.textTheme.titleSmall,
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  'Left out (${rallies.length})',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              TextButton(
+                onPressed: busy || rallies.isEmpty ? null : onKeepBest,
+                child: const Text('Keep top 10'),
+              ),
+            ],
           ),
         ),
         SizedBox(
@@ -308,15 +353,22 @@ class _LeftOut extends StatelessWidget {
             itemCount: rallies.length,
             itemBuilder: (context, index) {
               final rally = rallies[index];
+              final rank = ranking[rally.id];
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: ActionChip(
-                  avatar: const Icon(Icons.add),
-                  label: Text(
-                    '${formatDuration(rally.startSeconds)}'
-                    '–${formatDuration(rally.endSeconds)}',
+                child: Tooltip(
+                  message: rank == null
+                      ? 'Add to the reel'
+                      : 'Highlight score ${(rank.score * 100).round()}%',
+                  child: ActionChip(
+                    avatar: const Icon(Icons.add),
+                    label: Text(
+                      '${rank == null ? '' : '#${rank.rank} '}'
+                      '${formatDuration(rally.startSeconds)}'
+                      '–${formatDuration(rally.endSeconds)}',
+                    ),
+                    onPressed: busy ? null : () => onAdd(rally),
                   ),
-                  onPressed: busy ? null : () => onAdd(rally),
                 ),
               );
             },

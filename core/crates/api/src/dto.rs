@@ -81,6 +81,76 @@ pub struct RallySuggestionsDto {
     pub audio_available: bool,
 }
 
+/// One rally's known signals for highlight ranking.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HighlightRallyDto {
+    /// Stable identity in the application's editing records.
+    pub rally_id: String,
+    /// Start on the original recording timeline, in seconds.
+    pub start_seconds: f64,
+    /// End on the original recording timeline, in seconds.
+    pub end_seconds: f64,
+    /// Motion quality from analysis, `0.0..=1.0`, when the rally came from a
+    /// suggestion; absent for a hand-marked rally.
+    pub motion: Option<f64>,
+    /// Score context from `0.0..=1.0`: importance of the point, `0` when the
+    /// rally is unscored.
+    pub score_context: f64,
+}
+
+/// Ask the engine to rank rallies into a suggested highlight order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HighlightRankingRequestDto {
+    /// Rallies to rank, in any order.
+    pub rallies: Vec<HighlightRallyDto>,
+}
+
+/// One rally's computed place in the suggested highlight order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HighlightRankDto {
+    /// Stable identity in the application's editing records.
+    pub rally_id: String,
+    /// Highlight score from `0.0..=1.0`, higher is better.
+    pub score: f64,
+    /// `1`-based rank, best first.
+    pub rank: u32,
+}
+
+/// Which side of the court a result refers to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RallySideDto {
+    /// The left-hand side of the court.
+    Left,
+    /// The right-hand side of the court.
+    Right,
+}
+
+/// One rally's known outcome, in recording order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RallyOutcomeDto {
+    /// Stable identity in the application's editing records.
+    pub rally_id: String,
+    /// Confirmed winner, or `None` while the rally is unscored.
+    pub winner: Option<RallySideDto>,
+}
+
+/// Ask the engine to derive who served each rally.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ServingSideRequestDto {
+    /// Rallies in recording order.
+    pub rallies: Vec<RallyOutcomeDto>,
+}
+
+/// Who served one rally.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServingSideDto {
+    /// Stable identity in the application's editing records.
+    pub rally_id: String,
+    /// The side that served this rally, or `None` when it cannot be derived.
+    pub side: Option<RallySideDto>,
+}
+
 /// Read only the sampled observations needed for a playback window.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlayerTrackWindowRequestDto {

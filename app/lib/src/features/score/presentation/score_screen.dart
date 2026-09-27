@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/router.dart';
 import '../../../bridge/sportcut_engine.dart';
 import '../../editing/domain/match_edit.dart';
 import '../../editing/domain/rally.dart';
@@ -13,6 +14,7 @@ import '../../library/presentation/formatters.dart';
 import '../../library/presentation/library_providers.dart';
 import '../../library/presentation/playback_controller.dart';
 import '../../rally/presentation/rally_review_providers.dart';
+import 'serving_sides_providers.dart';
 
 /// The rally timeline: mark a point, say who won it, watch the score follow.
 ///
@@ -76,9 +78,29 @@ class _ScoreScreenState extends ConsumerState<ScoreScreen> {
     final problem = state.problem;
     final review = ref.watch(rallyReviewControllerProvider);
     final canAnalyze = ref.watch(rallySegmentationConfigProvider) != null;
+    final serving = ref.watch(servingSidesProvider).value ??
+        const <String, RallySideDto>{};
+    WinnerSide? currentServer;
+    for (final rally in edit?.rallies ?? const <Rally>[]) {
+      if (rally.isScored) {
+        currentServer = rally.winnerSide;
+      }
+    }
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.match.title)),
+      appBar: AppBar(
+        title: Text(widget.match.title),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Highlights',
+            onPressed: () => Navigator.of(context).pushNamed(
+              AppRoutes.highlights,
+              arguments: widget.match,
+            ),
+            icon: const Icon(Icons.movie_outlined),
+          ),
+        ],
+      ),
       body: Column(
         children: <Widget>[
           if (problem != null)
@@ -87,7 +109,7 @@ class _ScoreScreenState extends ConsumerState<ScoreScreen> {
               onDismiss: () =>
                   ref.read(editingControllerProvider.notifier).clearProblem(),
             ),
-          _Scoreboard(edit: edit),
+          _Scoreboard(edit: edit, server: currentServer),
           Expanded(
             child: ColoredBox(
               color: Colors.black,
@@ -146,6 +168,7 @@ class _ScoreScreenState extends ConsumerState<ScoreScreen> {
             Expanded(
               child: _RallyList(
                 edit: edit,
+                serving: serving,
                 busy: state.busy,
                 onSeekTo: (rally) => _controller.seek(
                   Duration(
@@ -361,9 +384,10 @@ class _RallySuggestionsPanel extends StatelessWidget {
 
 /// The running score, as it stands for the confirmed rallies so far.
 class _Scoreboard extends StatelessWidget {
-  const _Scoreboard({required this.edit});
+  const _Scoreboard({required this.edit, required this.server});
 
   final MatchEdit? edit;
+  final WinnerSide? server;
 
   @override
   Widget build(BuildContext context) {
@@ -375,9 +399,17 @@ class _Scoreboard extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: <Widget>[
-          _Side(label: 'Left', score: score?.left ?? 0),
+          _Side(
+            label: 'Left',
+            score: score?.left ?? 0,
+            serving: server == WinnerSide.left,
+          ),
           Text('–', style: theme.textTheme.headlineSmall),
-          _Side(label: 'Right', score: score?.right ?? 0),
+          _Side(
+            label: 'Right',
+            score: score?.right ?? 0,
+            serving: server == WinnerSide.right,
+          ),
         ],
       ),
     );
@@ -385,17 +417,38 @@ class _Scoreboard extends StatelessWidget {
 }
 
 class _Side extends StatelessWidget {
-  const _Side({required this.label, required this.score});
+  const _Side({
+    required this.label,
+    required this.score,
+    required this.serving,
+  });
 
   final String label;
   final int score;
+  final bool serving;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
       children: <Widget>[
-        Text(label, style: theme.textTheme.labelMedium),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(label, style: theme.textTheme.labelMedium),
+            if (serving) ...<Widget>[
+              const SizedBox(width: 4),
+              Tooltip(
+                message: 'Serves next',
+                child: Icon(
+                  Icons.sports_tennis,
+                  size: 14,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
+          ],
+        ),
         Text('$score', style: theme.textTheme.headlineMedium),
       ],
     );
@@ -482,6 +535,7 @@ class _MarkControls extends StatelessWidget {
 class _RallyList extends StatelessWidget {
   const _RallyList({
     required this.edit,
+    required this.serving,
     required this.busy,
     required this.onSeekTo,
     required this.onWinner,
@@ -490,6 +544,7 @@ class _RallyList extends StatelessWidget {
   });
 
   final MatchEdit edit;
+  final Map<String, RallySideDto> serving;
   final bool busy;
   final ValueChanged<Rally> onSeekTo;
   final void Function(Rally rally, WinnerSide? side) onWinner;
@@ -515,11 +570,16 @@ class _RallyList extends StatelessWidget {
       itemCount: edit.rallies.length,
       itemBuilder: (context, index) {
         final rally = edit.rallies[index];
+        final side = serving[rally.id];
+        final suggested = side == null
+            ? null
+            : (side == RallySideDto.left ? WinnerSide.left : WinnerSide.right);
         return _RallyTile(
           rally: rally,
           index: index,
           kept: edit.isKept(rally),
           score: edit.score.atRally(rally.id),
+          suggested: suggested,
           busy: busy,
           onSeekTo: () => onSeekTo(rally),
           onWinner: (side) => onWinner(rally, side),
@@ -537,6 +597,7 @@ class _RallyTile extends StatelessWidget {
     required this.index,
     required this.kept,
     required this.score,
+    required this.suggested,
     required this.busy,
     required this.onSeekTo,
     required this.onWinner,
@@ -548,6 +609,7 @@ class _RallyTile extends StatelessWidget {
   final int index;
   final bool kept;
   final ScoreEvent? score;
+  final WinnerSide? suggested;
   final bool busy;
   final VoidCallback onSeekTo;
   final void Function(WinnerSide? side) onWinner;
@@ -569,7 +631,10 @@ class _RallyTile extends StatelessWidget {
       subtitle: Text(
         scored && scoreLine != null
             ? 'Confirmed · ${scoreLine.leftScore}–${scoreLine.rightScore}'
-            : 'Tap the side that won it',
+            : suggested == null
+                ? 'Tap the side that won it'
+                : 'Suggested: ${suggested == WinnerSide.left ? 'Left' : 'Right'}'
+                    ' · tap to confirm',
         style: theme.textTheme.bodySmall,
       ),
       leading: IconButton(
@@ -583,12 +648,14 @@ class _RallyTile extends StatelessWidget {
           _WinnerButton(
             label: 'L',
             selected: rally.winnerSide == WinnerSide.left,
+            suggested: !scored && suggested == WinnerSide.left,
             onPressed: busy ? null : () => onWinner(WinnerSide.left),
           ),
           const SizedBox(width: 4),
           _WinnerButton(
             label: 'R',
             selected: rally.winnerSide == WinnerSide.right,
+            suggested: !scored && suggested == WinnerSide.right,
             onPressed: busy ? null : () => onWinner(WinnerSide.right),
           ),
           const SizedBox(width: 4),
@@ -607,11 +674,13 @@ class _WinnerButton extends StatelessWidget {
   const _WinnerButton({
     required this.label,
     required this.selected,
+    this.suggested = false,
     required this.onPressed,
   });
 
   final String label;
   final bool selected;
+  final bool suggested;
   final VoidCallback? onPressed;
 
   @override
@@ -625,8 +694,11 @@ class _WinnerButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           padding: EdgeInsets.zero,
           backgroundColor: selected ? theme.colorScheme.primaryContainer : null,
+          side: suggested && !selected
+              ? BorderSide(color: theme.colorScheme.primary, width: 2)
+              : null,
         ),
-        child: Text(label),
+        child: Text(suggested ? '•$label' : label),
       ),
     );
   }

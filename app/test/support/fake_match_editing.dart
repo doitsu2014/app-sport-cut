@@ -114,6 +114,7 @@ class FakeMatchEditing implements MatchEditing {
     required String candidateId,
     required double startSeconds,
     required double endSeconds,
+    required double quality,
   }) async {
     calls.add('acceptSuggestion');
     _throwIfFailing();

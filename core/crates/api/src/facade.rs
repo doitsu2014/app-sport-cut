@@ -18,12 +18,14 @@ use anyhow::{anyhow, Result};
 use sportcut_common::{CancelToken, SportcutError};
 use sportcut_court::{CalibrationSegment, CourtCalibration};
 use sportcut_export::{render, EditClip, EditList, ExportContext, TitleCard, EXPORT_RELATIVE_PATH};
+use sportcut_highlight::HighlightRally;
 use sportcut_jobs::{execute_admitted, CheckpointStore, JobLease, JobPlan, JobSession};
 use sportcut_media::{
     probe, regenerate_missing, run_stage, MediaToolchain, PipelineContext, PipelineOptions, STAGES,
     STAGE_PROBE,
 };
 use sportcut_rally::{segment_with_cancel, SegmentationConfig, SegmentationInput};
+use sportcut_score::RallyOutcome;
 use sportcut_storage::{
     load_calibration, load_rally_suggestions, save_calibration, save_rally_suggestions,
     ArtifactKind, ArtifactManifest, ArtifactState, MatchDirectory, RallySuggestions,
@@ -32,9 +34,10 @@ use sportcut_storage::{
 
 use crate::dto::{
     ArtifactManifestDto, CalibrationSaveDto, CalibrationSaveRequestDto, CalibrationSegmentDto,
-    CourtCalibrationDto, CourtGeometryDto, ExportRequestDto, JobHandleDto, JobStatusDto,
-    MediaImportRequestDto, MediaMetadataDto, PlayerTrackWindowRequestDto, PlayerTrackingRequestDto,
-    PlayerTracksDto, RallySegmentationRequestDto, RallySuggestionsDto,
+    CourtCalibrationDto, CourtGeometryDto, ExportRequestDto, HighlightRankDto,
+    HighlightRankingRequestDto, JobHandleDto, JobStatusDto, MediaImportRequestDto,
+    MediaMetadataDto, PlayerTrackWindowRequestDto, PlayerTrackingRequestDto, PlayerTracksDto,
+    RallySegmentationRequestDto, RallySuggestionsDto, ServingSideDto, ServingSideRequestDto,
 };
 use crate::jobs;
 use crate::track_artifact::{content_fingerprint, TrackArtifact, PLAYER_TRACKS_RELATIVE_PATH};
@@ -122,7 +125,11 @@ pub fn start_rally_segmentation(request: RallySegmentationRequestDto) -> Result<
     let match_dir = MatchDirectory::new(&request.match_dir);
     let config = SegmentationConfig::from(&request.config);
     config.validate().map_err(to_anyhow)?;
-    let (manifest, input, identity) = load_track_input(&match_dir, config)?;
+    // Reject unavailable inputs without hashing the proxy and frames here; the
+    // expensive media verification runs on the worker thread.
+    let (manifest, _, _) = read_track_artifact(&match_dir, false)?.ok_or_else(|| {
+        anyhow!("player tracks are unavailable; run player tracking before rally analysis")
+    })?;
 
     let session = JobSession::new(manifest.match_id.clone(), CancelToken::new());
     let lease = jobs::open(&session, match_dir.root(), false)?;
@@ -131,7 +138,7 @@ pub fn start_rally_segmentation(request: RallySegmentationRequestDto) -> Result<
         "rally-segmentation",
         &session,
         lease,
-        move |session, lease| run_rally_segmentation(&match_dir, input, identity, session, lease),
+        move |session, lease| run_rally_segmentation(&match_dir, config, session, lease),
     )?;
     Ok(handle)
 }
@@ -142,7 +149,7 @@ pub fn match_rally_suggestions(
 ) -> Result<Option<RallySuggestionsDto>> {
     let match_dir = MatchDirectory::new(&request.match_dir);
     let config = SegmentationConfig::from(&request.config);
-    let (_, _, identity) = load_track_input(&match_dir, config)?;
+    let (_, _, identity) = load_track_input(&match_dir, config, false)?;
     let suggestions = load_rally_suggestions(&match_dir, &identity).map_err(to_anyhow)?;
     Ok(suggestions.as_ref().map(RallySuggestionsDto::from))
 }
@@ -210,6 +217,35 @@ pub fn job_status(job_id: String) -> Result<JobStatusDto> {
         Vec::new()
     };
     Ok(JobStatusDto::from(&session.status_with_stages(completed)))
+}
+
+/// Rank the caller's rallies into a suggested highlight order.
+///
+/// A pure, deterministic call over the signals the application already holds:
+/// no files are read and the engine never touches the application's catalog.
+pub fn rank_highlights(request: HighlightRankingRequestDto) -> Result<Vec<HighlightRankDto>> {
+    let rallies = request
+        .rallies
+        .iter()
+        .map(HighlightRally::from)
+        .collect::<Vec<_>>();
+    let ranked = sportcut_highlight::rank(&rallies).map_err(to_anyhow)?;
+    Ok(ranked.iter().map(HighlightRankDto::from).collect())
+}
+
+/// Derive who served each of the caller's rallies.
+///
+/// A pure, deterministic call over the confirmed winners the application
+/// already records; no files are read and the engine never touches the
+/// application's catalog.
+pub fn serving_sides(request: ServingSideRequestDto) -> Result<Vec<ServingSideDto>> {
+    let rallies = request
+        .rallies
+        .iter()
+        .map(RallyOutcome::from)
+        .collect::<Vec<_>>();
+    let sides = sportcut_score::serving_sides(&rallies).map_err(to_anyhow)?;
+    Ok(sides.iter().map(ServingSideDto::from).collect())
 }
 
 /// Derive the court geometry a marked segment defines.
@@ -432,8 +468,7 @@ fn run_regenerate(
 
 fn run_rally_segmentation(
     match_dir: &MatchDirectory,
-    input: SegmentationInput,
-    identity: SuggestionInputs,
+    config: SegmentationConfig,
     session: &Arc<JobSession>,
     lease: JobLease,
 ) -> Result<()> {
@@ -441,6 +476,14 @@ fn run_rally_segmentation(
     let plan =
         JobPlan::new(session.match_id().to_string(), [RALLY_SEGMENTATION_STAGE]).without_resume();
     execute_admitted(lease, session, &checkpoints, &plan, |_stage, context| {
+        context.check_cancelled()?;
+        context.report(
+            RALLY_SEGMENTATION_STAGE,
+            0.0,
+            Some("loading player tracks".to_string()),
+        );
+        let (_, input, identity) = load_track_input(match_dir, config, true)
+            .map_err(|error| SportcutError::Artifact(error.to_string()))?;
         context.check_cancelled()?;
         context.report(
             RALLY_SEGMENTATION_STAGE,
@@ -454,7 +497,7 @@ fn run_rally_segmentation(
             0.9,
             Some("publishing rally suggestions".to_string()),
         );
-        let (_, _, current) = load_track_input(match_dir, identity.config)
+        let (_, _, current) = load_track_input(match_dir, identity.config, true)
             .map_err(|error| SportcutError::Artifact(error.to_string()))?;
         if current != identity {
             return Err(SportcutError::Artifact(
@@ -474,10 +517,12 @@ fn run_rally_segmentation(
 fn load_track_input(
     match_dir: &MatchDirectory,
     config: SegmentationConfig,
+    verify_media_bytes: bool,
 ) -> Result<(ArtifactManifest, SegmentationInput, SuggestionInputs)> {
-    let (manifest, bytes, artifact) = read_track_artifact(match_dir, true)?.ok_or_else(|| {
-        anyhow!("player tracks are unavailable; run player tracking before rally analysis")
-    })?;
+    let (manifest, bytes, artifact) = read_track_artifact(match_dir, verify_media_bytes)?
+        .ok_or_else(|| {
+            anyhow!("player tracks are unavailable; run player tracking before rally analysis")
+        })?;
     let audio_fingerprint = artifact
         .input
         .audio
