@@ -5,10 +5,10 @@ import '../features/calibration/presentation/calibration_screen.dart';
 import '../features/export/presentation/export_screen.dart';
 import '../features/highlights/presentation/highlights_screen.dart';
 import '../features/library/domain/match_record.dart';
-import '../features/library/presentation/library_screen.dart';
 import '../features/library/presentation/player_screen.dart';
 import '../features/score/presentation/score_screen.dart';
 import '../features/tracking/presentation/player_tracking_screen.dart';
+import '../features/workspace/presentation/workspace_screen.dart';
 
 /// Named routes of the application.
 ///
@@ -17,8 +17,8 @@ import '../features/tracking/presentation/player_tracking_screen.dart';
 /// removing code. This table is the single place to change if that stops being
 /// true.
 abstract final class AppRoutes {
-  /// Match library: the home screen.
-  static const String library = '/';
+  /// Workspace list: the home screen.
+  static const String workspace = '/';
 
   /// Local playback of one match.
   static const String player = '/match/player';
@@ -47,8 +47,8 @@ abstract final class AppRouter {
   /// Route factory handed to `MaterialApp.onGenerateRoute`.
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
-      case AppRoutes.library:
-        return _route(settings, const LibraryScreen());
+      case AppRoutes.workspace:
+        return _route(settings, const WorkspaceScreen());
       case AppRoutes.player:
         return _route(settings, PlayerScreen(match: matchFrom(settings)));
       case AppRoutes.calibration:

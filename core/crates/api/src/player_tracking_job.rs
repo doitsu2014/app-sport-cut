@@ -49,8 +49,16 @@ pub(crate) fn start(request: PlayerTrackingRequestDto) -> Result<JobHandleDto> {
     let config = TrackingConfig::from(&request.config);
     config.validate().map_err(to_anyhow)?;
     validate_sampling_rate(request.config.sampling_rate).map_err(to_anyhow)?;
-    let runtime_path = local_asset(RUNTIME_ENV, "TFLite runtime")?;
-    let model_path = local_asset(MODEL_ENV, "person model weights")?;
+    let runtime_path = local_asset(
+        request.runtime_path.as_deref(),
+        RUNTIME_ENV,
+        "TFLite runtime",
+    )?;
+    let model_path = local_asset(
+        request.model_path.as_deref(),
+        MODEL_ENV,
+        "person model weights",
+    )?;
     let model_fingerprint = fingerprint_file(&model_path).map_err(to_anyhow)?;
     if model_fingerprint != TRIAL_MODEL_FINGERPRINT {
         return Err(anyhow!(
@@ -211,7 +219,22 @@ fn run(inputs: &JobInputs, session: &Arc<JobSession>, lease: JobLease) -> Result
     .map_err(to_anyhow)
 }
 
-fn local_asset(variable: &str, description: &str) -> Result<PathBuf> {
+/// Resolve an inference asset path.
+///
+/// A packaged app supplies [explicit] so the engine never reads the development
+/// environment; when it is absent the evaluation build falls back to the
+/// environment variable. Both paths are validated as readable files.
+fn local_asset(explicit: Option<&str>, variable: &str, description: &str) -> Result<PathBuf> {
+    if let Some(path) = explicit {
+        let path = PathBuf::from(path);
+        if !path.is_file() {
+            return Err(anyhow!(
+                "{description} is unavailable at {}; bundle it with the app or set {variable}",
+                path.display()
+            ));
+        }
+        return Ok(path);
+    }
     let path = std::env::var_os(variable).ok_or_else(|| {
         anyhow!("{description} is unavailable; set {variable} to its local file path")
     })?;

@@ -20,8 +20,13 @@
 /// ```
 library;
 
+import 'dart:io' show File, Platform;
+
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
     show AnyhowException, FrbException, PanicException;
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show ExternalLibrary;
+import 'package:path/path.dart' as p;
 
 import 'generated/dto.dart';
 import 'generated/facade.dart' as rust;
@@ -121,10 +126,23 @@ class SportcutEngine {
     if (existing != null) {
       return existing;
     }
-    await RustLib.init();
+    await RustLib.init(externalLibrary: _bundledEngineLibrary());
     final engine = SportcutEngine._();
     _instance = engine;
     return engine;
+  }
+
+  /// The engine library when it is embedded in the macOS app bundle.
+  ///
+  /// A packaged build carries `libsportcut_api.dylib` in `Contents/Frameworks`
+  /// and the loader opens it directly. During development the file is absent,
+  /// so this returns `null` and the generated loader uses its configured dev
+  /// directory plus the `FRB_DART_LOAD_EXTERNAL_LIBRARY_NATIVE_LIB_DIR`
+  /// override that `tools/run-macos.sh` sets.
+  static ExternalLibrary? _bundledEngineLibrary() {
+    final contents = p.dirname(p.dirname(Platform.resolvedExecutable));
+    final candidate = p.join(contents, 'Frameworks', 'libsportcut_api.dylib');
+    return File(candidate).existsSync() ? ExternalLibrary.open(candidate) : null;
   }
 
   /// Release the native engine. Mainly useful in tests.
@@ -265,11 +283,15 @@ class SportcutEngine {
   Future<JobHandleDto> startPlayerTracking({
     required String matchDir,
     required PlayerTrackingConfigDto config,
+    String? runtimePath,
+    String? modelPath,
   }) =>
       _guard(() async => rust.startPlayerTracking(
             request: PlayerTrackingRequestDto(
               matchDir: matchDir,
               config: config,
+              runtimePath: runtimePath,
+              modelPath: modelPath,
             ),
           ));
 

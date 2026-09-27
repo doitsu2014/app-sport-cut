@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/match_record.dart';
-import 'formatters.dart';
 import 'library_providers.dart';
 import 'playback_controller.dart';
+import 'player_view.dart';
 
 /// Local playback of one match, with the standard transport controls.
 ///
@@ -54,105 +54,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.match.title)),
-      body: ValueListenableBuilder<PlaybackState>(
-        valueListenable: _controller.state,
-        builder: (context, state, _) {
-          return Column(
-            children: <Widget>[
-              Expanded(
-                child: ColoredBox(
-                  color: Colors.black,
-                  child: Center(
-                    child: state.error == null
-                        ? _controller.buildSurface(context)
-                        : _PlaybackProblem(message: state.error!),
-                  ),
-                ),
-              ),
-              _TransportControls(
-                state: state,
-                onPlayPause: () =>
-                    state.isPlaying ? _controller.pause() : _controller.play(),
-                onSeek: (progress) {
-                  if (state.duration.inMilliseconds == 0) {
-                    return;
-                  }
-                  _controller.seek(
-                    Duration(
-                      milliseconds:
-                          (state.duration.inMilliseconds * progress).round(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _TransportControls extends StatelessWidget {
-  const _TransportControls({
-    required this.state,
-    required this.onPlayPause,
-    required this.onSeek,
-  });
-
-  final PlaybackState state;
-  final VoidCallback onPlayPause;
-  final ValueChanged<double> onSeek;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: <Widget>[
-          IconButton(
-            onPressed: state.isReady && state.error == null ? onPlayPause : null,
-            icon: Icon(
-              state.isPlaying ? Icons.pause : Icons.play_arrow,
-              semanticLabel: state.isPlaying ? 'Pause' : 'Play',
-            ),
-            tooltip: state.isPlaying ? 'Pause' : 'Play',
-          ),
-          Text(formatPosition(state.position)),
-          Expanded(
-            child: Slider(
-              value: state.progress,
-              onChanged: state.isReady && state.error == null ? onSeek : null,
-            ),
-          ),
-          Text(formatPosition(state.duration)),
-        ],
-      ),
-    );
-  }
-}
-
-class _PlaybackProblem extends StatelessWidget {
-  const _PlaybackProblem({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          const Icon(Icons.videocam_off_outlined, color: Colors.white70, size: 40),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            style: const TextStyle(color: Colors.white),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+      body: PlayerView(controller: _controller),
     );
   }
 }

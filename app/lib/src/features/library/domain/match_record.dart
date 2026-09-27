@@ -17,6 +17,7 @@ class MatchRecord {
     required this.durationSeconds,
     required this.createdAt,
     required this.matchDir,
+    this.workspaceId,
     this.videoWidth,
     this.videoHeight,
     this.frameRate,
@@ -48,6 +49,13 @@ class MatchRecord {
 
   /// Directory holding this match's derived artifacts.
   final String matchDir;
+
+  /// The workspace this match belongs to, when it has been assigned one.
+  ///
+  /// Matches created before workspaces existed are assigned to a workspace by
+  /// the migration that introduced them, so a match loaded from the catalog
+  /// always has one; the field stays nullable only for in-flight construction.
+  final String? workspaceId;
 
   /// Stored frame width, when known.
   final int? videoWidth;
@@ -89,6 +97,7 @@ class MatchRecord {
     double? durationSeconds,
     DateTime? createdAt,
     String? matchDir,
+    String? workspaceId,
     int? videoWidth,
     int? videoHeight,
     double? frameRate,
@@ -104,6 +113,7 @@ class MatchRecord {
         durationSeconds: durationSeconds ?? this.durationSeconds,
         createdAt: createdAt ?? this.createdAt,
         matchDir: matchDir ?? this.matchDir,
+        workspaceId: workspaceId ?? this.workspaceId,
         videoWidth: videoWidth ?? this.videoWidth,
         videoHeight: videoHeight ?? this.videoHeight,
         frameRate: frameRate ?? this.frameRate,

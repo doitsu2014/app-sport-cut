@@ -196,6 +196,14 @@ pub struct PlayerTrackingRequestDto {
     pub match_dir: String,
     /// Explicit trial parameters, to be tuned on representative footage.
     pub config: PlayerTrackingConfigDto,
+    /// Absolute path to the bundled TFLite runtime, when supplied by the client.
+    ///
+    /// A packaged app supplies this so the engine never reads the development
+    /// environment; when it is absent the engine falls back to the environment
+    /// variable for the evaluation build.
+    pub runtime_path: Option<String>,
+    /// Absolute path to the bundled model weights, when supplied by the client.
+    pub model_path: Option<String>,
 }
 
 /// Sustained number of on-court players supported by the sampled evidence.

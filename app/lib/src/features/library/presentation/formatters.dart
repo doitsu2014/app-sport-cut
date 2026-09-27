@@ -1,3 +1,11 @@
+import 'dart:ui' show FontFeature;
+
+/// Tabular figures for score, duration, and timecode numerals, so numeric
+/// columns do not shift width as digits change.
+const List<FontFeature> tabularFigures = <FontFeature>[
+  FontFeature.tabularFigures(),
+];
+
 /// Formats a duration in seconds as `m:ss`, or `h:mm:ss` past an hour.
 String formatDuration(double seconds) {
   final total = seconds.isFinite && seconds > 0 ? seconds.round() : 0;

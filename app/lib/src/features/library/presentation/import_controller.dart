@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/import_cancel_token.dart';
 import '../domain/match_import_exception.dart';
 import '../domain/match_record.dart';
+import '../../workspace/presentation/workspace_providers.dart';
 import 'library_providers.dart';
 
 /// What the library shows about an import.
@@ -81,11 +82,12 @@ class ImportController extends Notifier<ImportState> {
   @override
   ImportState build() => const ImportState();
 
-  /// Ask the user for a recording, then import it.
+  /// Ask the user for a recording, then import it into [workspaceId].
   ///
+  /// When [workspaceId] is null the repository chooses or creates a workspace.
   /// Returns [ImportDeclined] when nothing should be shown — the user
   /// cancelled, or an import was already running when this was called.
-  Future<ImportOutcome> start() async {
+  Future<ImportOutcome> start({String? workspaceId}) async {
     if (state.isRunning) {
       return const ImportDeclined();
     }
@@ -102,8 +104,12 @@ class ImportController extends Notifier<ImportState> {
 
       state = const ImportState(phase: ImportPhase.importing);
       final repository = await ref.read(matchRepositoryProvider.future);
-      final match = await repository.importVideo(picked, cancelToken: token);
-      ref.invalidate(matchListProvider);
+      final match = await repository.importVideo(
+        picked,
+        workspaceId: workspaceId,
+        cancelToken: token,
+      );
+      _invalidateAfterImport(match);
       return ImportSucceeded(match);
     } on MatchImportException catch (error) {
       // A cancellation is the user's own doing, so it needs no explanation.
@@ -127,6 +133,15 @@ class ImportController extends Notifier<ImportState> {
         _token = null;
         state = ImportState(problem: state.problem);
       }
+    }
+  }
+
+  void _invalidateAfterImport(MatchRecord match) {
+    ref.invalidate(workspaceListProvider);
+    final workspaceId = match.workspaceId;
+    if (workspaceId != null) {
+      ref.invalidate(workspaceVideosProvider(workspaceId));
+      ref.invalidate(workspaceVideoFactsProvider(workspaceId));
     }
   }
 

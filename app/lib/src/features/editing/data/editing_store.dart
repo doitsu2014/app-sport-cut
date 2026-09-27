@@ -261,6 +261,21 @@ class EditingStore {
     };
   }
 
+  /// The number of selected clips per match, for matches that have any.
+  ///
+  /// One query for the whole workspace view, so the pipeline toolbar can mark
+  /// the highlights stage done without a query per video.
+  Future<Map<String, int>> selectedClipCounts() async {
+    final rows = await _database.rawQuery(
+      'SELECT match_id, COUNT(*) AS c FROM highlight_clips '
+      'WHERE selected = 1 GROUP BY match_id',
+    );
+    return <String, int>{
+      for (final row in rows)
+        row['match_id']! as String: (row['c'] as num).toInt(),
+    };
+  }
+
   /// Replace every score event for a match with [events].
   ///
   /// The whole timeline is rewritten rather than patched, because a correction

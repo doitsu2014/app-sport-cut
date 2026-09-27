@@ -4,6 +4,7 @@ import '../../../bridge/sportcut_engine.dart';
 import '../../calibration/data/calibration_bridge.dart';
 import '../../calibration/domain/court_calibration.dart';
 import '../../editing/data/editing_store.dart';
+import '../../workspace/domain/workspace.dart';
 import '../domain/import_cancel_token.dart';
 import '../domain/match_import_exception.dart';
 import '../domain/match_library.dart';
@@ -45,9 +46,35 @@ class MatchRepository implements MatchLibrary {
     return 'match-${DateTime.now().microsecondsSinceEpoch}-$_sequence';
   }
 
+  static int _workspaceSequence = 0;
+
+  static String _workspaceIdGenerator() {
+    _workspaceSequence += 1;
+    return 'workspace-${DateTime.now().microsecondsSinceEpoch}-$_workspaceSequence';
+  }
+
   /// Every stored match, newest first.
+  ///
+  /// [workspaceId] narrows the result to one workspace; null returns all.
   @override
-  Future<List<MatchRecord>> listMatches() => _catalog.listMatches();
+  Future<List<MatchRecord>> listMatches({String? workspaceId}) =>
+      _catalog.listMatches(workspaceId: workspaceId);
+
+  /// Every workspace, oldest first.
+  @override
+  Future<List<Workspace>> listWorkspaces() => _catalog.listWorkspaces();
+
+  /// Create a workspace with an optional title.
+  @override
+  Future<Workspace> createWorkspace({String? title}) async {
+    final workspace = Workspace(
+      id: _workspaceIdGenerator(),
+      title: _workspaceTitleFor(title),
+      createdAt: _clock(),
+    );
+    await _catalog.insertWorkspace(workspace);
+    return workspace;
+  }
 
   /// The score each match has reached, for the library list.
   @override
@@ -73,12 +100,14 @@ class MatchRepository implements MatchLibrary {
   Future<MatchRecord> importVideo(
     PickedVideo video, {
     String? title,
+    String? workspaceId,
     ImportCancelToken? cancelToken,
   }) async {
     await _ensureReadable(video.path);
     final metadata = await _probe(video.path);
 
     final id = _idGenerator();
+    final resolvedWorkspaceId = await _ensureWorkspaceId(workspaceId);
     _throwIfCancelled(cancelToken);
     final stored = await _recordings.takeCustody(
       matchId: id,
@@ -93,6 +122,7 @@ class MatchRepository implements MatchLibrary {
       durationSeconds: metadata.durationSeconds,
       createdAt: _clock(),
       matchDir: _paths.matchDir(id),
+      workspaceId: resolvedWorkspaceId,
       videoWidth: metadata.width,
       videoHeight: metadata.height,
       frameRate: metadata.frameRate,
@@ -146,8 +176,14 @@ class MatchRepository implements MatchLibrary {
   }
 
   /// Which artifacts are present, and which are missing.
+  @override
   Future<ArtifactManifestDto> manifest(MatchRecord match) =>
       _engine.manifest(match.matchDir);
+
+  /// The number of selected highlight clips per match.
+  @override
+  Future<Map<String, int>> selectedClipCounts() =>
+      _editingStore.selectedClipCounts();
 
   /// Record the court the user marked on this match.
   ///
@@ -251,6 +287,25 @@ class MatchRepository implements MatchLibrary {
     }
   }
 
+  /// Delete a workspace together with its contained matches.
+  @override
+  Future<void> deleteWorkspace(
+    Workspace workspace, {
+    bool deleteArtifacts = false,
+    bool deleteRecording = false,
+  }) async {
+    final matches =
+        await _catalog.listMatches(workspaceId: workspace.id);
+    for (final match in matches) {
+      await deleteMatch(
+        match,
+        deleteArtifacts: deleteArtifacts,
+        deleteRecording: deleteRecording,
+      );
+    }
+    await _catalog.deleteWorkspace(workspace.id);
+  }
+
   /// Delete a match.
   ///
   /// The catalog records always go. Derived artifacts are removed only when
@@ -276,6 +331,21 @@ class MatchRepository implements MatchLibrary {
     if (directory.existsSync()) {
       await directory.delete(recursive: true);
     }
+  }
+
+  /// Resolve the workspace a new match joins.
+  ///
+  /// An explicit id is used as-is; otherwise the first existing workspace is
+  /// used, or one is created so an import never fails for lack of a home.
+  Future<String> _ensureWorkspaceId(String? requested) async {
+    if (requested != null) {
+      return requested;
+    }
+    final workspaces = await _catalog.listWorkspaces();
+    if (workspaces.isNotEmpty) {
+      return workspaces.first.id;
+    }
+    return (await createWorkspace()).id;
   }
 
   Future<void> _ensureReadable(String path) async {
@@ -330,5 +400,13 @@ class MatchRepository implements MatchLibrary {
         ? name.substring(0, name.lastIndexOf('.'))
         : name;
     return withoutExtension.isEmpty ? 'Untitled match' : withoutExtension;
+  }
+
+  static String _workspaceTitleFor(String? title) {
+    final trimmed = title?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) {
+      return trimmed;
+    }
+    return 'Untitled workspace';
   }
 }

@@ -89,11 +89,33 @@ class CalibrationState {
 /// during a drag it holds the corners, and it asks for the projection when the
 /// user lets go.
 class CalibrationController extends Notifier<CalibrationState> {
+  /// In-progress sessions per match, so switching videos preserves a marking
+  /// the user has not saved yet.
+  final Map<String, CalibrationState> _sessions = <String, CalibrationState>{};
+
+  String? _currentMatchId;
+
   @override
   CalibrationState build() => const CalibrationState();
 
   /// Load whatever this match already has marked.
+  ///
+  /// Re-opening the match that is already showing is a no-op; opening a
+  /// different match parks the current session and restores that match's, so
+  /// the studio can switch videos without losing in-progress corners.
   void open(MatchRecord match) {
+    if (_currentMatchId == match.id) {
+      return;
+    }
+    if (_currentMatchId != null) {
+      _sessions[_currentMatchId!] = state;
+    }
+    _currentMatchId = match.id;
+    final saved = _sessions[match.id];
+    if (saved != null) {
+      state = saved;
+      return;
+    }
     final calibration = match.courtCalibration;
     final segment = calibration?.firstSegment;
     if (segment == null) {
@@ -199,7 +221,7 @@ class CalibrationController extends Notifier<CalibrationState> {
       );
 }
 
-/// The court being marked on the calibration screen.
+/// The court being marked on the calibration surface.
 final calibrationControllerProvider =
     NotifierProvider<CalibrationController, CalibrationState>(
   CalibrationController.new,

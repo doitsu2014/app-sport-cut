@@ -74,3 +74,6 @@ testdata/
 tools/testdata/
 *.mp4
 !docs/**/*.mp4
+
+# Fetched inference assets (see tools/fetch-inference-assets.sh); never committed.
+third_party/

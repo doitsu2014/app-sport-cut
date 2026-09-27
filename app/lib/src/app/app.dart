@@ -14,7 +14,7 @@ class SportcutApp extends StatelessWidget {
       title: 'Sportcut',
       theme: buildSportcutTheme(Brightness.light),
       darkTheme: buildSportcutTheme(Brightness.dark),
-      initialRoute: AppRoutes.library,
+      initialRoute: AppRoutes.workspace,
       onGenerateRoute: AppRouter.onGenerateRoute,
       debugShowCheckedModeBanner: false,
     );

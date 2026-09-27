@@ -1,5 +1,6 @@
 import '../../../bridge/sportcut_engine.dart';
 import '../../calibration/domain/court_calibration.dart';
+import '../../workspace/domain/workspace.dart';
 import '../data/video_file_picker.dart';
 import 'import_cancel_token.dart';
 import 'match_record.dart';
@@ -11,7 +12,9 @@ import 'match_record.dart';
 /// storage backend can be substituted without touching the UI.
 abstract interface class MatchLibrary {
   /// Every stored match, newest first.
-  Future<List<MatchRecord>> listMatches();
+  ///
+  /// [workspaceId] narrows the result to one workspace; null returns all.
+  Future<List<MatchRecord>> listMatches({String? workspaceId});
 
   /// The score each match has reached, keyed by match identifier.
   ///
@@ -22,10 +25,13 @@ abstract interface class MatchLibrary {
   /// Create a match from a chosen recording, taking custody of it.
   ///
   /// The picked file is copied into app-owned storage and it is that copy the
-  /// match records; the file the user selected is never modified.
+  /// match records; the file the user selected is never modified. [workspaceId]
+  /// is the workspace the match joins; when null, the repository ensures a
+  /// workspace exists and uses it.
   Future<MatchRecord> importVideo(
     PickedVideo video, {
     String? title,
+    String? workspaceId,
     ImportCancelToken? cancelToken,
   });
 
@@ -39,6 +45,13 @@ abstract interface class MatchLibrary {
     double samplingRate,
   });
 
+  /// Which artifacts are present for this match, and which are missing.
+  Future<ArtifactManifestDto> manifest(MatchRecord match);
+
+  /// The number of selected highlight clips per match, for matches that have
+  /// any. Used by the pipeline toolbar to mark the highlights stage done.
+  Future<Map<String, int>> selectedClipCounts();
+
   /// Record the court the user marked on this match.
   ///
   /// The engine writes the calibration into the match directory and only then is
@@ -49,6 +62,22 @@ abstract interface class MatchLibrary {
     MatchRecord match,
     CourtCalibration calibration,
   );
+
+  /// Every workspace, oldest first.
+  Future<List<Workspace>> listWorkspaces();
+
+  /// Create a workspace with an optional title, defaulting to a friendly name.
+  Future<Workspace> createWorkspace({String? title});
+
+  /// Delete a workspace together with its contained matches.
+  ///
+  /// Contained matches are removed with the same artifact/recording choices as
+  /// a single-match deletion; the user's original files are never deleted.
+  Future<void> deleteWorkspace(
+    Workspace workspace, {
+    bool deleteArtifacts,
+    bool deleteRecording,
+  });
 
   /// Delete a match, optionally removing its derived artifacts and the
   /// app-owned copy of its recording. The file the user selected is never

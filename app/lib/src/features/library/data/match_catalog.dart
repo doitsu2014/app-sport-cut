@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 
 import '../../calibration/domain/court_calibration.dart';
+import '../../workspace/domain/workspace.dart';
 import '../domain/match_record.dart';
 
 /// One versioned schema change.
@@ -32,7 +33,7 @@ class MatchCatalog {
   final Database _database;
 
   /// Schema version written by this build.
-  static const int schemaVersion = 4;
+  static const int schemaVersion = 5;
 
   /// All migrations, in ascending version order.
   static const List<Migration> defaultMigrations = <Migration>[
@@ -40,6 +41,7 @@ class MatchCatalog {
     Migration(version: 2, apply: _addRecordingOrigin),
     Migration(version: 3, apply: _addEditingRecords),
     Migration(version: 4, apply: _addSuggestionDecisions),
+    Migration(version: 5, apply: _addWorkspaces),
   ];
 
   /// Open (and migrate) the catalog.
@@ -85,9 +87,14 @@ class MatchCatalog {
   }
 
   /// Every match, newest first.
-  Future<List<MatchRecord>> listMatches() async {
+  ///
+  /// [workspaceId] narrows the result to one workspace; when it is null, every
+  /// match is returned.
+  Future<List<MatchRecord>> listMatches({String? workspaceId}) async {
     final rows = await _database.query(
       'matches',
+      where: workspaceId == null ? null : 'workspace_id = ?',
+      whereArgs: workspaceId == null ? null : <Object?>[workspaceId],
       orderBy: 'created_at DESC, title ASC',
     );
     return rows.map(_matchFromRow).toList();
@@ -140,6 +147,36 @@ class MatchCatalog {
       );
       await txn.delete('matches', where: 'id = ?', whereArgs: args);
     });
+  }
+
+  /// Insert a workspace.
+  ///
+  /// Uses `abort` on conflict so a duplicate identifier fails loudly.
+  Future<void> insertWorkspace(Workspace workspace) async {
+    await _database.insert(
+      'workspaces',
+      _workspaceToRow(workspace),
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  }
+
+  /// Every workspace, oldest first.
+  Future<List<Workspace>> listWorkspaces() async {
+    final rows = await _database.query(
+      'workspaces',
+      orderBy: 'created_at ASC, title ASC',
+    );
+    return rows.map(_workspaceFromRow).toList();
+  }
+
+  /// Delete a workspace row. Its contained matches are deleted separately by
+  /// the repository, which owns the artifact and recording cleanup.
+  Future<void> deleteWorkspace(String id) async {
+    await _database.delete(
+      'workspaces',
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+    );
   }
 
   /// Close the database.
@@ -310,6 +347,35 @@ class MatchCatalog {
     );
   }
 
+  /// Groups of recordings, and each match's membership.
+  ///
+  /// A default workspace is created only when matches already exist, so a fresh
+  /// install starts with no workspaces and sees the new-workspace empty state.
+  static Future<void> _addWorkspaces(Database db) async {
+    await db.execute('''
+      CREATE TABLE workspaces (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('ALTER TABLE matches ADD COLUMN workspace_id TEXT');
+
+    final rows = await db.rawQuery('SELECT COUNT(*) AS c FROM matches');
+    final count = (rows.first['c'] as num?)?.toInt() ?? 0;
+    if (count > 0) {
+      await db.insert('workspaces', <String, Object?>{
+        'id': 'default',
+        'title': 'My videos',
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+      });
+      await db.update(
+        'matches',
+        <String, Object?>{'workspace_id': 'default'},
+      );
+    }
+  }
+
   static Map<String, Object?> _matchToRow(MatchRecord match) =>
       <String, Object?>{
         'id': match.id,
@@ -318,6 +384,7 @@ class MatchCatalog {
         'duration_seconds': match.durationSeconds,
         'created_at': match.createdAt.millisecondsSinceEpoch,
         'match_dir': match.matchDir,
+        'workspace_id': match.workspaceId,
         'video_width': match.videoWidth,
         'video_height': match.videoHeight,
         'frame_rate': match.frameRate,
@@ -335,6 +402,7 @@ class MatchCatalog {
         createdAt:
             DateTime.fromMillisecondsSinceEpoch(row['created_at']! as int),
         matchDir: row['match_dir']! as String,
+        workspaceId: row['workspace_id'] as String?,
         videoWidth: (row['video_width'] as num?)?.toInt(),
         videoHeight: (row['video_height'] as num?)?.toInt(),
         frameRate: (row['frame_rate'] as num?)?.toDouble(),
@@ -342,6 +410,20 @@ class MatchCatalog {
         originalPath: row['original_path'] as String?,
         sourceBytes: (row['source_bytes'] as num?)?.toInt(),
         courtCalibration: decodeCalibration(row['court_calibration']),
+      );
+
+  static Map<String, Object?> _workspaceToRow(Workspace workspace) =>
+      <String, Object?>{
+        'id': workspace.id,
+        'title': workspace.title,
+        'created_at': workspace.createdAt.millisecondsSinceEpoch,
+      };
+
+  static Workspace _workspaceFromRow(Map<String, Object?> row) => Workspace(
+        id: row['id']! as String,
+        title: row['title']! as String,
+        createdAt:
+            DateTime.fromMillisecondsSinceEpoch(row['created_at']! as int),
       );
 
   /// The catalog column holding a match's calibration, as JSON.

@@ -14,6 +14,7 @@ import 'package:sportcut/src/features/library/data/video_file_picker.dart';
 import 'package:sportcut/src/features/library/domain/import_cancel_token.dart';
 import 'package:sportcut/src/features/library/domain/match_library.dart';
 import 'package:sportcut/src/features/library/domain/match_record.dart';
+import 'package:sportcut/src/features/workspace/domain/workspace.dart';
 
 class FakeMatchLibrary implements MatchLibrary {
   FakeMatchLibrary({List<MatchRecord>? matches})
@@ -48,8 +49,45 @@ class FakeMatchLibrary implements MatchLibrary {
       <String, ({int left, int right})>{};
 
   @override
-  Future<List<MatchRecord>> listMatches() async =>
-      List<MatchRecord>.unmodifiable(matches);
+  Future<List<MatchRecord>> listMatches({String? workspaceId}) async {
+    if (workspaceId == null) {
+      return List<MatchRecord>.unmodifiable(matches);
+    }
+    return List<MatchRecord>.unmodifiable(
+      matches.where((match) => match.workspaceId == workspaceId),
+    );
+  }
+
+  @override
+  Future<List<Workspace>> listWorkspaces() async => const <Workspace>[];
+
+  @override
+  Future<Workspace> createWorkspace({String? title}) async => Workspace(
+        id: 'workspace-1',
+        title: title ?? 'Untitled workspace',
+        createdAt: DateTime(2026, 3, 2),
+      );
+
+  @override
+  Future<void> deleteWorkspace(
+    Workspace workspace, {
+    bool deleteArtifacts = false,
+    bool deleteRecording = false,
+  }) async {}
+
+  @override
+  Future<ArtifactManifestDto> manifest(MatchRecord match) async =>
+      ArtifactManifestDto(
+        matchId: match.id,
+        originalPath: match.videoPath,
+        artifacts: const <ArtifactDto>[],
+        missingKinds: const <String>[],
+        notRebuildableKinds: const <String>[],
+        originalPresent: true,
+      );
+
+  @override
+  Future<Map<String, int>> selectedClipCounts() async => const <String, int>{};
 
   @override
   Future<Map<String, ({int left, int right})>> scoreSummaries() async => scores;
@@ -58,6 +96,7 @@ class FakeMatchLibrary implements MatchLibrary {
   Future<MatchRecord> importVideo(
     PickedVideo video, {
     String? title,
+    String? workspaceId,
     ImportCancelToken? cancelToken,
   }) async {
     importCalls += 1;
@@ -74,6 +113,7 @@ class FakeMatchLibrary implements MatchLibrary {
       durationSeconds: 90.5,
       createdAt: DateTime(2026, 3, 2),
       matchDir: p.join(p.dirname(video.path), 'matches', id),
+      workspaceId: workspaceId,
       videoWidth: 1920,
       videoHeight: 1080,
       frameRate: 30,

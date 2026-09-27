@@ -8,11 +8,13 @@
 # What it does:
 #   1. checks that the bridge bindings have been generated;
 #   2. builds the engine library into core/crates/api/target/release;
-#   3. points the generated loader at that directory and runs the app.
+#   3. fetches the inference assets (TFLite runtime + model);
+#   4. runs the app; the Xcode build embeds the engine library and inference
+#      assets into the .app bundle, so the app finds them without environment
+#      variables.
 #
-# The loader needs the pointer because it resolves its default directory
-# relative to the process working directory, which is not the project directory
-# for a packaged macOS app.
+# The fetch is idempotent: it downloads once and then verifies the cached
+# copies, so the first run needs network and later runs do not.
 #
 # Usage:
 #   tools/run-macos.sh [extra flutter run arguments...]
@@ -30,6 +32,8 @@ if [ ! -f "${REPO_ROOT}/core/crates/api/src/frb_generated.rs" ]; then
 fi
 
 "${SCRIPT_DIR}/build-engine-lib.sh"
+
+"${SCRIPT_DIR}/fetch-inference-assets.sh"
 
 if [ ! -f "${ENGINE_LIB_DIR}/libsportcut_api.dylib" ]; then
   echo "run-macos: ${ENGINE_LIB_DIR}/libsportcut_api.dylib was not produced" >&2

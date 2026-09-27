@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/di.dart';
 import '../../../bridge/sportcut_engine.dart';
 import '../../library/domain/match_record.dart';
+import '../data/inference_assets.dart';
 
 /// Review state for one local player-track generation.
 class PlayerTrackingState {
@@ -134,8 +135,11 @@ class PlayerTrackingController extends Notifier<PlayerTrackingState> {
     );
     try {
       final engine = ref.read(sportcutEngineProvider);
+      final assets = InferenceAssets.resolve();
       final handle = await engine.startPlayerTracking(
         matchDir: match.matchDir,
+        runtimePath: assets.runtimePath,
+        modelPath: assets.modelPath,
         config: const PlayerTrackingConfigDto(
           samplingRate: 5,
           minConfidence: 0.2,
