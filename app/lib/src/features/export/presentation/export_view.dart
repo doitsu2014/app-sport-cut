@@ -19,10 +19,14 @@ import 'export_providers.dart';
 /// directly in the center pane.
 class ExportView extends ConsumerStatefulWidget {
   /// Build the export view.
-  const ExportView({super.key, required this.match});
+  const ExportView({super.key, required this.match, this.onExported});
 
   /// Match being exported.
   final MatchRecord match;
+
+  /// Called after a render finishes so the host can refresh the stage state
+  /// derived from the manifest.
+  final VoidCallback? onExported;
 
   @override
   ConsumerState<ExportView> createState() => _ExportViewState();
@@ -89,7 +93,12 @@ class _ExportViewState extends ConsumerState<ExportView> {
               const SizedBox(height: 16),
               _Padding(edit: edit, onChanged: _save),
               const SizedBox(height: 24),
-              _Render(export: export, edit: edit, match: widget.match),
+              _Render(
+                export: export,
+                edit: edit,
+                match: widget.match,
+                onExported: widget.onExported,
+              ),
             ],
           );
   }
@@ -233,11 +242,13 @@ class _Render extends ConsumerWidget {
     required this.export,
     required this.edit,
     required this.match,
+    this.onExported,
   });
 
   final ExportState export;
   final MatchEdit edit;
   final MatchRecord match;
+  final VoidCallback? onExported;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -272,7 +283,7 @@ class _Render extends ConsumerWidget {
           FilledButton.icon(
             onPressed: edit.clips.isEmpty
                 ? null
-                : () => controller.render(match: match, edit: edit),
+                : () => _render(controller),
             icon: const Icon(Icons.movie_filter_outlined),
             label: Text(reel == null ? 'Render reel' : 'Render again'),
           ),
@@ -313,6 +324,11 @@ class _Render extends ConsumerWidget {
         ],
       ],
     );
+  }
+
+  Future<void> _render(ExportController controller) async {
+    await controller.render(match: match, edit: edit);
+    onExported?.call();
   }
 
   static String _stageLabel(ExportState export) => switch (export.stage) {

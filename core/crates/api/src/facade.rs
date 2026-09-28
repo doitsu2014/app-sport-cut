@@ -341,7 +341,21 @@ pub fn export_highlight(request: ExportRequestDto) -> Result<JobHandleDto> {
 /// Read the manifest of a match, including which artifacts are missing.
 pub fn match_manifest(match_dir: String) -> Result<ArtifactManifestDto> {
     let match_dir = MatchDirectory::new(&match_dir);
-    let manifest = ArtifactManifest::load(&match_dir.manifest_path()).map_err(to_anyhow)?;
+    let path = match_dir.manifest_path();
+    let manifest = if path.is_file() {
+        ArtifactManifest::load(&path).map_err(to_anyhow)?
+    } else {
+        // Imported but not yet analyzed: no manifest exists. Report an empty
+        // manifest so the client can show stages that need no artifacts.
+        ArtifactManifest::new(
+            match_dir
+                .root()
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| "match".to_string()),
+            Path::new(""),
+        )
+    };
     Ok(ArtifactManifestDto::from_manifest(
         &manifest,
         match_dir.root(),

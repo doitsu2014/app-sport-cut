@@ -189,6 +189,16 @@ structured change (proposing, continuing, implementing, verifying, syncing, or
 archiving a change). Treat the change artifacts under `openspec/changes/` as the
 source of truth for the requested behavior and implementation tasks.
 
+Choose the right skill for the job at hand:
+
+- **Exploring a new idea** — use the `openspec-explore` skill to think through
+  possibilities and clarify requirements before committing to a plan.
+- **Constructing a plan or updating an existing change** — use the
+  `openspec-propose` skill (or `openspec-continue-change` / `openspec-new-change`)
+  to turn the idea into a structured change with design, specs, and tasks.
+- **Implementing the change / plan** — use the `openspec-apply-change` skill to
+  work through the pending tasks and mark them complete as they are verified.
+
 - Before implementing a selected change, run `openspec status --change "<name>" --json`
   and `openspec instructions apply --change "<name>" --json`.
 - Read every context file named by the apply instructions before changing code.

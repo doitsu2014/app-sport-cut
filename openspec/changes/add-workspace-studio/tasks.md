@@ -43,3 +43,23 @@
 ## 9. Verify
 
 - [x] 9.1 `flutter analyze` clean and the studio runs with Play and Calibrate sharing one preview
+
+## 10. Fix: surface the prepare-analysis stage
+
+The `workspace` delta already requires prepare analysis to be presented in the
+feature rail, but the rail omitted it, so the stage that gates player analysis
+was invisible and unreachable.
+
+- [x] 10.1 List `Prepare analysis` in the right feature rail so the stage that gates player analysis is visible and targetable
+- [x] 10.2 Prepare the artifacts when it is selected (guarded against concurrent runs) and name the missing prerequisite when a later stage is blocked
+- [x] 10.3 `flutter analyze` clean and Player analysis reachable after marking the court
+
+## 11. Fix: refresh the stage rail after an action
+
+The rail read the manifest once and was not invalidated when an in-center action
+(analyze players, render) wrote a new artifact, so done/ready states stayed stale
+and the later stages remained greyed out after the work had finished.
+
+- [x] 11.1 Refresh the studio stage facts when the player-analysis job publishes tracks
+- [x] 11.2 Refresh when a rendered reel is produced, and when the first clip is kept or dropped
+- [x] 11.3 `flutter analyze` clean

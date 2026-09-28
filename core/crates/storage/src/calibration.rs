@@ -76,12 +76,21 @@ pub fn save_calibration(
     calibration.validate()?;
 
     let manifest_path = match_dir.manifest_path();
-    if !manifest_path.is_file() {
-        return Err(SportcutError::Artifact(format!(
-            "{} has no manifest; import the recording before calibrating it",
-            match_dir.root().display()
-        )));
-    }
+    let mut manifest = if manifest_path.is_file() {
+        ArtifactManifest::load(&manifest_path)?
+    } else {
+        // The court is marked as soon as a match is imported, before any
+        // analysis has run and produced a manifest. Start one here so the
+        // calibration has somewhere to be recorded.
+        ArtifactManifest::new(
+            match_dir
+                .root()
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| "match".to_string()),
+            Path::new(""),
+        )
+    };
 
     // The stored file is a projection of the application's catalog, so an
     // unreadable one is not a reason to refuse a new calibration: it is replaced
@@ -92,8 +101,6 @@ pub fn save_calibration(
 
     let path = match_dir.resolve(CALIBRATION_RELATIVE_PATH);
     write_calibration(&path, calibration)?;
-
-    let mut manifest = ArtifactManifest::load(&manifest_path)?;
     let invalidated = if changed {
         invalidate_derived(&mut manifest)
     } else {

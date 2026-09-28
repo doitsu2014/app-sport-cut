@@ -16,8 +16,11 @@ extension PipelineStageInfo on PipelineStage {
       };
 }
 
-/// Whether a stage is done, can be done now, or needs an earlier stage first.
-enum StageState { done, ready, blocked }
+/// Whether a stage is done, can be done now, or is not set up yet.
+///
+/// `idle` is guidance, not a gate: the stage that needs an earlier one stays
+/// selectable, and the feature explains what is missing when it opens.
+enum StageState { done, ready, idle }
 
 /// Everything the toolbar needs to know about one video, gathered once per
 /// workspace view rather than once per rebuild.
@@ -58,8 +61,8 @@ class VideoStageFacts {
 /// Resolve each stage's state for one video.
 ///
 /// A stage is `done` when its output exists, `ready` when its prerequisite is
-/// satisfied but the output does not exist, and `blocked` otherwise. A missing
-/// recording blocks every stage after import.
+/// satisfied but the output does not exist, and `idle` otherwise. A missing
+/// recording leaves every stage after import `idle`.
 Map<PipelineStage, StageState> resolveStageStates(VideoStageFacts facts) {
   final available = facts.recordingAvailable;
   return <PipelineStage, StageState>{
@@ -88,19 +91,9 @@ Map<PipelineStage, StageState> resolveStageStates(VideoStageFacts facts) {
   };
 }
 
-/// The first stage the user can act on now, or `null` when none is ready.
-PipelineStage? nextStage(Map<PipelineStage, StageState> states) {
-  for (final stage in PipelineStage.values) {
-    if (states[stage] == StageState.ready) {
-      return stage;
-    }
-  }
-  return null;
-}
-
 StageState _state({required bool done, required bool prereq}) {
   if (done) {
     return StageState.done;
   }
-  return prereq ? StageState.ready : StageState.blocked;
+  return prereq ? StageState.ready : StageState.idle;
 }

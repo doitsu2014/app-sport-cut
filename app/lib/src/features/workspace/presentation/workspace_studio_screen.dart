@@ -50,6 +50,9 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
   /// The selected feature, where null means playback.
   PipelineStage? _selectedStage;
 
+  /// Whether the prepare-analysis job is in flight.
+  bool _preparingAnalysis = false;
+
   @override
   void dispose() {
     _controller?.dispose();
@@ -61,10 +64,12 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     final videos = ref.watch(workspaceVideosProvider(widget.workspace.id));
     final import = ref.watch(importControllerProvider);
 
-    // Scoring the first rally flips Review & score from ready to done; refresh
-    // the stage facts so the rail shows the check rather than a stale state.
+    // Scoring the first rally flips Review & score from ready to done, and
+    // keeping the first clip flips Export; refresh the stage facts so the rail
+    // shows the check rather than a stale state.
     ref.listen(editingControllerProvider, (previous, next) {
-      if (_editHasScore(previous?.edit) != _editHasScore(next.edit)) {
+      if (_editHasScore(previous?.edit) != _editHasScore(next.edit) ||
+          _editHasClips(previous?.edit) != _editHasClips(next.edit)) {
         _refresh();
       }
     });
@@ -77,13 +82,6 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
             onPressed: import.isRunning ? null : _import,
             icon: const Icon(Icons.add),
             tooltip: 'Import video',
-          ),
-          IconButton(
-            onPressed: import.isRunning
-                ? null
-                : () => _selectStage(PipelineStage.analyze),
-            icon: const Icon(Icons.settings_input_component),
-            tooltip: 'Prepare analysis',
           ),
           IconButton(
             onPressed: () => _confirmDeleteWorkspace(),
@@ -185,7 +183,7 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     final videoFacts = facts?[entry.match.id];
     if (videoFacts == null) {
       return <PipelineStage, StageState>{
-        for (final stage in PipelineStage.values) stage: StageState.blocked,
+        for (final stage in PipelineStage.values) stage: StageState.idle,
       };
     }
     return resolveStageStates(videoFacts);
@@ -209,9 +207,18 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
           onSaved: (_) => _refresh(),
         );
       case PipelineStage.track:
+        final videoFacts = facts?[entry.match.id];
         return PlayerTrackingView(
           match: entry.match,
           controller: controller,
+          calibrated: videoFacts?.calibrated ?? false,
+          analysisReady: videoFacts?.analysisReady ?? false,
+          onMarkCourt: () =>
+              setState(() => _selectedStage = PipelineStage.calibrate),
+          onPrepare: () => unawaited(_generateArtifacts(entry.match)),
+          // The track job writes a new artifact; refresh the rail so done and
+          // ready states do not stay stale after the action.
+          onAnalyzed: _refresh,
           // Manual review is always available, even without detected tracks.
           onOpenScore: () =>
               setState(() => _selectedStage = PipelineStage.score),
@@ -221,7 +228,7 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
       case PipelineStage.highlight:
         return HighlightsView(match: entry.match);
       case PipelineStage.export:
-        return ExportView(match: entry.match);
+        return ExportView(match: entry.match, onExported: _refresh);
       case PipelineStage.import:
       case PipelineStage.analyze:
         // Import is not a lens, and prepare-analysis is a background job; the
@@ -254,23 +261,25 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     final facts = ref
         .read(workspaceVideoFactsProvider(widget.workspace.id))
         .value;
-    final state = _statesFor(entry, facts)[stage] ?? StageState.blocked;
-    if (state == StageState.blocked) {
-      _showBlocked(stage);
-      return;
-    }
+    // Every feature is selectable; a stage that needs an earlier one stays
+    // openable and explains what is missing in its own view.
+    final state = _statesFor(entry, facts)[stage] ?? StageState.idle;
     switch (stage) {
       case PipelineStage.import:
         return;
       case PipelineStage.calibrate:
-        setState(() => _selectedStage = stage);
-      case PipelineStage.analyze:
-        unawaited(_generateArtifacts(entry.match));
       case PipelineStage.track:
       case PipelineStage.score:
       case PipelineStage.highlight:
       case PipelineStage.export:
         setState(() => _selectedStage = stage);
+      case PipelineStage.analyze:
+        // Prepare analysis is an action, not a lens: show it as selected and
+        // run the job, staying on playback while it works.
+        setState(() => _selectedStage = stage);
+        if (state != StageState.done) {
+          unawaited(_generateArtifacts(entry.match));
+        }
     }
   }
 
@@ -285,6 +294,10 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
   }
 
   Future<void> _generateArtifacts(MatchRecord match) async {
+    if (_preparingAnalysis) {
+      return;
+    }
+    setState(() => _preparingAnalysis = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final repository = await ref.read(matchRepositoryProvider.future);
@@ -299,25 +312,24 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
       _refresh();
     } on MatchImportException catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) {
+        setState(() => _preparingAnalysis = false);
+      }
     }
   }
 
-  void _showBlocked(PipelineStage stage) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Finish the earlier steps first before ${stage.label.toLowerCase()}.',
-        ),
-      ),
-    );
-  }
-
   void _refresh() {
+    if (!mounted) {
+      return;
+    }
     ref.invalidate(workspaceVideosProvider(widget.workspace.id));
     ref.invalidate(workspaceVideoFactsProvider(widget.workspace.id));
   }
 
   bool _editHasScore(MatchEdit? edit) => edit != null && !edit.score.isEmpty;
+
+  bool _editHasClips(MatchEdit? edit) => edit != null && edit.clips.isNotEmpty;
 
   Future<void> _import() async {
     final messenger = ScaffoldMessenger.of(context);
@@ -460,6 +472,20 @@ class _FeatureRail extends StatelessWidget {
   final VoidCallback onSelectPlay;
   final void Function(PipelineStage) onSelectStage;
 
+  /// Features that read the match.
+  static const List<PipelineStage> _analysis = <PipelineStage>[
+    PipelineStage.calibrate,
+    PipelineStage.analyze,
+    PipelineStage.track,
+  ];
+
+  /// Features that shape the highlight.
+  static const List<PipelineStage> _studio = <PipelineStage>[
+    PipelineStage.score,
+    PipelineStage.highlight,
+    PipelineStage.export,
+  ];
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -470,25 +496,25 @@ class _FeatureRail extends StatelessWidget {
             label: 'Play',
             selected: selectedStage == null,
             icon: Icons.play_circle_outline,
-            state: null,
+            done: false,
             onTap: onSelectPlay,
           ),
-          for (final stage in PipelineStage.values.where(
-            (stage) =>
-                stage != PipelineStage.import &&
-                stage != PipelineStage.analyze,
-          ))
-            _FeatureItem(
-              label: stage.label,
-              selected: selectedStage == stage,
-              icon: _stageIcon(stage),
-              state: states[stage],
-              onTap: () => onSelectStage(stage),
-            ),
+          const _SectionHeader(label: 'Analysis'),
+          for (final stage in _analysis) _item(stage),
+          const _SectionHeader(label: 'Studio'),
+          for (final stage in _studio) _item(stage),
         ],
       ),
     );
   }
+
+  _FeatureItem _item(PipelineStage stage) => _FeatureItem(
+        label: stage.label,
+        selected: selectedStage == stage,
+        icon: _stageIcon(stage),
+        done: states[stage] == StageState.done,
+        onTap: () => onSelectStage(stage),
+      );
 
   static IconData _stageIcon(PipelineStage stage) => switch (stage) {
         PipelineStage.import => Icons.download_done,
@@ -501,31 +527,51 @@ class _FeatureRail extends StatelessWidget {
       };
 }
 
+/// A small uppercase label separating the rail's two sections.
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(
+        label.toUpperCase(),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+
 class _FeatureItem extends StatelessWidget {
   const _FeatureItem({
     required this.label,
     required this.selected,
     required this.icon,
+    required this.done,
     required this.onTap,
-    this.state,
   });
 
   final String label;
   final bool selected;
   final IconData icon;
+  final bool done;
   final VoidCallback onTap;
-  final StageState? state;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final done = state == StageState.done;
-    final ready = state == StageState.ready;
-    final blocked = state == StageState.blocked;
 
-    // Selected wins over every other state: the lens you are looking at is
-    // the active menu item. Next (the stage to do first) and ready (an
-    // actionable-but-later stage) stay distinct when nothing is selected.
+    // Only the lens you are looking at is emphasised: the selected row is bold
+    // on a secondary-container tint. A done stage is muted with no glyph and
+    // every other row stays a normal enabled row.
     final Color? tileColor;
     final Color color;
     final FontWeight weight;
@@ -533,17 +579,9 @@ class _FeatureItem extends StatelessWidget {
       tileColor = scheme.secondaryContainer;
       color = scheme.onSecondaryContainer;
       weight = FontWeight.w700;
-    } else if (ready) {
-      tileColor = null;
-      color = scheme.primary;
-      weight = FontWeight.w700;
     } else if (done) {
       tileColor = null;
       color = scheme.onSurfaceVariant;
-      weight = FontWeight.w400;
-    } else if (blocked) {
-      tileColor = null;
-      color = scheme.onSurfaceVariant.withValues(alpha: 0.45);
       weight = FontWeight.w400;
     } else {
       tileColor = null;
@@ -551,16 +589,22 @@ class _FeatureItem extends StatelessWidget {
       weight = FontWeight.w400;
     }
 
+    // Give the title the full column width: the M3 defaults reserve 24px of
+    // trailing padding, a 24px leading slot, and a 16px title gap, which leaves
+    // only ~100px — not enough for "Prepare analysis" once it is bold, so the
+    // label wrapped and the row changed height when selected.
     return ListTile(
       tileColor: tileColor,
+      contentPadding: const EdgeInsetsDirectional.only(start: 16, end: 8),
+      minLeadingWidth: 0,
+      horizontalTitleGap: 8,
       leading: Icon(icon, size: 20, color: color),
       title: Text(
         label,
         style: TextStyle(color: color, fontWeight: weight),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
-      trailing: done
-          ? Icon(Icons.check, size: 16, color: scheme.primary)
-          : null,
       onTap: onTap,
       dense: true,
     );

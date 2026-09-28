@@ -21,6 +21,11 @@ class PlayerTrackingView extends ConsumerStatefulWidget {
     required this.match,
     required this.controller,
     this.onOpenScore,
+    this.onAnalyzed,
+    this.calibrated = true,
+    this.analysisReady = true,
+    this.onMarkCourt,
+    this.onPrepare,
   });
 
   /// Match being analyzed.
@@ -32,6 +37,24 @@ class PlayerTrackingView extends ConsumerStatefulWidget {
   /// Called when the user wants to review rallies; the studio switches to the
   /// score feature and the route wrapper pushes the score screen.
   final VoidCallback? onOpenScore;
+
+  /// Called after a player-analysis run finishes and publishes new tracks, so
+  /// the host can refresh the stage state derived from the manifest.
+  final VoidCallback? onAnalyzed;
+
+  /// Whether the court is marked. When false, the view offers to mark it rather
+  /// than letting the engine reject an unprepared job.
+  final bool calibrated;
+
+  /// Whether the analysis proxy/frames exist. When false, the view offers to
+  /// prepare them.
+  final bool analysisReady;
+
+  /// Called to mark the court; the studio switches to the calibration feature.
+  final VoidCallback? onMarkCourt;
+
+  /// Called to prepare the analysis files.
+  final VoidCallback? onPrepare;
 
   @override
   ConsumerState<PlayerTrackingView> createState() =>
@@ -60,6 +83,11 @@ class _PlayerTrackingViewState extends ConsumerState<PlayerTrackingView> {
     super.dispose();
   }
 
+  Future<void> _analyzePlayers(PlayerTrackingController controller) async {
+    await controller.analyze(widget.match);
+    widget.onAnalyzed?.call();
+  }
+
   void _refreshWindow() {
     if (!mounted) {
       return;
@@ -85,6 +113,20 @@ class _PlayerTrackingViewState extends ConsumerState<PlayerTrackingView> {
     final theme = Theme.of(context);
     final playback = widget.controller;
     final dark = theme.brightness == Brightness.dark;
+    final prerequisite = !widget.calibrated
+        ? _PrerequisiteNotice(
+            message: 'Player analysis needs the court marked first.',
+            actionLabel: 'Mark court',
+            onAction: widget.onMarkCourt,
+          )
+        : !widget.analysisReady
+            ? _PrerequisiteNotice(
+                message:
+                    'Player analysis needs the analysis files prepared first.',
+                actionLabel: 'Prepare analysis',
+                onAction: widget.onPrepare,
+              )
+            : null;
 
     return Column(
       children: <Widget>[
@@ -148,12 +190,18 @@ class _PlayerTrackingViewState extends ConsumerState<PlayerTrackingView> {
                 const SizedBox(height: 8),
                 Text(_stageLabel(tracking.stage)),
               ],
+              if (prerequisite != null) ...<Widget>[
+                prerequisite,
+                const SizedBox(height: 8),
+              ],
               Row(
                 children: <Widget>[
                   FilledButton.tonalIcon(
                     onPressed: tracking.running
                         ? () => unawaited(controller.cancel())
-                        : () => unawaited(controller.analyze(widget.match)),
+                        : (prerequisite != null
+                            ? null
+                            : () => unawaited(_analyzePlayers(controller))),
                     icon: Icon(tracking.running
                         ? Icons.stop_circle_outlined
                         : Icons.person_search_outlined),
@@ -280,6 +328,40 @@ class _PlayerTrackingViewState extends ConsumerState<PlayerTrackingView> {
         'publish_tracks' => 'Saving player tracks…',
         _ => 'Analyzing players…',
       };
+}
+
+/// A bordered explanation of a missing prerequisite, with an action to fix it.
+class _PrerequisiteNotice extends StatelessWidget {
+  const _PrerequisiteNotice({
+    required this.message,
+    required this.actionLabel,
+    this.onAction,
+  });
+
+  final String message;
+  final String actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outline),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(child: Text(message, style: theme.textTheme.bodySmall)),
+          if (onAction != null) ...<Widget>[
+            const SizedBox(width: 8),
+            TextButton(onPressed: onAction, child: Text(actionLabel)),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 /// A bordered readout chip for the tracking summary strip.
