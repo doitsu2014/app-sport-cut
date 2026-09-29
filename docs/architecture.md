@@ -8,9 +8,9 @@ confirm the score in a few taps, pick the best rallies, and export an edited
 video. Everything runs offline — recordings and analysis results never leave
 the device, and no cloud or online-API dependency may be introduced.
 
-The product is deliberately semi-automatic. The app proposes rally boundaries
-and a suggested winner; the user confirms. It does not claim fully automatic
-officiating, because shuttlecocks are small, fast, and often hidden.
+The product is deliberately semi-automatic. The app proposes rally boundaries,
+who serves, and a highlight order; the user confirms. It does not claim fully
+automatic officiating, because shuttlecocks are small, fast, and often hidden.
 
 ## Stack
 
@@ -28,20 +28,21 @@ officiating, because shuttlecocks are small, fast, and often hidden.
 
 ```
 Flutter App (app/)
-  ├─ Video import and library
+  ├─ Workspaces (home) and the three-pane studio
+  ├─ Video import, library, and playback
   ├─ Court calibration
-  ├─ Video review player
-  ├─ Player analysis (count, tracks, sides)
-  ├─ Score confirmation
-  ├─ Highlight editor
-  └─ Export settings
+  ├─ Analysis preparation (proxy, audio, frames)
+  ├─ Player tracking (count, tracks, sides)
+  ├─ Rally review and score confirmation (+ serving side)
+  ├─ Highlights (ranked suggestions, keep / trim / reorder)
+  └─ Export settings and rendering
 
 Rust Engine (core/)
   ├─ Frame sampling and proxy          (sportcut-media)
   ├─ Court geometry / homography       (sportcut-court)
   ├─ Person detection and tracking     (sportcut-vision)
   ├─ Rally segmentation                (sportcut-rally)
-  ├─ Score timeline                    (sportcut-score)
+  ├─ Serving-side derivation           (sportcut-score)
   ├─ Highlight ranking                 (sportcut-highlight)
   ├─ FFmpeg export                     (sportcut-export)
   └─ Single FFI facade                 (sportcut-api)
@@ -57,22 +58,68 @@ Local storage
 
 | Crate | Responsibility |
 | --- | --- |
-| `sportcut-common` | Shared error type, progress and cancellation primitives. |
-| `sportcut-media` | Probe, proxy, analysis audio, frame sampling behind `MediaToolchain`. |
-| `sportcut-storage` | Match artifact directory, manifest, checkpoint persistence. |
-| `sportcut-jobs` | Job lifecycle, stage-labelled progress, cancellation, resume. |
-| `sportcut-court` | Calibration segments, normalized court geometry, side assignment. |
-| `sportcut-vision` | Decoded frames, person detection (`PersonDetector`), court candidates, tracking. |
-| `sportcut-rally` | Rally segmentation and the `tracks/player_tracks.json` consumer. |
-| `sportcut-score` | Score timeline. |
-| `sportcut-highlight` | Highlight ranking. |
-| `sportcut-export` | Edit decision list and the FFmpeg renderer. |
-| `sportcut-api` | FFI facade: DTOs, job handles — the only surface across the bridge. |
-| `sportcut-cli` | Headless harness for developing and benchmarking the pipeline. |
+| `sportcut-common` | Shared `SportcutError`, progress events, and `CancelToken`. |
+| `sportcut-media` | Probe, proxy, analysis audio, frame sampling behind `MediaToolchain`; the import pipeline and regeneration of missing media. |
+| `sportcut-storage` | Match artifact directory, manifest, calibration and rally-suggestion persistence. |
+| `sportcut-jobs` | Job lifecycle, registry (one heavy job at a time), checkpoints, cancellation, resume. |
+| `sportcut-court` | Calibration segments, homography / normalized court mapping, side assignment. |
+| `sportcut-vision` | Decoded frames, TFLite person detection (feature `macos-tflite-eval`), on-court candidate classification, tracking. |
+| `sportcut-rally` | Motion-first rally/rest segmentation from court-position tracks and coverage intervals, optional audio intensity. |
+| `sportcut-score` | `serving_sides`: who served each rally, from the confirmed winners (winner of a rally serves the next). |
+| `sportcut-highlight` | `rank`: deterministic highlight score (`0..1`) and 1-based rank per rally. |
+| `sportcut-export` | Edit decision list and the FFmpeg renderer (`export/highlight.mp4`). |
+| `sportcut-api` | FFI facade: DTOs, job handles, the player-tracking job, and the tracks artifact — the only surface across the bridge. |
+| `sportcut-cli` | Headless harness (`core/cli`) to probe, proxy, sample, run the import pipeline, and inspect or regenerate a match directory. Not shipped. |
 
 Crate boundaries mirror the pipeline stages. Only `sportcut-api` crosses the
 language boundary; internal crates are free to change because the bridge only
 sees that facade.
+
+### Facade surface (`core/crates/api/src/facade.rs`)
+
+| Area | Calls |
+| --- | --- |
+| Media import | `media_import_stages`, `probe_media`, `start_import`, `start_regenerate_match_media`, `match_manifest` |
+| Calibration | `court_geometry`, `save_match_calibration`, `match_calibration` |
+| Tracking and rallies | `start_player_tracking`, `match_player_tracks`, `start_rally_segmentation`, `match_rally_suggestions` |
+| Scoring and highlights | `serving_sides`, `rank_highlights` (pure calls: no files, no catalog) |
+| Export | `export_highlight` |
+| Jobs | `job_status`, `job_cancel` |
+
+Long-running work (`start_*`, `export_highlight`) returns a job handle polled
+through `job_status`; the registry admits one heavy job at a time.
+
+## Client (`app/lib/src/`)
+
+| Module | Responsibility |
+| --- | --- |
+| `app/` | App shell, theme, dependency injection, and the route table (`router.dart`). |
+| `bridge/` | `sportcut_engine.dart` — the typed wrapper; the only way feature code reaches the engine. |
+| `features/workspace` | Workspaces (home screen), `PipelineStage` state per video, and the three-pane studio. |
+| `features/library` | Import, SQLite catalog (`match_catalog.dart`), recording store, match repository, playback. |
+| `features/calibration` | Court corner/net marking over the video frame. |
+| `features/analysis` | Preparing analysis media (proxy, audio, frames). |
+| `features/tracking` | Running player tracking and reviewing count, tracks, and sides. |
+| `features/rally` | Rally-suggestion review state (accept / adjust / dismiss). |
+| `features/editing` | Domain and persistence for rallies, score events, highlight clips, and export settings. |
+| `features/score` | Score confirmation screen and the serving-side indicator. |
+| `features/highlights` | Ranked highlight candidates and "keep the best N". |
+| `features/export` | Export settings, overlay rendering, music picker, and the export job. |
+
+### Navigation
+
+`/` is the workspace list. A workspace opens the **studio**: a left rail of the
+workspace's videos, one shared video preview in the centre (the studio owns one
+playback controller per selected video and hands it to the active feature), and
+a right feature rail — **Play**, then **Analysis** (calibrate, analyze, track)
+and **Studio** (score, highlight, export). Each rail item shows the stage state
+(`done` / `ready` / `idle`) derived from the video's facts; `idle` is guidance,
+not a gate.
+
+Features not yet embedded in the studio open their full-screen route:
+`/match/player`, `/match/calibration`, `/match/analysis`,
+`/match/player-tracking`, `/match/score`, `/match/highlights`, `/match/export`
+(each takes a `MatchRecord`).
 
 ## The two tracks
 
@@ -89,6 +136,7 @@ cd app && flutter analyze             # client static analysis
 
 tools/generate-bridge.sh              # Dart bindings + Rust glue (not committed)
 tools/build-engine-lib.sh             # engine library the app links against
+tools/fetch-inference-assets.sh       # build-time TFLite runtime + model download
 tools/run-macos.sh                    # dev run of the client on macOS
 ```
 
@@ -121,18 +169,37 @@ together: `core/crates/api/Cargo.toml`, `app/pubspec.yaml`, and
    explicit gaps, projected through calibration, and assigned a geometric court
    side (`First`/`Second`, unknown near the net).
 5. **Rally segmentation** — active/inactive periods are proposed from the track
-   input; boundaries stay user-editable.
-6. **Score confirmation** — the app proposes a winning side per rally; only a
-   user-confirmed winner advances the score.
-7. **Highlight ranking** — rallies are scored by duration, movement, audio, and
-   confirmed points; the user keeps, trims, reorders, or removes clips.
+   input; the user accepts, adjusts, or dismisses each suggestion.
+6. **Score confirmation** — the user confirms the winning side per rally; only a
+   user-confirmed winner advances the score. `serving_sides` applies the
+   rally-point rule (the previous rally's winner serves) and the score screen
+   shows who serves; the first rally, or one after an unscored rally, has no
+   server.
+7. **Highlight ranking** — `rank_highlights` scores each rally as
+   `0.40·duration + 0.30·motion + 0.30·score context`, clamped to `0..1`:
+   duration is seconds/30 (capped at 1), motion is the accepted suggestion's
+   quality (`rally.confidence`, `0.5` when hand-marked), and score context is
+   `1 / (1 + |left − right|)` at that rally (`0` when unscored). Ties go to the
+   earlier rally. The ranking is recomputed, not persisted; the user keeps,
+   trims, reorders, or removes clips, or keeps the best N in one tap.
 8. **Export** — selected clips are trimmed from the original, concatenated, and
    rendered with score overlays, a title card, and mixed music.
 
 ## Developer scripts (`tools/`)
 
-`preflight.sh` (environment check, installs nothing), `verify-engine.sh`
-(fmt/clippy/test), `generate-bridge.sh`, `build-engine-lib.sh`, and
-`run-macos.sh` are the supported entry points. They are bash with
-`set -euo pipefail`, resolve the repository root from `BASH_SOURCE`, and print
-diagnostics to stderr.
+| Script | Purpose |
+| --- | --- |
+| `preflight.sh` | Check the toolchain (presence, versions, license-affecting config); installs nothing. |
+| `verify-engine.sh` | `cargo fmt --check`, clippy, and tests across `core/`. |
+| `generate-bridge.sh` | Regenerate the bridge bindings (not committed). |
+| `build-engine-lib.sh` | Build the engine library the app links against. |
+| `embed-engine-lib.sh` | Copy the built engine library into a built macOS `.app`. |
+| `fetch-inference-assets.sh` | Build-time download and checksum check of the TFLite runtime and model. |
+| `embed-inference-assets.sh` | Copy the fetched inference assets into a built `.app`. |
+| `run-macos.sh` | Dev run of the client on macOS. |
+
+They are bash scripts that print diagnostics to stderr. The build scripts use
+`set -euo pipefail` and resolve the repository root from `BASH_SOURCE`;
+`preflight.sh` uses only `set -u` and reports every check, exiting `1` when a
+required component is missing and `2` on a GPL toolchain under
+`--strict-license`.

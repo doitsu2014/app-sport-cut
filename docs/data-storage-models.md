@@ -13,38 +13,68 @@ never point an artifact root at the checkout.
 
 ## Client catalog (SQLite)
 
-The app's catalog records the matches the user has imported, plus everything the
-user authored: accepted rallies, confirmed scores, and kept clips. It never
-stores per-frame track data (that stays in the engine's regenerable artifacts).
+The app's catalog (`sportcut.db`, defined in
+`app/lib/src/features/library/data/match_catalog.dart`) records the workspaces
+and matches the user has imported, plus everything the user authored: accepted
+rallies, confirmed scores, kept clips, and export settings. It never stores
+per-frame track data (that stays in the engine's regenerable artifacts).
 
-Core records:
+The schema is at **version 5**, reached by ordered migrations so a device that
+skipped a release still upgrades step by step.
 
 ```text
-Match
-  id, title, video_path, duration, created_at
+workspaces                                   (v5)
+  id PK, title, created_at
+
+matches
+  id PK, workspace_id (v5), title, created_at
+  video_path, original_path (v2), source_bytes (v2), match_dir
+  duration_seconds, video_width, video_height, frame_rate, has_audio
   court_calibration, team_left_name, team_right_name
   final_score_left, final_score_right
 
-Rally
-  id, match_id, start_time, end_time, confidence, winner_side
-  status, highlight_score
+rallies
+  id PK, match_id → matches (cascade)
+  start_seconds, end_seconds, confidence, winner_side, status, highlight_score
 
-ScoreEvent
-  id, match_id, rally_id, timestamp, winner_side, left_score, right_score
+score_events
+  id PK, match_id → matches (cascade), rally_id → rallies (set null)
+  timestamp_seconds, winner_side, left_score, right_score
 
-HighlightClip
-  id, match_id, start_time, end_time, rank, selected, trim_start, trim_end
+highlight_clips
+  id PK, match_id → matches (cascade), rally_id → rallies (set null, v3)
+  start_seconds, end_seconds, rank, selected, order_index (v3)
+  trim_start_seconds, trim_end_seconds
+
+export_settings                              (v3)
+  match_id PK → matches (cascade)
+  title, music_path, music_gain (0.25), lead_in_seconds (1.0)
+  lead_out_seconds (1.0), updated_at
+
+rally_suggestion_decisions                   (v4)
+  PK (match_id, generation_id, candidate_id), match_id → matches (cascade)
+  decision ∈ {accepted, dismissed}, rally_id → rallies (set null)
 ```
 
-Rallies, score events, and clip selections are user-authored and preserved
-across reanalysis. Derived evidence (tracks, suggested rallies) is regenerable
-and may be invalidated and replaced.
+Migration v5 moves every existing match into a workspace with id `default`,
+titled "My videos". A workspace is a loose folder of recordings: it owns no
+artifacts, and each video still runs the one-video pipeline.
 
-A small `rally_suggestion_decisions` table records accepted/dismissed choices
-per suggestion generation. Accepting a candidate creates an unscored rally in
-the same SQLite transaction; dismissing records only the decision. Decisions are
-keyed by generation, so a rerun with the same inputs keeps them while a changed
-input starts a new generation.
+Rallies, score events, clip selections, and export settings are user-authored
+and preserved across reanalysis. Derived evidence (tracks, suggested rallies) is
+regenerable and may be invalidated and replaced.
+
+`rally_suggestion_decisions` records accepted/dismissed choices per suggestion
+generation. Accepting a candidate creates an unscored rally in the same SQLite
+transaction, carrying the suggestion's motion quality as the rally's
+`confidence`; dismissing records only the decision. Decisions are keyed by
+generation, so a rerun with the same inputs keeps them while a changed input
+starts a new generation.
+
+Serving sides and highlight ranks are pure engine calls recomputed from the
+catalog on demand. They are not persisted: `rallies.highlight_score` and
+`highlight_clips.rank` exist in the schema but the ranking is not written to
+them.
 
 ## Match directory (engine artifacts)
 
@@ -56,18 +86,19 @@ checkpoints.json       stage checkpoint state for resumable jobs
 proxy/                 low-resolution analysis proxy
 audio/                 low-bitrate analysis audio
 frames/                upright, timestamped sampled JPEGs
-calibration/           court calibration
+calibration/           calibration.json
 tracks/                player_tracks.json + rally_suggestions.json
-export/                rendered highlight output
+export/                highlight.mp4
 ```
 
 Keep that layout stable. `manifest.json` records each artifact's kind, final or
-non-final state, relative path, and content identity.
+non-final state, relative path, and content identity. There are no score or
+highlight-ranking artifacts; that data lives in the SQLite catalog.
 
 ## Artifact kinds and freshness
 
-`ArtifactKind` values include calibration, proxy, analysis audio, sampled
-frames, tracks, and export. A completed artifact is marked **final** only after
+`ArtifactKind` values are `Proxy`, `AnalysisAudio`, `Frames`, `Calibration`,
+`Tracks`, `RallySuggestions` (both under `tracks/`), and `Export`. A completed artifact is marked **final** only after
 successful completion; cancelled or interrupted output stays non-final and is
 never consumed as a valid result.
 

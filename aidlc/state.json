@@ -2,23 +2,71 @@
   "workflowVersion": "1.0.0",
   "engineVersion": "0.1.0",
   "activeIntent": {
-    "id": "260929-doctor",
-    "label": "doctor",
-    "description": "doctor",
-    "scope": "classic",
+    "id": "260929-update-architecture-and",
+    "label": "update-architecture-and",
+    "description": "Update architecture and documents in docs/ folder to match current codebase",
+    "scope": "express",
     "space": "default",
-    "createdAt": "2026-09-29T04:35:57.949Z"
+    "createdAt": "2026-09-29T06:29:14.827Z"
   },
-  "currentStage": "intent-capture",
+  "currentStage": null,
   "parked": false,
   "stages": {
     "intent-capture": {
-      "status": "active",
+      "status": "complete",
       "attempt": 1,
       "feedback": [],
-      "updatedAt": "2026-09-29T04:55:05.781Z"
+      "updatedAt": "2026-09-29T06:30:17.472Z"
+    },
+    "requirements-analysis": {
+      "status": "complete",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T06:30:38.507Z"
+    },
+    "task-planning": {
+      "status": "complete",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T06:30:53.075Z"
+    },
+    "code-generation": {
+      "status": "complete",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T06:35:30.986Z"
+    },
+    "refactor": {
+      "status": "skipped",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T06:35:37.639Z"
+    },
+    "test-plan": {
+      "status": "skipped",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T06:35:37.682Z"
+    },
+    "test-generation": {
+      "status": "skipped",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T06:35:37.722Z"
+    },
+    "ci-pipeline": {
+      "status": "skipped",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T06:35:37.762Z"
+    },
+    "deployment": {
+      "status": "skipped",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T06:35:37.801Z"
     }
   },
-  "startedAt": "2026-09-29T04:35:57.949Z",
-  "updatedAt": "2026-09-29T04:55:05.781Z"
+  "startedAt": "2026-09-29T06:29:14.827Z",
+  "updatedAt": "2026-09-29T06:35:37.801Z"
 }
