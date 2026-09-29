@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../analysis/presentation/analysis_providers.dart';
+import '../../analysis/presentation/analysis_view.dart';
 import '../../calibration/presentation/calibration_view.dart';
 import '../../editing/domain/match_edit.dart';
 import '../../editing/presentation/editing_providers.dart';
 import '../../export/presentation/export_view.dart';
 import '../../highlights/presentation/highlights_view.dart';
-import '../../library/domain/match_import_exception.dart';
 import '../../library/domain/match_record.dart';
 import '../../library/presentation/import_controller.dart';
 import '../../library/presentation/library_providers.dart';
@@ -50,9 +51,6 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
   /// The selected feature, where null means playback.
   PipelineStage? _selectedStage;
 
-  /// Whether the prepare-analysis job is in flight.
-  bool _preparingAnalysis = false;
-
   @override
   void dispose() {
     _controller?.dispose();
@@ -63,6 +61,25 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
   Widget build(BuildContext context) {
     final videos = ref.watch(workspaceVideosProvider(widget.workspace.id));
     final import = ref.watch(importControllerProvider);
+    final analysis = ref.watch(analysisControllerProvider);
+
+    // Preparing analysis runs in the background; announce how it ended, even
+    // if the user has moved to another feature or video, and refresh the rail.
+    ref.listen(analysisControllerProvider, (previous, next) {
+      final outcome = next.lastOutcome;
+      if (outcome == null || identical(outcome, previous?.lastOutcome)) {
+        return;
+      }
+      _refresh();
+      final what = outcome.kind == AnalysisJobKind.prepare
+          ? 'Preparing analysis'
+          : 'Rebuilding analysis files';
+      final message = outcome.succeeded
+          ? 'Analysis files ready for ${outcome.title}'
+          : outcome.message ?? '$what for ${outcome.title} was stopped';
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    });
 
     // Scoring the first rally flips Review & score from ready to done, and
     // keeping the first clip flips Export; refresh the stage facts so the rail
@@ -125,6 +142,7 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
                     _VideoRail(
                       entries: entries,
                       selectedId: _selectedVideoId,
+                      busyId: analysis.running ? analysis.runningMatchId : null,
                       onSelect: (entry) => _selectVideo(entry.match),
                       onDelete: (entry) => _confirmDeleteMatch(entry.match),
                     ),
@@ -140,6 +158,10 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
                           ? const <PipelineStage, StageState>{}
                           : _statesFor(selected, facts),
                       selectedStage: _selectedStage,
+                      busyStages: selected != null &&
+                              analysis.runningFor(selected.match.id)
+                          ? const <PipelineStage>{PipelineStage.analyze}
+                          : const <PipelineStage>{},
                       onSelectPlay: () => setState(() => _selectedStage = null),
                       onSelectStage: _selectStage,
                     ),
@@ -215,7 +237,7 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
           analysisReady: videoFacts?.analysisReady ?? false,
           onMarkCourt: () =>
               setState(() => _selectedStage = PipelineStage.calibrate),
-          onPrepare: () => unawaited(_generateArtifacts(entry.match)),
+          onPrepare: () => _startPreparing(entry.match),
           // The track job writes a new artifact; refresh the rail so done and
           // ready states do not stay stale after the action.
           onAnalyzed: _refresh,
@@ -229,10 +251,14 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
         return HighlightsView(match: entry.match);
       case PipelineStage.export:
         return ExportView(match: entry.match, onExported: _refresh);
-      case PipelineStage.import:
       case PipelineStage.analyze:
-        // Import is not a lens, and prepare-analysis is a background job; the
-        // center stays on playback in both cases.
+        return AnalysisView(
+          match: entry.match,
+          onOpenTracking: () =>
+              setState(() => _selectedStage = PipelineStage.track),
+        );
+      case PipelineStage.import:
+        // Import is not a lens; the center stays on playback.
         return PlayerView(controller: controller);
     }
   }
@@ -258,65 +284,25 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     if (entry == null) {
       return;
     }
-    final facts = ref
-        .read(workspaceVideoFactsProvider(widget.workspace.id))
-        .value;
     // Every feature is selectable; a stage that needs an earlier one stays
-    // openable and explains what is missing in its own view.
-    final state = _statesFor(entry, facts)[stage] ?? StageState.idle;
-    switch (stage) {
-      case PipelineStage.import:
-        return;
-      case PipelineStage.calibrate:
-      case PipelineStage.track:
-      case PipelineStage.score:
-      case PipelineStage.highlight:
-      case PipelineStage.export:
-        setState(() => _selectedStage = stage);
-      case PipelineStage.analyze:
-        // Prepare analysis is an action, not a lens: show it as selected and
-        // run the job, staying on playback while it works.
-        setState(() => _selectedStage = stage);
-        if (state != StageState.done) {
-          unawaited(_generateArtifacts(entry.match));
-        }
-    }
+    // openable and explains what is missing in its own view. Prepare analysis
+    // opens its screen, and the job starts only from its button.
+    setState(() => _selectedStage = stage);
   }
 
   MatchListEntry? _selectedEntryFromProvider() {
-    final entries = ref
-        .read(workspaceVideosProvider(widget.workspace.id))
-        .value;
+    final entries =
+        ref.read(workspaceVideosProvider(widget.workspace.id)).value;
     if (entries == null) {
       return null;
     }
     return _selectedEntry(entries);
   }
 
-  Future<void> _generateArtifacts(MatchRecord match) async {
-    if (_preparingAnalysis) {
-      return;
-    }
-    setState(() => _preparingAnalysis = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final repository = await ref.read(matchRepositoryProvider.future);
-      final manifest = await repository.generateArtifacts(match);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Analysis files ready: ${manifest.artifacts.length} artifacts',
-          ),
-        ),
-      );
-      _refresh();
-    } on MatchImportException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
-    } finally {
-      if (mounted) {
-        setState(() => _preparingAnalysis = false);
-      }
-    }
+  /// Show the prepare screen and start its background job.
+  void _startPreparing(MatchRecord match) {
+    setState(() => _selectedStage = PipelineStage.analyze);
+    unawaited(ref.read(analysisControllerProvider.notifier).prepare(match));
   }
 
   void _refresh() {
@@ -399,12 +385,16 @@ class _VideoRail extends StatefulWidget {
   const _VideoRail({
     required this.entries,
     required this.selectedId,
+    required this.busyId,
     required this.onSelect,
     required this.onDelete,
   });
 
   final List<MatchListEntry> entries;
   final String? selectedId;
+
+  /// Video whose analysis files are being prepared in the background.
+  final String? busyId;
   final void Function(MatchListEntry) onSelect;
   final void Function(MatchListEntry) onDelete;
 
@@ -439,18 +429,22 @@ class _VideoRailState extends State<_VideoRail> {
                     ? null
                     : Text('Score ${entry.score!.left}–${entry.score!.right}'),
                 onTap: () => widget.onSelect(entry),
-                trailing: IgnorePointer(
-                  ignoring: _hoveredId != entry.match.id,
-                  child: AnimatedOpacity(
-                    opacity: _hoveredId == entry.match.id ? 1 : 0,
-                    duration: const Duration(milliseconds: 120),
-                    child: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Delete video',
-                      onPressed: () => widget.onDelete(entry),
-                    ),
-                  ),
-                ),
+                trailing: entry.match.id == widget.busyId
+                    ? const _BusySpinner(
+                        tooltip: 'Preparing analysis in the background',
+                      )
+                    : IgnorePointer(
+                        ignoring: _hoveredId != entry.match.id,
+                        child: AnimatedOpacity(
+                          opacity: _hoveredId == entry.match.id ? 1 : 0,
+                          duration: const Duration(milliseconds: 120),
+                          child: IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: 'Delete video',
+                            onPressed: () => widget.onDelete(entry),
+                          ),
+                        ),
+                      ),
               ),
             ),
         ],
@@ -463,12 +457,16 @@ class _FeatureRail extends StatelessWidget {
   const _FeatureRail({
     required this.states,
     required this.selectedStage,
+    required this.busyStages,
     required this.onSelectPlay,
     required this.onSelectStage,
   });
 
   final Map<PipelineStage, StageState> states;
   final PipelineStage? selectedStage;
+
+  /// Stages with a job running in the background for the selected video.
+  final Set<PipelineStage> busyStages;
   final VoidCallback onSelectPlay;
   final void Function(PipelineStage) onSelectStage;
 
@@ -513,6 +511,7 @@ class _FeatureRail extends StatelessWidget {
         selected: selectedStage == stage,
         icon: _stageIcon(stage),
         done: states[stage] == StageState.done,
+        busy: busyStages.contains(stage),
         onTap: () => onSelectStage(stage),
       );
 
@@ -556,6 +555,7 @@ class _FeatureItem extends StatelessWidget {
     required this.selected,
     required this.icon,
     required this.done,
+    this.busy = false,
     required this.onTap,
   });
 
@@ -563,6 +563,9 @@ class _FeatureItem extends StatelessWidget {
   final bool selected;
   final IconData icon;
   final bool done;
+
+  /// Whether this feature's job is running in the background.
+  final bool busy;
   final VoidCallback onTap;
 
   @override
@@ -605,8 +608,29 @@ class _FeatureItem extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
+      trailing: busy
+          ? const _BusySpinner(tooltip: 'Running in the background')
+          : null,
       onTap: onTap,
       dense: true,
+    );
+  }
+}
+
+/// A small indeterminate spinner marking work that runs in the background.
+class _BusySpinner extends StatelessWidget {
+  const _BusySpinner({required this.tooltip});
+
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: const SizedBox.square(
+        dimension: 16,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
     );
   }
 }

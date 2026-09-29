@@ -157,4 +157,109 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('a match with no files offers to start preparing', (tester) async {
+    engine.manifestArtifacts = <ArtifactDto>[];
+    await pumpAnalysis(tester);
+
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Start preparing analysis'),
+    );
+    expect(button.onPressed, isNotNull);
+    // Opening the screen reads the manifest; it does not start the job.
+    expect(engine.artifactCalls, 0);
+  });
+
+  testWidgets('starting preparation runs the job and lists the new files',
+      (tester) async {
+    engine.manifestArtifacts = <ArtifactDto>[];
+    await pumpAnalysis(tester);
+
+    // The job completes at once; afterwards the manifest has the files.
+    engine.manifestArtifacts = <ArtifactDto>[
+      artifact('proxy', ArtifactStateDto.final_),
+      artifact('frames', ArtifactStateDto.final_),
+    ];
+    await tester.tap(find.text('Start preparing analysis'));
+    await tester.pumpAndSettle();
+
+    expect(engine.artifactCalls, 1);
+    expect(engine.lastMatchId, match.id);
+    expect(engine.lastMatchDir, match.matchDir);
+    expect(find.text('Start preparing analysis'), findsNothing);
+    expect(find.text('frames'), findsOneWidget);
+  });
+
+  testWidgets('a running preparation shows its step and can be cancelled',
+      (tester) async {
+    engine.manifestArtifacts = <ArtifactDto>[];
+    engine.jobState = JobStateDto.running;
+    engine.jobStage = 'proxy';
+    await pumpAnalysis(tester);
+
+    await tester.tap(find.text('Start preparing analysis'));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Making the proxy…'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.textContaining('Running in the background'), findsOneWidget);
+
+    engine.jobState = JobStateDto.cancelled;
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(engine.jobCancelCalls, 1);
+    expect(find.text('Start preparing analysis'), findsOneWidget);
+  });
+
+  testWidgets('another video waits while one is being prepared',
+      (tester) async {
+    final other = MatchRecord(
+      id: 'match-2',
+      title: 'Club semi',
+      videoPath: '/tmp/club-semi.mp4',
+      durationSeconds: 60,
+      createdAt: DateTime(2026, 3, 1),
+      matchDir: '/tmp/matches/match-2',
+    );
+    final container = ProviderContainer(
+      overrides: [mediaEngineProvider.overrideWithValue(engine)],
+    );
+    addTearDown(container.dispose);
+    Future<void> show(MatchRecord shown) => tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(home: AnalysisScreen(match: shown)),
+          ),
+        );
+
+    engine.manifestArtifacts = <ArtifactDto>[];
+    engine.jobState = JobStateDto.running;
+    await show(match);
+    await tester.pump();
+    await tester.tap(find.text('Start preparing analysis'));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // The job keeps running while another video is opened.
+    await show(other);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      find.textContaining('Another video is being prepared (Club final)'),
+      findsOneWidget,
+    );
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Start preparing analysis'),
+    );
+    expect(button.onPressed, isNull);
+
+    // Going back shows the same job, still running.
+    await show(match);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('Cancel'), findsOneWidget);
+    expect(engine.artifactCalls, 1);
+
+    engine.jobState = JobStateDto.completed;
+    await tester.pumpAndSettle();
+  });
 }

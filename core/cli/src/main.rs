@@ -10,16 +10,28 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use sportcut_common::SportcutError;
+use sportcut_eval::{
+    aggregate, render_table, score_clip, ClipLabels, ClipOutcome, ClipReport, Manifest, Prediction,
+    PredictionSource, TrackView,
+};
 use sportcut_export::{render, EditClip, EditList, ExportContext, TitleCard};
 use sportcut_media::{
     extract_analysis_audio, generate_proxy, probe, regenerate_missing, run as run_pipeline,
     sample_frames, FrameSamplingOptions, MediaMetadata, MediaToolchain, PipelineContext,
     PipelineOptions, ProxyOptions,
 };
-use sportcut_storage::{ArtifactManifest, MatchDirectory};
+use sportcut_rally::SegmentationConfig;
+use sportcut_storage::{
+    ArtifactManifest, MatchDirectory, RallySuggestions, RALLY_SUGGESTIONS_RELATIVE_PATH,
+};
 
 /// Exit code used when a command fails.
 const EXIT_FAILURE: u8 = 1;
+
+/// Exit code of `eval --fail-on-target` when an accuracy target is missed.
+///
+/// Distinct from clap's own usage-error status, which is 2.
+const EXIT_TARGET_MISSED: u8 = 3;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -140,6 +152,35 @@ enum Command {
         #[arg(long)]
         music: Option<PathBuf>,
     },
+
+    /// Score player count and rally segmentation against hand-written labels.
+    Eval(EvalArgs),
+}
+
+#[derive(Debug, clap::Args)]
+#[command(group(clap::ArgGroup::new("source").required(true).args(["manifest", "labels"])))]
+struct EvalArgs {
+    /// Manifest listing labeled clips and their match directories.
+    #[arg(long)]
+    manifest: Option<PathBuf>,
+    /// Label file of a single clip; needs --match-dir.
+    #[arg(long, requires = "match_dir")]
+    labels: Option<PathBuf>,
+    /// Match directory of the single clip given by --labels.
+    #[arg(long, requires = "labels")]
+    match_dir: Option<PathBuf>,
+    /// Largest distance between a labeled and a predicted boundary, in milliseconds.
+    #[arg(long, default_value_t = sportcut_eval::DEFAULT_TOLERANCE_MS, allow_hyphen_values = true)]
+    tolerance_ms: i64,
+    /// Re-run segmentation with this SegmentationConfig JSON instead of the stored suggestions.
+    #[arg(long)]
+    rally_config: Option<PathBuf>,
+    /// Print the report as JSON.
+    #[arg(long)]
+    json: bool,
+    /// Exit with status 3 when a target fails or no clip could be scored.
+    #[arg(long)]
+    fail_on_target: bool,
 }
 
 fn main() -> ExitCode {
@@ -151,12 +192,15 @@ fn main() -> ExitCode {
             eprintln!("sportcut-cli: {message}");
             ExitCode::from(EXIT_FAILURE)
         }
+        Err(Failure::TargetMissed) => ExitCode::from(EXIT_TARGET_MISSED),
     }
 }
 
 #[derive(Debug)]
 enum Failure {
     Message(String),
+    /// The report was printed, but an accuracy target was not met.
+    TargetMissed,
 }
 
 fn run(cli: Cli) -> Result<(), Failure> {
@@ -193,6 +237,7 @@ fn run(cli: Cli) -> Result<(), Failure> {
             title_seconds,
             music,
         ),
+        Command::Eval(args) => command_eval(&args),
     }
 }
 
@@ -445,6 +490,118 @@ fn command_export(
         rendered.size_bytes
     );
     Ok(())
+}
+
+/// Track artifact written by player tracking, relative to the match directory.
+const PLAYER_TRACKS_RELATIVE_PATH: &str = "tracks/player_tracks.json";
+
+fn command_eval(args: &EvalArgs) -> Result<(), Failure> {
+    if args.tolerance_ms < 0 {
+        return Err(Failure::Message(
+            "--tolerance-ms must not be negative".to_string(),
+        ));
+    }
+    let replay = match &args.rally_config {
+        Some(path) => {
+            let config: SegmentationConfig = read_json(path).map_err(Failure::Message)?;
+            config.validate().map_err(to_failure)?;
+            Some(config)
+        }
+        None => None,
+    };
+
+    let clips = match (&args.manifest, &args.labels, &args.match_dir) {
+        (Some(manifest_path), _, _) => {
+            let manifest: Manifest = read_json(manifest_path).map_err(Failure::Message)?;
+            manifest.validate().map_err(to_failure)?;
+            let base = manifest_path.parent().unwrap_or(std::path::Path::new(""));
+            // One unreadable clip must not hide the others while labeling is in progress.
+            manifest
+                .clips
+                .iter()
+                .map(|entry| {
+                    load_and_score(
+                        Some(&entry.clip_id),
+                        &base.join(&entry.labels),
+                        &base.join(&entry.match_dir),
+                        replay,
+                        args.tolerance_ms,
+                    )
+                    .unwrap_or_else(|error| ClipReport::error(entry.clip_id.as_str(), error))
+                })
+                .collect()
+        }
+        (None, Some(labels), Some(match_dir)) => {
+            let clip = load_and_score(None, labels, match_dir, replay, args.tolerance_ms)
+                .map_err(Failure::Message)?;
+            // With one clip there is nothing else to report, so its error is the command's.
+            if let ClipOutcome::Error { error } = &clip.outcome {
+                return Err(Failure::Message(format!("{}: {error}", clip.clip_id)));
+            }
+            vec![clip]
+        }
+        _ => {
+            return Err(Failure::Message(
+                "give --manifest, or --labels with --match-dir".to_string(),
+            ))
+        }
+    };
+
+    let source = replay.map_or(PredictionSource::Stored, PredictionSource::Replay);
+    let report = aggregate(clips, args.tolerance_ms, source);
+    if args.json {
+        print_json(&report)?;
+    } else {
+        print!("{}", render_table(&report));
+    }
+    if args.fail_on_target && report.any_target_failed() {
+        return Err(Failure::TargetMissed);
+    }
+    Ok(())
+}
+
+/// Read one clip's labels and engine output, then score it.
+fn load_and_score(
+    expected_id: Option<&str>,
+    labels_path: &std::path::Path,
+    match_dir: &std::path::Path,
+    replay: Option<SegmentationConfig>,
+    tolerance_ms: i64,
+) -> Result<ClipReport, String> {
+    let labels: ClipLabels = read_json(labels_path)?;
+    if let Some(expected) = expected_id {
+        if labels.clip_id != expected {
+            return Err(format!(
+                "{} has clip_id {:?}, but the manifest says {expected:?}",
+                labels_path.display(),
+                labels.clip_id
+            ));
+        }
+    }
+    labels.validate().map_err(|error| error.to_string())?;
+
+    let directory = MatchDirectory::new(match_dir);
+    let tracks: TrackView = read_json(&directory.resolve(PLAYER_TRACKS_RELATIVE_PATH))?;
+    let report = match replay {
+        Some(config) => score_clip(&labels, &tracks, Prediction::Replay(config), tolerance_ms),
+        None => {
+            let suggestions: RallySuggestions =
+                read_json(&directory.resolve(RALLY_SUGGESTIONS_RELATIVE_PATH))?;
+            score_clip(
+                &labels,
+                &tracks,
+                Prediction::Stored(&suggestions.timeline),
+                tolerance_ms,
+            )
+        }
+    };
+    Ok(report)
+}
+
+fn read_json<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Result<T, String> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    serde_json::from_str(&text).map_err(|error| format!("cannot parse {}: {error}", path.display()))
 }
 
 fn print_metadata(metadata: &MediaMetadata) {

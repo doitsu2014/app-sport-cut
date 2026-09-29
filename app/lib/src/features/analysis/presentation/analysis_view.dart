@@ -8,10 +8,12 @@ import '../../library/domain/match_record.dart';
 import '../../library/presentation/formatters.dart';
 import 'analysis_providers.dart';
 
-/// What the engine produced for a match, and how to rebuild what is gone.
+/// What the engine produced for a match: preparing its analysis files the
+/// first time, rebuilding what is gone, and following that job while it runs.
 ///
 /// A form-style panel with no playback of its own, so the studio hosts it
-/// directly in the center pane.
+/// directly in the center pane. The job belongs to the app-wide
+/// [analysisControllerProvider], so it keeps running when this view closes.
 class AnalysisView extends ConsumerStatefulWidget {
   /// Build the analysis view.
   const AnalysisView({super.key, required this.match, this.onOpenTracking});
@@ -31,10 +33,25 @@ class _AnalysisViewState extends ConsumerState<AnalysisView> {
   @override
   void initState() {
     super.initState();
+    _openAfterFrame();
+  }
+
+  @override
+  void didUpdateWidget(AnalysisView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The studio reuses this view when another video is selected.
+    if (oldWidget.match.id != widget.match.id) {
+      _openAfterFrame();
+    }
+  }
+
+  void _openAfterFrame() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(
-        ref.read(analysisControllerProvider.notifier).open(widget.match),
-      );
+      if (mounted) {
+        unawaited(
+          ref.read(analysisControllerProvider.notifier).open(widget.match),
+        );
+      }
     });
   }
 
@@ -43,11 +60,13 @@ class _AnalysisViewState extends ConsumerState<AnalysisView> {
     final state = ref.watch(analysisControllerProvider);
     final controller = ref.read(analysisControllerProvider.notifier);
     final theme = Theme.of(context);
+    final match = widget.match;
+    final viewing = state.matchId == match.id;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
-        if (state.problem != null)
+        if (viewing && state.problem != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Text(
@@ -67,23 +86,23 @@ class _AnalysisViewState extends ConsumerState<AnalysisView> {
           ),
         ),
         const SizedBox(height: 8),
-        if (state.running) ...<Widget>[
-          LinearProgressIndicator(value: state.progress),
-          const SizedBox(height: 8),
-          Row(
-            children: <Widget>[
-              Expanded(child: Text(_stageLabel(state.stage))),
-              TextButton(
-                onPressed: controller.cancel,
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
-        ] else
+        if (state.runningFor(match.id))
+          _RunningJob(
+            label: _stageLabel(state.jobKind, state.stage),
+            progress: state.progress,
+            onCancel: controller.cancel,
+          )
+        else if (state.busyElsewhere(match.id) && viewing && state.unprepared)
+          _BusyElsewhere(title: state.runningTitle)
+        else if (viewing && state.unprepared)
+          _PrepareAction(onStart: () => unawaited(controller.prepare(match)))
+        else
           FilledButton.tonalIcon(
-            onPressed: state.missing.isEmpty
+            onPressed: !viewing ||
+                    state.missing.isEmpty ||
+                    state.busyElsewhere(match.id)
                 ? null
-                : () => controller.repair(widget.match),
+                : () => controller.repair(match),
             icon: const Icon(Icons.healing_outlined),
             label: Text(
               state.missing.isEmpty
@@ -103,14 +122,14 @@ class _AnalysisViewState extends ConsumerState<AnalysisView> {
         const SizedBox(height: 16),
         Text('Artifacts', style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
-        if (!state.loaded)
+        if (!viewing || !state.loaded)
           const Center(child: CircularProgressIndicator())
         else if ((state.manifest?.artifacts ?? const <ArtifactDto>[]).isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Text(
-              'This match has no analysis files yet. Prepare them from the '
-              'studio.',
+              'This match has no analysis files yet. Start preparing '
+              'analysis to make them.',
             ),
           )
         else
@@ -166,14 +185,113 @@ class _AnalysisViewState extends ConsumerState<AnalysisView> {
     return parts.join('  ·  ');
   }
 
-  static String _stageLabel(String? stage) => switch (stage) {
-        'probe' => 'Reading the recording…',
-        'proxy' => 'Rebuilding the proxy…',
-        'audio' => 'Rebuilding the analysis audio…',
-        'frames' => 'Sampling frames…',
-        'regenerate' => 'Working out what to rebuild…',
-        _ => 'Working…',
-      };
+  static String _stageLabel(AnalysisJobKind? kind, String? stage) {
+    final verb = kind == AnalysisJobKind.rebuild ? 'Rebuilding' : 'Making';
+    return switch (stage) {
+      'probe' => 'Reading the recording…',
+      'proxy' => '$verb the proxy…',
+      'audio' => '$verb the analysis audio…',
+      'frames' => 'Sampling frames…',
+      'regenerate' => 'Working out what to rebuild…',
+      _ => 'Starting…',
+    };
+  }
+}
+
+/// The first-time action: what preparing does, and the button that starts it.
+class _PrepareAction extends StatelessWidget {
+  const _PrepareAction({required this.onStart});
+
+  final VoidCallback onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'Preparing makes a smaller proxy video, the analysis audio, and '
+          'sampled frames. Player analysis needs them. Your recording is not '
+          'changed.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: onStart,
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('Start preparing analysis'),
+        ),
+      ],
+    );
+  }
+}
+
+/// A job in flight for this match.
+class _RunningJob extends StatelessWidget {
+  const _RunningJob({
+    required this.label,
+    required this.progress,
+    required this.onCancel,
+  });
+
+  final String label;
+  final double progress;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            // The engine reports progress per stage; 0 means "not yet known".
+            LinearProgressIndicator(value: progress > 0 ? progress : null),
+            const SizedBox(height: 8),
+            Row(
+              children: <Widget>[
+                Expanded(child: Text(label)),
+                TextButton(onPressed: onCancel, child: const Text('Cancel')),
+              ],
+            ),
+            Text(
+              'Running in the background. You can switch features or videos; '
+              'the studio shows a spinner until it finishes.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Another match's job holds the engine.
+class _BusyElsewhere extends StatelessWidget {
+  const _BusyElsewhere({required this.title});
+
+  final String? title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'Another video is being prepared${title == null ? '' : ' ($title)'}. '
+          'This one can start when it finishes.',
+        ),
+        const SizedBox(height: 12),
+        const FilledButton(
+          onPressed: null,
+          child: Text('Start preparing analysis'),
+        ),
+      ],
+    );
+  }
 }
 
 class _StateChip extends StatelessWidget {
