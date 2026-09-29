@@ -23,6 +23,7 @@ sportcut-rally = { path = "crates/rally" }
 sportcut-score = { path = "crates/score" }
 sportcut-highlight = { path = "crates/highlight" }
 sportcut-export = { path = "crates/export" }
+sportcut-eval = { path = "crates/eval" }
 
 clap = { version = "4.5", features = ["derive"] }
 image = { version = "=0.24.9", default-features = false, features = ["jpeg"] }

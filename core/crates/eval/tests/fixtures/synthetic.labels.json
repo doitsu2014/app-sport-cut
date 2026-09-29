@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "clip_id": "synthetic",
+  "duration_ms": 60000,
+  "players": 4,
+  "clean": true,
+  "rallies": [
+    { "start_ms": 5000, "end_ms": 15000 },
+    { "start_ms": 20000, "end_ms": 30000 },
+    { "start_ms": 40000, "end_ms": 45000 }
+  ],
+  "notes": "hand-written fixture; no footage"
+}

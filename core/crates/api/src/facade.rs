@@ -144,12 +144,18 @@ pub fn start_rally_segmentation(request: RallySegmentationRequestDto) -> Result<
 }
 
 /// Read only suggestions produced for the current tracks and configuration.
+///
+/// A match without player tracks, including one whose analysis files were never
+/// produced, has no suggestions: that is `None`, not an error. Asking to analyse
+/// such a match is what reports the missing tracks.
 pub fn match_rally_suggestions(
     request: RallySegmentationRequestDto,
 ) -> Result<Option<RallySuggestionsDto>> {
     let match_dir = MatchDirectory::new(&request.match_dir);
     let config = SegmentationConfig::from(&request.config);
-    let (_, _, identity) = load_track_input(&match_dir, config, false)?;
+    let Some((_, _, identity)) = find_track_input(&match_dir, config, false)? else {
+        return Ok(None);
+    };
     let suggestions = load_rally_suggestions(&match_dir, &identity).map_err(to_anyhow)?;
     Ok(suggestions.as_ref().map(RallySuggestionsDto::from))
 }
@@ -533,10 +539,20 @@ fn load_track_input(
     config: SegmentationConfig,
     verify_media_bytes: bool,
 ) -> Result<(ArtifactManifest, SegmentationInput, SuggestionInputs)> {
-    let (manifest, bytes, artifact) = read_track_artifact(match_dir, verify_media_bytes)?
-        .ok_or_else(|| {
-            anyhow!("player tracks are unavailable; run player tracking before rally analysis")
-        })?;
+    find_track_input(match_dir, config, verify_media_bytes)?.ok_or_else(|| {
+        anyhow!("player tracks are unavailable; run player tracking before rally analysis")
+    })
+}
+
+fn find_track_input(
+    match_dir: &MatchDirectory,
+    config: SegmentationConfig,
+    verify_media_bytes: bool,
+) -> Result<Option<(ArtifactManifest, SegmentationInput, SuggestionInputs)>> {
+    let Some((manifest, bytes, artifact)) = read_track_artifact(match_dir, verify_media_bytes)?
+    else {
+        return Ok(None);
+    };
     let audio_fingerprint = artifact
         .input
         .audio
@@ -551,14 +567,21 @@ fn load_track_input(
         config,
     };
     identity.validate().map_err(to_anyhow)?;
-    Ok((manifest, artifact.input, identity))
+    Ok(Some((manifest, artifact.input, identity)))
 }
 
 fn read_track_artifact(
     match_dir: &MatchDirectory,
     verify_media_bytes: bool,
 ) -> Result<Option<(ArtifactManifest, Vec<u8>, TrackArtifact)>> {
-    let manifest = ArtifactManifest::load(&match_dir.manifest_path()).map_err(to_anyhow)?;
+    // An imported match has no manifest until its analysis files are produced,
+    // and so no tracks yet. A manifest that exists but cannot be read is still
+    // an error.
+    let manifest_path = match_dir.manifest_path();
+    if !manifest_path.is_file() {
+        return Ok(None);
+    }
+    let manifest = ArtifactManifest::load(&manifest_path).map_err(to_anyhow)?;
     let Some(tracks) = manifest.entry(ArtifactKind::Tracks) else {
         return Ok(None);
     };

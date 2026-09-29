@@ -22,6 +22,7 @@ tools/verify-engine.sh          # from the repository root
 | `sportcut-rally` | `crates/rally` | Placeholder for rally/rest segmentation (later phase). |
 | `sportcut-score` | `crates/score` | Placeholder for score suggestion (later phase). |
 | `sportcut-highlight` | `crates/highlight` | Placeholder for highlight ranking (later phase). |
+| `sportcut-eval` | `crates/eval` | Scores player count and rally segmentation against hand labels (`sportcut-cli eval`); see `docs/verification/accuracy-evaluation.md`. |
 | `sportcut-cli` | `cli` | Headless harness (`sportcut-cli`) for developing and benchmarking the pipeline on a workstation. |
 
 The crate boundaries mirror the pipeline stages so later phases fill in

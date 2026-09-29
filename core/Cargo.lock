@@ -889,8 +889,10 @@ dependencies = [
  "serde",
  "serde_json",
  "sportcut-common",
+ "sportcut-eval",
  "sportcut-export",
  "sportcut-media",
+ "sportcut-rally",
  "sportcut-storage",
 ]
 
@@ -908,6 +910,17 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "sportcut-common",
+]
+
+[[package]]
+name = "sportcut-eval"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sportcut-common",
+ "sportcut-rally",
+ "sportcut-vision",
 ]
 
 [[package]]

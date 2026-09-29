@@ -69,7 +69,8 @@ Local storage
 | `sportcut-highlight` | `rank`: deterministic highlight score (`0..1`) and 1-based rank per rally. |
 | `sportcut-export` | Edit decision list and the FFmpeg renderer (`export/highlight.mp4`). |
 | `sportcut-api` | FFI facade: DTOs, job handles, the player-tracking job, and the tracks artifact — the only surface across the bridge. |
-| `sportcut-cli` | Headless harness (`core/cli`) to probe, proxy, sample, run the import pipeline, and inspect or regenerate a match directory. Not shipped. |
+| `sportcut-eval` | Pure scoring of player count and rally segmentation against hand labels (`verification/accuracy-evaluation.md`). Not shipped. |
+| `sportcut-cli` | Headless harness (`core/cli`) to probe, proxy, sample, run the import pipeline, inspect or regenerate a match directory, and score accuracy (`eval`). Not shipped. |
 
 Crate boundaries mirror the pipeline stages. Only `sportcut-api` crosses the
 language boundary; internal crates are free to change because the bridge only

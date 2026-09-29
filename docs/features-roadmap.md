@@ -45,7 +45,7 @@ highlights, then exports a short video with music and a scoreboard.
 
 | Phase | Goal | Deliverables | Status |
 | --- | --- | --- | --- |
-| 0 | Research and proof of concept | Test footage, court-calibration prototype, frame extraction, person detection and player count, rally-vs-rest classifier, benchmark report | Footage and inference gates partially open; latency/memory benchmark recorded, accuracy still unmeasured |
+| 0 | Research and proof of concept | Test footage, court-calibration prototype, frame extraction, person detection and player count, rally-vs-rest classifier, benchmark report | Footage and inference gates partially open; latency/memory benchmark recorded; accuracy harness ready (`sportcut-cli eval`, `verification/accuracy-evaluation.md`), awaiting labeled clips |
 | 1 | Video editing MVP | Import, manual trim/clips, manual score timeline, overlay, music, FFmpeg export | Done — see `verification/manual-editing-and-export.md` |
 | 2 | Automatic rally detection | Court calibration, player count, tracking, active/inactive segments, suggested cuts, editable timeline | Done: court calibration (`verification/court-calibration.md`), player detection and tracking, rally/rest segmentation (`verification/rally-rest-segmentation.md`; thresholds first-pass on clip c1) |
 | 3 | Semi-automatic scoring | Rally confirmation UI, left/right selection, score timeline, serving-side heuristic | Done: accept/adjust/dismiss rally suggestions, one-tap winner, score timeline, serving side (`sportcut-score`) shown on the scoreboard |
