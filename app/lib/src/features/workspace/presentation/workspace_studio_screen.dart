@@ -475,11 +475,11 @@ class _FeatureRail extends StatelessWidget {
     PipelineStage.calibrate,
     PipelineStage.analyze,
     PipelineStage.track,
+    PipelineStage.score,
   ];
 
   /// Features that shape the highlight.
   static const List<PipelineStage> _studio = <PipelineStage>[
-    PipelineStage.score,
     PipelineStage.highlight,
     PipelineStage.export,
   ];

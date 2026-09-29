@@ -112,8 +112,8 @@ through `job_status`; the registry admits one heavy job at a time.
 `/` is the workspace list. A workspace opens the **studio**: a left rail of the
 workspace's videos, one shared video preview in the centre (the studio owns one
 playback controller per selected video and hands it to the active feature), and
-a right feature rail — **Play**, then **Analysis** (calibrate, analyze, track)
-and **Studio** (score, highlight, export). Each rail item shows the stage state
+a right feature rail — **Play**, then **Analysis** (calibrate, analyze, track,
+score) and **Studio** (highlight, export). Each rail item shows the stage state
 (`done` / `ready` / `idle`) derived from the video's facts; `idle` is guidance,
 not a gate.
 

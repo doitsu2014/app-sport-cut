@@ -2,12 +2,12 @@
   "workflowVersion": "1.0.0",
   "engineVersion": "0.1.0",
   "activeIntent": {
-    "id": "260929-prepare-analysis-screen",
-    "label": "prepare-analysis-screen",
-    "description": "Prepare analysis screen: show a button to start the background job and show that the job is running in the background",
-    "scope": "express",
+    "id": "260929-review-and-score",
+    "label": "review-and-score",
+    "description": "Review and Score Feature on Menu Studio to Analysis Menu",
+    "scope": "feature",
     "space": "default",
-    "createdAt": "2026-09-29T09:42:10.074Z"
+    "createdAt": "2026-09-29T10:13:17.086Z"
   },
   "currentStage": null,
   "parked": false,
@@ -16,57 +16,113 @@
       "status": "complete",
       "attempt": 1,
       "feedback": [],
-      "updatedAt": "2026-09-29T09:43:25.988Z"
+      "updatedAt": "2026-09-29T10:13:55.778Z",
+      "autoApproved": true
     },
     "requirements-analysis": {
       "status": "complete",
       "attempt": 1,
       "feedback": [],
-      "updatedAt": "2026-09-29T09:43:41.313Z"
+      "updatedAt": "2026-09-29T10:14:07.918Z",
+      "autoApproved": true
+    },
+    "feasibility-assessment": {
+      "status": "complete",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T10:14:20.446Z",
+      "autoApproved": true
+    },
+    "architecture-design": {
+      "status": "complete",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T10:14:34.920Z",
+      "autoApproved": true
+    },
+    "api-contract": {
+      "status": "complete",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T10:14:44.361Z",
+      "autoApproved": true
+    },
+    "design-patterns": {
+      "status": "complete",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T10:14:53.502Z",
+      "autoApproved": true
+    },
+    "technical-spec": {
+      "status": "complete",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T10:15:03.824Z",
+      "autoApproved": true
     },
     "task-planning": {
       "status": "complete",
       "attempt": 1,
       "feedback": [],
-      "updatedAt": "2026-09-29T09:43:55.636Z"
+      "updatedAt": "2026-09-29T10:15:13.715Z",
+      "autoApproved": true
     },
     "code-generation": {
       "status": "complete",
       "attempt": 1,
       "feedback": [],
-      "updatedAt": "2026-09-29T09:47:28.390Z"
+      "updatedAt": "2026-09-29T10:16:03.423Z",
+      "autoApproved": true
+    },
+    "code-review": {
+      "status": "complete",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T10:16:15.131Z",
+      "autoApproved": true
     },
     "refactor": {
       "status": "complete",
       "attempt": 1,
       "feedback": [],
-      "updatedAt": "2026-09-29T09:47:46.683Z"
+      "updatedAt": "2026-09-29T10:16:22.195Z",
+      "autoApproved": true
     },
     "test-plan": {
       "status": "complete",
       "attempt": 1,
       "feedback": [],
-      "updatedAt": "2026-09-29T09:47:57.167Z"
+      "updatedAt": "2026-09-29T10:16:32.502Z",
+      "autoApproved": true
     },
     "test-generation": {
       "status": "complete",
       "attempt": 1,
       "feedback": [],
-      "updatedAt": "2026-09-29T09:49:14.261Z"
+      "updatedAt": "2026-09-29T10:16:53.828Z",
+      "autoApproved": true
     },
     "ci-pipeline": {
       "status": "skipped",
       "attempt": 1,
       "feedback": [],
-      "updatedAt": "2026-09-29T09:49:18.549Z"
+      "updatedAt": "2026-09-29T10:16:59.455Z"
     },
     "deployment": {
       "status": "skipped",
       "attempt": 1,
       "feedback": [],
-      "updatedAt": "2026-09-29T09:49:23.531Z"
+      "updatedAt": "2026-09-29T10:17:01.427Z"
+    },
+    "release-validation": {
+      "status": "complete",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T10:17:12.995Z",
+      "autoApproved": true
     }
   },
-  "startedAt": "2026-09-29T09:42:10.074Z",
-  "updatedAt": "2026-09-29T09:49:23.531Z"
+  "startedAt": "2026-09-29T10:13:17.086Z",
+  "updatedAt": "2026-09-29T10:17:12.995Z"
 }
