@@ -20,7 +20,6 @@ storage models are documented in
 | `models/` | Model assets and pretrained weights that ship with the app, plus the notes that map each asset to its license register entry. |
 | `tools/` | Developer scripts: environment preflight, engine verification, and bridge regeneration. |
 | `docs/` | Architecture, feature list and road map, external dependencies (register), and data and storage models. |
-| `openspec/` | OpenSpec change artifacts. `openspec/changes/bootstrap-project-base/` is the change that created this layout. |
 
 ## Prerequisites
 
@@ -86,7 +85,5 @@ the prerequisites above).
 ## Status
 
 The engine foundation — workspace layout, media pipeline, and job model — is the
-first deliverable, tracked as the OpenSpec change
-`openspec/changes/bootstrap-project-base`. The Flutter shell follows once the
-Xcode toolchain is installed, because it cannot be compiled or tested without
-it.
+first deliverable. The Flutter shell follows once the Xcode toolchain is
+installed, because it cannot be compiled or tested without it.

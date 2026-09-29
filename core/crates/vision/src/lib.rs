@@ -4,9 +4,6 @@
 //! boundary the later phases plug into, so the choice of on-device runtime
 //! (TensorFlow Lite by default, or a platform ML kit) does not reshape the
 //! pipeline.
-//!
-//! The design decision behind this crate is D7 in
-//! `openspec/changes/bootstrap-project-base/design.md`.
 
 #![forbid(unsafe_code)]
 

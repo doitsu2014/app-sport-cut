@@ -36,7 +36,6 @@ fully automatic officiating — the reasoning is in `docs/architecture.md`.
 | `models/` | Model assets and weights that ship with the app, plus the notes mapping each to its license-register entry. |
 | `tools/` | Supported developer entry points: preflight, engine verification, bridge generation, engine library build, macOS run. |
 | `docs/` | Architecture (`docs/architecture.md`), feature list and road map (`docs/features-roadmap.md`), external dependencies (`docs/external-dependencies.md`), data and storage models (`docs/data-storage-models.md`), verification records (`docs/verification/`). |
-| `openspec/` | Change artifacts. Specs in `openspec/specs/`, active changes in `openspec/changes/`, finished ones in `openspec/changes/archive/`. |
 | `flutter_rust_bridge.yaml` | Codegen configuration. Generated files are never committed. |
 
 ## The two tracks
@@ -76,9 +75,9 @@ Default to shipping implementation, not test scaffolding.
 - Touch an existing test only when your change stops it compiling, or when the
   user asks you to.
 
-The exception is an explicit request to verify, close, or archive an OpenSpec
-change: that workflow requires recorded evidence, so run `tools/verify-engine.sh`
-and/or `flutter test` in `app/` at that point (see "OpenSpec workflow" below).
+The exception is an explicit request to verify a change: that workflow requires
+recorded evidence, so run `tools/verify-engine.sh` and/or `flutter test` in
+`app/` at that point.
 
 ## Conventions
 
@@ -178,41 +177,6 @@ redistribute.
 - Formatting and lint are clean for the track you touched.
 - No generated file was hand-edited or committed.
 - Any new dependency has a license-register row.
-- The task checkbox in the OpenSpec change's `tasks.md` is marked complete when
-  the work came from a change.
-
-<!-- OpenSpec workflow -->
-## OpenSpec workflow
-
-Use the OpenSpec CLI and the relevant OpenSpec skill whenever work is part of a
-structured change (proposing, continuing, implementing, verifying, syncing, or
-archiving a change). Treat the change artifacts under `openspec/changes/` as the
-source of truth for the requested behavior and implementation tasks.
-
-Choose the right skill for the job at hand:
-
-- **Exploring a new idea** — use the `openspec-explore` skill to think through
-  possibilities and clarify requirements before committing to a plan.
-- **Constructing a plan or updating an existing change** — use the
-  `openspec-propose` skill (or `openspec-continue-change` / `openspec-new-change`)
-  to turn the idea into a structured change with design, specs, and tasks.
-- **Implementing the change / plan** — use the `openspec-apply-change` skill to
-  work through the pending tasks and mark them complete as they are verified.
-
-- Before implementing a selected change, run `openspec status --change "<name>" --json`
-  and `openspec instructions apply --change "<name>" --json`.
-- Read every context file named by the apply instructions before changing code.
-- Implement only the pending tasks for that change, and mark a task complete in
-  its task artifact immediately after it is verified.
-- If the change is ambiguous, required artifacts are missing, or implementation
-  exposes a design conflict, pause and update or clarify the OpenSpec artifacts
-  before proceeding.
-- Verification runs are the one place the skip-tests default does not apply:
-  when the user asks to verify, close, or archive a change, run the verification
-  commands and record the output under `docs/verification/`.
-- Run the OpenSpec verification workflow before considering a change ready to
-  archive; archive only after implementation and verification are complete.
-<!-- /OpenSpec workflow -->
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

@@ -54,5 +54,4 @@ recording.
 Implement first. Do not add or run tests unless the user explicitly asks; verify
 with `cargo build` or
 `cargo clippy --workspace --all-targets -- -D warnings`. Run
-`tools/verify-engine.sh` only when the user asks to verify, close, or archive an
-OpenSpec change.
+`tools/verify-engine.sh` only when the user asks to verify a change.

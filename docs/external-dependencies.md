@@ -16,9 +16,6 @@ pretrained weight file, training dataset, font, audio asset, and video codec
 that Sportcut uses or distributes. It is a gating document: a component with an
 unresolved or negative distribution verdict may not ship in a release build.
 
-Required by the `project-bootstrap` capability
-(`openspec/changes/bootstrap-project-base/specs/project-bootstrap/spec.md`).
-
 ## Register schema
 
 | Column | Meaning |

@@ -56,4 +56,4 @@ Reuse the existing patterns rather than introducing new ones:
 
 Implement first. Do not add or run widget tests unless the user explicitly asks;
 verify with `flutter analyze`. Run `flutter test` only when the user asks to
-verify, close, or archive an OpenSpec change.
+verify a change.
