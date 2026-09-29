@@ -1,0 +1,4 @@
+{"ts":"2026-09-29T04:35:57.950Z","engineVersion":"0.1.0","event":"INTENT_CREATED","space":"default","intent":"260929-doctor","scope":"classic"}
+{"ts":"2026-09-29T04:35:57.950Z","engineVersion":"0.1.0","event":"SCOPE_SELECTED","space":"default","intent":"260929-doctor","scope":"classic"}
+{"ts":"2026-09-29T04:35:57.950Z","engineVersion":"0.1.0","event":"STAGE_STARTED","space":"default","intent":"260929-doctor","phase":"analyze","stage":"intent-capture"}
+{"ts":"2026-09-29T04:36:36.878Z","engineVersion":"0.1.0","event":"WORKFLOW_PARKED","space":"default","intent":"260929-doctor","stage":"intent-capture"}

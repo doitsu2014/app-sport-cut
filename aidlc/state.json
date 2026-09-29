@@ -1,0 +1,24 @@
+{
+  "workflowVersion": "1.0.0",
+  "engineVersion": "0.1.0",
+  "activeIntent": {
+    "id": "260929-doctor",
+    "label": "doctor",
+    "description": "doctor",
+    "scope": "classic",
+    "space": "default",
+    "createdAt": "2026-09-29T04:35:57.949Z"
+  },
+  "currentStage": "intent-capture",
+  "parked": false,
+  "stages": {
+    "intent-capture": {
+      "status": "active",
+      "attempt": 1,
+      "feedback": [],
+      "updatedAt": "2026-09-29T04:55:05.781Z"
+    }
+  },
+  "startedAt": "2026-09-29T04:35:57.949Z",
+  "updatedAt": "2026-09-29T04:55:05.781Z"
+}

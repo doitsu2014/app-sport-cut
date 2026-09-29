@@ -77,3 +77,21 @@ tools/testdata/
 
 # Fetched inference assets (see tools/fetch-inference-assets.sh); never committed.
 third_party/
+
+# BEGIN my-aidlc:pi
+# my-aidlc workspace runtime
+aidlc/.my-aidlc-sessions/
+aidlc/spaces/*/.active-space
+aidlc/spaces/*/intents/*/.active-intent
+# PI Agent local settings
+.pi/settings.local.json
+# END my-aidlc:pi
+
+# BEGIN my-aidlc:claude
+# my-aidlc workspace runtime
+aidlc/.my-aidlc-sessions/
+aidlc/spaces/*/.active-space
+aidlc/spaces/*/intents/*/.active-intent
+# Claude Code per-machine settings
+.claude/settings.local.json
+# END my-aidlc:claude
