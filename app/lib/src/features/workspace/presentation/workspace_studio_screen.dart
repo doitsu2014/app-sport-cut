@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/design/sportcut_tokens.dart';
 import '../../analysis/presentation/analysis_providers.dart';
 import '../../analysis/presentation/analysis_view.dart';
 import '../../calibration/presentation/calibration_view.dart';
@@ -11,6 +12,7 @@ import '../../editing/presentation/editing_providers.dart';
 import '../../export/presentation/export_view.dart';
 import '../../highlights/presentation/highlights_view.dart';
 import '../../library/domain/match_record.dart';
+import '../../library/presentation/formatters.dart';
 import '../../library/presentation/import_controller.dart';
 import '../../library/presentation/library_providers.dart';
 import '../../library/presentation/match_list_entry.dart';
@@ -62,6 +64,14 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     final videos = ref.watch(workspaceVideosProvider(widget.workspace.id));
     final import = ref.watch(importControllerProvider);
     final analysis = ref.watch(analysisControllerProvider);
+    final facts =
+        ref.watch(workspaceVideoFactsProvider(widget.workspace.id)).value;
+    final loadedEntries = videos.value;
+    final selectedEntry =
+        loadedEntries == null ? null : _selectedEntry(loadedEntries);
+    final missingCount = loadedEntries == null
+        ? 0
+        : loadedEntries.where((entry) => !entry.recordingAvailable).length;
 
     // Preparing analysis runs in the background; announce how it ended, even
     // if the user has moved to another feature or video, and refresh the rail.
@@ -92,23 +102,20 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     });
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.workspace.title),
-        actions: <Widget>[
-          IconButton(
-            onPressed: import.isRunning ? null : _import,
-            icon: const Icon(Icons.add),
-            tooltip: 'Import video',
-          ),
-          IconButton(
-            onPressed: () => _confirmDeleteWorkspace(),
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Delete workspace',
-          ),
-        ],
-      ),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: Column(
         children: <Widget>[
+          _StudioToolbar(
+            workspace: widget.workspace,
+            videoCount: loadedEntries?.length ?? 0,
+            importRunning: import.isRunning,
+            showImport: loadedEntries == null || loadedEntries.isNotEmpty,
+            onBack: () {
+              Navigator.of(context).maybePop();
+            },
+            onImport: _import,
+            onDelete: _confirmDeleteWorkspace,
+          ),
           if (import.isRunning)
             _ImportProgress(
               description: import.description,
@@ -133,9 +140,6 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
                 }
                 _ensureSelection(entries);
                 final selected = _selectedEntry(entries);
-                final facts = ref
-                    .watch(workspaceVideoFactsProvider(widget.workspace.id))
-                    .value;
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
@@ -169,6 +173,15 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
                 );
               },
             ),
+          ),
+          _StudioStatusBar(
+            videoCount: loadedEntries?.length ?? 0,
+            missingCount: missingCount,
+            entry: selectedEntry,
+            stage: _selectedStage,
+            facts: selectedEntry == null
+                ? null
+                : facts?[selectedEntry.match.id],
           ),
         ],
       ),
@@ -219,6 +232,22 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     if (controller == null) {
       return const SizedBox.shrink();
     }
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerLowest,
+      child: Column(
+        children: <Widget>[
+          _CenterHeader(match: entry.match, stage: _selectedStage),
+          Expanded(child: _featureView(entry, facts, controller)),
+        ],
+      ),
+    );
+  }
+
+  Widget _featureView(
+    MatchListEntry entry,
+    Map<String, VideoStageFacts>? facts,
+    PlaybackController controller,
+  ) {
     switch (_selectedStage) {
       case null:
         return PlayerView(controller: controller);
@@ -381,7 +410,282 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
   }
 }
 
-class _VideoRail extends StatefulWidget {
+String _resolutionLabel(MatchRecord match) {
+  final height = match.videoHeight;
+  if (height == null || height <= 0) {
+    return '—';
+  }
+  if (height >= 1080) {
+    return '1080p';
+  }
+  if (height >= 720) {
+    return '720p';
+  }
+  if (height >= 480) {
+    return '480p';
+  }
+  return '${height}p';
+}
+
+class _StudioToolbar extends StatelessWidget {
+  const _StudioToolbar({
+    required this.workspace,
+    required this.videoCount,
+    required this.importRunning,
+    required this.showImport,
+    required this.onBack,
+    required this.onImport,
+    required this.onDelete,
+  });
+
+  final Workspace workspace;
+  final int videoCount;
+  final bool importRunning;
+  final bool showImport;
+  final VoidCallback onBack;
+  final VoidCallback onImport;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tokens = SportcutTokens.of(context);
+    return Container(
+      height: tokens.chromeHeight,
+      padding: EdgeInsets.symmetric(horizontal: tokens.space4),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Row(
+        children: <Widget>[
+          IconButton(
+            onPressed: onBack,
+            tooltip: 'Back to workspaces',
+            icon: const Icon(Icons.arrow_back, size: 18),
+          ),
+          SizedBox(width: tokens.space2),
+          Text(
+            'Sportcut',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontSize: 14,
+              height: 1.1,
+              letterSpacing: -0.01,
+            ),
+          ),
+          SizedBox(width: tokens.space3),
+          Container(width: 1, height: 16, color: scheme.outlineVariant),
+          SizedBox(width: tokens.space3),
+          Expanded(
+            child: Text(
+              workspace.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          if (videoCount > 0) ...<Widget>[
+            _StudioChip(
+              label: '$videoCount ${videoCount == 1 ? 'video' : 'videos'}',
+            ),
+            SizedBox(width: tokens.space2),
+          ],
+          if (showImport) ...<Widget>[
+            FilledButton.icon(
+              onPressed: importRunning ? null : onImport,
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(importRunning ? 'Importing' : 'Import'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 30),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                textStyle: theme.textTheme.labelLarge?.copyWith(fontSize: 12),
+              ),
+            ),
+            SizedBox(width: tokens.space2),
+          ],
+          IconButton(
+            onPressed: onDelete,
+            tooltip: 'Delete workspace',
+            icon: const Icon(Icons.delete_outline, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CenterHeader extends StatelessWidget {
+  const _CenterHeader({required this.match, required this.stage});
+
+  final MatchRecord match;
+  final PipelineStage? stage;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tokens = SportcutTokens.of(context);
+    final fps = match.frameRate;
+    final fpsLabel = fps == null || fps <= 0
+        ? null
+        : '${fps.toStringAsFixed(fps.roundToDouble() == fps ? 0 : 2)} fps';
+    final parts = <String>[
+      _resolutionLabel(match),
+      if (fpsLabel != null) fpsLabel,
+    ];
+    return Container(
+      height: 40,
+      padding: EdgeInsets.symmetric(horizontal: tokens.space3),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Row(
+        children: <Widget>[
+          Text(
+            'Preview',
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontSize: 12,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(width: tokens.space2),
+          _StudioChip(label: stage?.label ?? 'Playback'),
+          const Spacer(),
+          Text(
+            parts.join(' · '),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StudioStatusBar extends StatelessWidget {
+  const _StudioStatusBar({
+    required this.videoCount,
+    required this.missingCount,
+    required this.entry,
+    required this.stage,
+    required this.facts,
+  });
+
+  final int videoCount;
+  final int missingCount;
+  final MatchListEntry? entry;
+  final PipelineStage? stage;
+  final VideoStageFacts? facts;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tokens = SportcutTokens.of(context);
+    final score = entry?.score;
+    final statusStyle = theme.textTheme.labelSmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final ready = facts?.hasSelectedClips;
+    final String readyLabel;
+    if (ready == null) {
+      readyLabel = 'Checking';
+    } else if (ready) {
+      readyLabel = 'Ready to export';
+    } else {
+      readyLabel = 'Needs a clip';
+    }
+    return Container(
+      height: tokens.statusHeight,
+      padding: EdgeInsets.symmetric(horizontal: tokens.space3),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              shape: BoxShape.circle,
+            ),
+          ),
+          SizedBox(width: tokens.space1 + 2),
+          Text('On-device · No cloud', style: statusStyle),
+          SizedBox(width: tokens.space3),
+          Text(
+            '$videoCount ${videoCount == 1 ? 'video' : 'videos'}',
+            style: statusStyle,
+          ),
+          if (missingCount > 0) ...<Widget>[
+            SizedBox(width: tokens.space3),
+            Text(
+              '$missingCount missing',
+              style: statusStyle?.copyWith(color: scheme.error),
+            ),
+          ],
+          const Spacer(),
+          if (score != null) ...<Widget>[
+            Text(
+              'Score ${score.left}–${score.right}',
+              style: statusStyle,
+            ),
+            SizedBox(width: tokens.space3),
+          ],
+          Text(
+            entry == null ? 'No video selected' : (stage?.label ?? 'Playback'),
+            style: statusStyle,
+          ),
+          SizedBox(width: tokens.space2),
+          if (entry != null)
+            _StudioChip(label: readyLabel),
+        ],
+      ),
+    );
+  }
+}
+
+class _StudioChip extends StatelessWidget {
+  const _StudioChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tokens = SportcutTokens.of(context);
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.space2 - 1,
+        vertical: 3,
+      ),
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(tokens.radiusPill),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
+          fontSize: 9,
+          letterSpacing: 0.06,
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoRail extends StatelessWidget {
   const _VideoRail({
     required this.entries,
     required this.selectedId,
@@ -399,52 +703,241 @@ class _VideoRail extends StatefulWidget {
   final void Function(MatchListEntry) onDelete;
 
   @override
-  State<_VideoRail> createState() => _VideoRailState();
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = SportcutTokens.of(context);
+    return Container(
+      width: tokens.videoRailWidth,
+      color: scheme.surface,
+      child: Column(
+        children: <Widget>[
+          _RailHeader(label: 'Videos', trailing: '${entries.length}'),
+          Expanded(
+            child: ListView.separated(
+              padding: EdgeInsets.all(tokens.space2),
+              itemCount: entries.length,
+              separatorBuilder: (context, index) =>
+                  SizedBox(height: tokens.space1),
+              itemBuilder: (context, index) {
+                final entry = entries[index];
+                return _VideoRailTile(
+                  entry: entry,
+                  selected: entry.match.id == selectedId,
+                  busy: entry.match.id == busyId,
+                  onSelect: () => onSelect(entry),
+                  onDelete: () => onDelete(entry),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _VideoRailState extends State<_VideoRail> {
-  String? _hoveredId;
+class _VideoRailTile extends StatelessWidget {
+  const _VideoRailTile({
+    required this.entry,
+    required this.selected,
+    required this.busy,
+    required this.onSelect,
+    required this.onDelete,
+  });
+
+  final MatchListEntry entry;
+  final bool selected;
+  final bool busy;
+  final VoidCallback onSelect;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: 200,
-      child: ListView(
-        children: <Widget>[
-          for (final entry in widget.entries)
-            MouseRegion(
-              onEnter: (_) => setState(() => _hoveredId = entry.match.id),
-              onExit: (_) => setState(() => _hoveredId = null),
-              child: ListTile(
-                selected: entry.match.id == widget.selectedId,
-                selectedTileColor: scheme.secondaryContainer,
-                title: Text(entry.match.title, maxLines: 1),
-                leading: Icon(
-                  entry.recordingAvailable
-                      ? Icons.movie_outlined
-                      : Icons.videocam_off_outlined,
-                ),
-                subtitle: entry.score == null
-                    ? null
-                    : Text('Score ${entry.score!.left}–${entry.score!.right}'),
-                onTap: () => widget.onSelect(entry),
-                trailing: entry.match.id == widget.busyId
-                    ? const _BusySpinner(
-                        tooltip: 'Preparing analysis in the background',
-                      )
-                    : IgnorePointer(
-                        ignoring: _hoveredId != entry.match.id,
-                        child: AnimatedOpacity(
-                          opacity: _hoveredId == entry.match.id ? 1 : 0,
-                          duration: const Duration(milliseconds: 120),
-                          child: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            tooltip: 'Delete video',
-                            onPressed: () => widget.onDelete(entry),
-                          ),
-                        ),
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tokens = SportcutTokens.of(context);
+    final missing = !entry.recordingAvailable;
+    final score = entry.score;
+    final scoreLabel = score == null
+        ? formatDuration(entry.match.durationSeconds)
+        : 'Score ${score.left}–${score.right}';
+    final meta = missing
+        ? 'Recording missing'
+        : '${_resolutionLabel(entry.match)} · $scoreLabel';
+
+    return Material(
+      color: selected ? scheme.surfaceContainerHighest : Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(tokens.radiusMd),
+        side: BorderSide(
+          color: selected ? scheme.outlineVariant : Colors.transparent,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onSelect,
+        child: Padding(
+          padding: EdgeInsets.all(tokens.space2),
+          child: Row(
+            children: <Widget>[
+              _VideoThumb(entry: entry),
+              SizedBox(width: tokens.space2),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      entry.match.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontSize: 12,
+                        height: 1.3,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: scheme.onSurface,
                       ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      meta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: missing
+                            ? scheme.error
+                            : scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                Padding(
+                  padding: EdgeInsets.only(left: tokens.space1),
+                  child: Icon(
+                    Icons.check_circle,
+                    size: 14,
+                    color: scheme.primary,
+                  ),
+                ),
+              if (busy)
+                const Padding(
+                  padding: EdgeInsets.only(left: 4),
+                  child: _BusySpinner(
+                    tooltip: 'Preparing analysis in the background',
+                  ),
+                )
+              else
+                IconButton(
+                  onPressed: onDelete,
+                  tooltip: 'Delete video',
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(28, 28),
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoThumb extends StatelessWidget {
+  const _VideoThumb({required this.entry});
+
+  final MatchListEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final available = entry.recordingAvailable;
+    return Container(
+      width: 52,
+      height: 30,
+      decoration: BoxDecoration(
+        // The footage bed is fixed in both themes; this is a thumbnail, not
+        // UI chrome.
+        color: const Color(0xFF0C3B2A),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          Center(
+            child: Icon(
+              available ? Icons.movie_outlined : Icons.error_outline,
+              size: 14,
+              color: available ? Colors.white70 : scheme.error,
+            ),
+          ),
+          if (available)
+            Positioned(
+              right: 2,
+              bottom: 2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha(170),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Text(
+                  formatDuration(entry.match.durationSeconds),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontSize: 9,
+                    height: 1.4,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RailHeader extends StatelessWidget {
+  const _RailHeader({required this.label, this.trailing});
+
+  final String label;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tokens = SportcutTokens.of(context);
+    return Container(
+      height: 38,
+      padding: EdgeInsets.symmetric(horizontal: tokens.space3),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Row(
+        children: <Widget>[
+          Text(
+            label.toUpperCase(),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          if (trailing != null)
+            Text(
+              trailing!,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
               ),
             ),
         ],
@@ -486,31 +979,49 @@ class _FeatureRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 180,
-      child: ListView(
+    final scheme = Theme.of(context).colorScheme;
+    final tokens = SportcutTokens.of(context);
+    final doneCount =
+        states.values.where((state) => state == StageState.done).length;
+    return Container(
+      width: tokens.featureRailWidth,
+      color: scheme.surface,
+      child: Column(
         children: <Widget>[
-          _FeatureItem(
-            label: 'Play',
-            selected: selectedStage == null,
-            icon: Icons.play_circle_outline,
-            done: false,
-            onTap: onSelectPlay,
+          _RailHeader(
+            label: 'Pipeline',
+            trailing: '$doneCount / ${PipelineStage.values.length}',
           ),
-          const _SectionHeader(label: 'Analysis'),
-          for (final stage in _analysis) _item(stage),
-          const _SectionHeader(label: 'Studio'),
-          for (final stage in _studio) _item(stage),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.all(tokens.space2),
+              children: <Widget>[
+                _FeatureRow(
+                  label: 'Play',
+                  selected: selectedStage == null,
+                  icon: Icons.play_circle_outline,
+                  done: false,
+                  ready: false,
+                  onTap: onSelectPlay,
+                ),
+                const _SectionHeader(label: 'Analysis'),
+                for (final stage in _analysis) _item(stage),
+                const _SectionHeader(label: 'Studio'),
+                for (final stage in _studio) _item(stage),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  _FeatureItem _item(PipelineStage stage) => _FeatureItem(
+  _FeatureRow _item(PipelineStage stage) => _FeatureRow(
         label: stage.label,
         selected: selectedStage == stage,
         icon: _stageIcon(stage),
         done: states[stage] == StageState.done,
+        ready: states[stage] == StageState.ready,
         busy: busyStages.contains(stage),
         onTap: () => onSelectStage(stage),
       );
@@ -536,25 +1047,25 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 4),
       child: Text(
         label.toUpperCase(),
         style: theme.textTheme.labelSmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
   }
 }
 
-class _FeatureItem extends StatelessWidget {
-  const _FeatureItem({
+class _FeatureRow extends StatelessWidget {
+  const _FeatureRow({
     required this.label,
     required this.selected,
     required this.icon,
     required this.done,
+    required this.ready,
     this.busy = false,
     required this.onTap,
   });
@@ -563,6 +1074,7 @@ class _FeatureItem extends StatelessWidget {
   final bool selected;
   final IconData icon;
   final bool done;
+  final bool ready;
 
   /// Whether this feature's job is running in the background.
   final bool busy;
@@ -570,49 +1082,60 @@ class _FeatureItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tokens = SportcutTokens.of(context);
+    final color = selected ? scheme.primary : scheme.onSurfaceVariant;
 
-    // Only the lens you are looking at is emphasised: the selected row is bold
-    // on a secondary-container tint. A done stage is muted with no glyph and
-    // every other row stays a normal enabled row.
-    final Color? tileColor;
-    final Color color;
-    final FontWeight weight;
-    if (selected) {
-      tileColor = scheme.secondaryContainer;
-      color = scheme.onSecondaryContainer;
-      weight = FontWeight.w700;
-    } else if (done) {
-      tileColor = null;
-      color = scheme.onSurfaceVariant;
-      weight = FontWeight.w400;
-    } else {
-      tileColor = null;
-      color = scheme.onSurface;
-      weight = FontWeight.w400;
-    }
-
-    // Give the title the full column width: the M3 defaults reserve 24px of
-    // trailing padding, a 24px leading slot, and a 16px title gap, which leaves
-    // only ~100px — not enough for "Prepare analysis" once it is bold, so the
-    // label wrapped and the row changed height when selected.
-    return ListTile(
-      tileColor: tileColor,
-      contentPadding: const EdgeInsetsDirectional.only(start: 16, end: 8),
-      minLeadingWidth: 0,
-      horizontalTitleGap: 8,
-      leading: Icon(icon, size: 20, color: color),
-      title: Text(
-        label,
-        style: TextStyle(color: color, fontWeight: weight),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+    return Material(
+      color: selected ? scheme.surfaceContainerHighest : Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(tokens.radiusSm),
+        side: BorderSide(
+          color: selected ? scheme.outlineVariant : Colors.transparent,
+        ),
       ),
-      trailing: busy
-          ? const _BusySpinner(tooltip: 'Running in the background')
-          : null,
-      onTap: onTap,
-      dense: true,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: tokens.space3,
+            vertical: tokens.space2,
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, size: 18, color: color),
+              SizedBox(width: tokens.space2),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
+                    fontWeight:
+                        selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (busy)
+                const _BusySpinner(tooltip: 'Running in the background')
+              else if (done)
+                Icon(Icons.check, size: 15, color: tokens.success)
+              else if (ready)
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -687,10 +1210,10 @@ class _EmptyStudio extends StatelessWidget {
               color: theme.colorScheme.primary,
             ),
             const SizedBox(height: 16),
-            Text('No videos yet', style: theme.textTheme.titleMedium),
+            Text('No videos in this workspace', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
-              'Import a recording to review it and build highlights.',
+              'Import a match recording to review it and build highlights.',
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -763,6 +1286,7 @@ class _DeleteMatchDialogState extends State<_DeleteMatchDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
       title: const Text('Delete video?'),
       content: _DeleteBody(
@@ -780,6 +1304,10 @@ class _DeleteMatchDialogState extends State<_DeleteMatchDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: scheme.error,
+            foregroundColor: scheme.onError,
+          ),
           onPressed: () => Navigator.of(context).pop(
             _DeleteChoice(
               deleteArtifacts: _deleteArtifacts,
@@ -808,6 +1336,7 @@ class _DeleteWorkspaceDialogState extends State<_DeleteWorkspaceDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
       title: const Text('Delete workspace?'),
       content: _DeleteBody(
@@ -826,6 +1355,10 @@ class _DeleteWorkspaceDialogState extends State<_DeleteWorkspaceDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: scheme.error,
+            foregroundColor: scheme.onError,
+          ),
           onPressed: () => Navigator.of(context).pop(
             _DeleteChoice(
               deleteArtifacts: _deleteArtifacts,

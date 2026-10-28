@@ -1,0 +1,125 @@
+/* Sportcut Design System — canonical tokens
+ * Court-side broadcast: low-glare surfaces, one court-green signal,
+ * tabular numerals, hairline rules.
+ *
+ * Light is canonical. Dark is a first-class override on [data-theme="dark"].
+ * Paste this file's :root block into an artifact before writing component CSS.
+ */
+
+:root {
+  /* Ground */
+  --bg: #f1f3ef;
+  --surface: #ffffff;
+  --surface-warm: #e8ece7;
+
+  /* Ink */
+  --fg: #101713;
+  --fg-2: #39443d;
+  --muted: #5c6860;
+  --meta: #4a554e;
+
+  /* Lines */
+  --border: #c7d0c8;
+  --border-soft: #dfe5df;
+
+  /* Signal */
+  --accent: #0e6e45;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* State */
+  --success: #157347;
+  --warn: #8a5a00;
+  --danger: #b42318;
+
+  /* Type */
+  --font-display: "Archivo", "Helvetica Neue", Helvetica, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Helvetica, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 44px;
+  --text-4xl: 64px;
+
+  --leading-body: 1.55;
+  --leading-tight: 1.06;
+  --tracking-display: -0.025em;
+
+  /* Space — 4px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 72px;
+  --section-y-tablet: 56px;
+  --section-y-phone: 40px;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 9999px;
+
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    0 1px 2px color-mix(in oklab, black, transparent 92%),
+    0 16px 40px color-mix(in oklab, black, transparent 94%);
+  --focus-ring:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+
+  /* Motion */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Measure */
+  --container-max: 1240px;
+  --container-gutter-desktop: 40px;
+  --container-gutter-tablet: 28px;
+  --container-gutter-phone: 20px;
+}
+
+:root[data-theme="dark"] {
+  /* Ground */
+  --bg: #0b100d;
+  --surface: #121814;
+  --surface-warm: #182019;
+
+  /* Ink */
+  --fg: #edf2ec;
+  --fg-2: #bcc6be;
+  --muted: #8b978f;
+  --meta: #a7b3aa;
+
+  /* Lines */
+  --border: #2b342e;
+  --border-soft: #1e2721;
+
+  /* Signal — luminous at night, still reserved for action */
+  --accent: #46d08d;
+  --accent-on: #04140c;
+  --accent-hover: color-mix(in oklab, var(--accent), white 10%);
+  --accent-active: color-mix(in oklab, var(--accent), white 18%);
+
+  /* State */
+  --success: #57c98f;
+  --warn: #e3b24e;
+  --danger: #f27b70;
+
+  --elev-raised:
+    0 1px 2px color-mix(in oklab, black, transparent 50%),
+    0 18px 44px color-mix(in oklab, black, transparent 55%);
+}

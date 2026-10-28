@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "sportcut",
+  "name": "Sportcut",
+  "category": "Product · Sports & Media",
+  "description": "Court-side broadcast design system for Sportcut, an offline badminton match analyzer for macOS. Low-glare surfaces, one court-green signal, tabular score numerals, and hairline court-line rules.",
+  "source": {
+    "type": "bundled",
+    "origin": "Authored for the Sportcut macOS client from docs/features-roadmap.md, docs/architecture.md, and app/lib/src/app/theme.dart"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css"
+  },
+  "usage": "USAGE.md",
+  "importMode": "normalized",
+  "craft": {
+    "applies": ["color", "typography", "accessibility-baseline"],
+    "suggested": ["layout", "motion"],
+    "exemptions": []
+  }
+}

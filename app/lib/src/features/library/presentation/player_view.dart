@@ -69,19 +69,25 @@ class _TransportControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final ready = state.isReady && state.error == null;
+    final baseTimecode = theme.textTheme.labelSmall?.copyWith(
+      fontSize: 11,
+      fontFeatures: tabularFigures,
+    );
     final timecodeStyle = ready
-        ? const TextStyle(fontFeatures: tabularFigures)
-        : TextStyle(
-            color: scheme.onSurfaceVariant,
-            fontFeatures: tabularFigures,
-          );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        ? baseTimecode
+        : baseTimecode?.copyWith(color: scheme.onSurfaceVariant);
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: <Widget>[
-          IconButton(
+          IconButton.filled(
             onPressed: ready ? onPlayPause : null,
             icon: Icon(
               state.isPlaying ? Icons.pause : Icons.play_arrow,
@@ -89,6 +95,7 @@ class _TransportControls extends StatelessWidget {
             ),
             tooltip: state.isPlaying ? 'Pause' : 'Play',
           ),
+          const SizedBox(width: 8),
           Text(formatPosition(state.position), style: timecodeStyle),
           Expanded(
             child: Slider(

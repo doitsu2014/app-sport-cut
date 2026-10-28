@@ -28,3 +28,22 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/fonts/OFL-Archivo.txt
+    - assets/fonts/OFL-IBMPlexSans.txt
+    - assets/fonts/OFL-IBMPlexMono.txt
+  # Variable fonts: the theme selects weights with FontVariation so one asset
+  # covers the display and body scale. IBM Plex Mono ships as static weights.
+  fonts:
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo-Variable.ttf
+    - family: IBMPlexSans
+      fonts:
+        - asset: assets/fonts/IBMPlexSans-Variable.ttf
+    - family: IBMPlexMono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexMono-Medium.ttf
+          weight: 500

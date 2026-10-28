@@ -1,0 +1,4141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sportcut Studio — macOS</title>
+    <meta
+      name="description"
+      content="Sportcut Studio: a macOS-native editing suite for reviewing rallies, confirming the score, and exporting badminton highlights on device."
+    />
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      (function () {
+        try {
+          document.documentElement.dataset.theme = window.matchMedia(
+            "(prefers-color-scheme: light)"
+          ).matches
+            ? "light"
+            : "dark";
+        } catch (error) {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
+    <style>
+      :root {
+        --toolbar-h: 52px;
+        --status-h: 30px;
+        --timeline-h: 176px;
+        --window-radius: 14px;
+        --stage: #050806;
+        --stage-ink: #f2f5f0;
+        --stage-signal: #46d08d;
+        --window-shadow:
+          0 1px 0 color-mix(in oklab, var(--fg) 8%, transparent),
+          0 30px 90px rgba(0, 0, 0, 0.55),
+          0 80px 150px rgba(0, 0, 0, 0.32);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #060906;
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: 16px;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        overflow: auto;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      :focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .icon {
+        font-family: "Material Symbols Rounded";
+        font-weight: normal;
+        font-style: normal;
+        font-size: 20px;
+        line-height: 1;
+        letter-spacing: normal;
+        text-transform: none;
+        display: inline-block;
+        white-space: nowrap;
+        word-wrap: normal;
+        direction: ltr;
+        font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+        font-feature-settings: "liga";
+        -webkit-font-smoothing: antialiased;
+        flex: none;
+      }
+
+      .icon.fill {
+        font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+      }
+
+      code {
+        font-family: var(--font-mono);
+        font-size: 0.9em;
+      }
+
+      /* ── Desktop ─────────────────────────────────────────────────────── */
+      .desktop {
+        position: relative;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 32px;
+        overflow: hidden;
+        isolation: isolate;
+      }
+
+      .desk-court {
+        position: fixed;
+        inset: -18%;
+        width: 136%;
+        height: 136%;
+        opacity: 0.16;
+        transform: rotate(-14deg);
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .desktop::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        background: rgba(2, 5, 3, 0.34);
+        pointer-events: none;
+      }
+
+      /* ── macOS window ────────────────────────────────────────────────── */
+      .window {
+        --sidebar-w: 264px;
+        --inspector-w: 320px;
+        position: relative;
+        z-index: 1;
+        width: min(1440px, calc(100vw - 64px));
+        height: min(900px, calc(100vh - 64px));
+        min-height: 600px;
+        display: grid;
+        grid-template-rows: var(--toolbar-h) minmax(0, 1fr) var(--timeline-h) var(--status-h);
+        background: var(--bg);
+        border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent);
+        border-radius: var(--window-radius);
+        box-shadow: var(--window-shadow);
+        overflow: hidden;
+      }
+
+      .window.hide-library {
+        --sidebar-w: 0px;
+      }
+
+      .window.hide-inspector {
+        --inspector-w: 0px;
+      }
+
+      .window.hide-library .sidebar,
+      .window.hide-inspector .inspector,
+      .window.focus-mode .sidebar,
+      .window.focus-mode .inspector {
+        display: none;
+      }
+
+      .window.focus-mode .workspace {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      /* ── Toolbar ─────────────────────────────────────────────────────── */
+      .toolbar {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 16px;
+        padding: 0 12px;
+        background: color-mix(in oklab, var(--surface) 94%, var(--bg));
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+      }
+
+      .toolbar-left,
+      .toolbar-right {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+      }
+
+      .toolbar-left {
+        gap: 12px;
+      }
+
+      .toolbar-right {
+        gap: 4px;
+        justify-content: flex-end;
+      }
+
+      .traffic {
+        display: flex;
+        gap: 8px;
+        padding-right: 4px;
+        flex: none;
+      }
+
+      .traffic i {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        display: block;
+      }
+
+      .traffic .close {
+        background: #ff5f57;
+      }
+
+      .traffic .min {
+        background: #febc2e;
+      }
+
+      .traffic .max {
+        background: #28c840;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+        flex: none;
+      }
+
+      .mark {
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
+        background: var(--accent);
+        color: var(--accent-on);
+        display: grid;
+        place-items: center;
+        flex: none;
+      }
+
+      .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .breadcrumb .sep {
+        color: var(--border);
+      }
+
+      .breadcrumb strong {
+        font-weight: 500;
+        color: var(--fg-2);
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .command {
+        justify-self: center;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        width: min(380px, 100%);
+        height: 30px;
+        padding: 0 9px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--muted);
+        transition: border-color var(--motion-fast) var(--ease-standard),
+          box-shadow var(--motion-fast) var(--ease-standard);
+      }
+
+      .command:focus-within {
+        border-color: var(--accent);
+        box-shadow: var(--focus-ring);
+      }
+
+      .command .icon {
+        font-size: 16px;
+      }
+
+      .command input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        color: var(--fg);
+        font-size: 12px;
+        outline: none;
+      }
+
+      .command input::placeholder {
+        color: var(--muted);
+      }
+
+      .command kbd {
+        font-family: var(--font-mono);
+        font-size: 9px;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 2px 4px;
+        background: var(--surface);
+        white-space: nowrap;
+      }
+
+      .tool-btn {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        display: inline-grid;
+        place-items: center;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--fg-2);
+        flex: none;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+          color var(--motion-fast) var(--ease-standard);
+      }
+
+      .tool-btn:hover {
+        background: var(--surface-warm);
+        color: var(--fg);
+      }
+
+      .tool-btn[aria-pressed="true"] {
+        background: color-mix(in oklab, var(--accent), transparent 88%);
+        color: var(--accent);
+        border-color: color-mix(in oklab, var(--accent), transparent 60%);
+      }
+
+      .tool-btn .icon {
+        font-size: 18px;
+      }
+
+      .export-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 30px;
+        padding: 0 12px;
+        margin-left: 6px;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        background: var(--accent);
+        color: var(--accent-on);
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        transition: background-color var(--motion-fast) var(--ease-standard);
+      }
+
+      .export-btn:hover {
+        background: var(--accent-hover);
+      }
+
+      .export-btn:active {
+        background: var(--accent-active);
+      }
+
+      .export-btn .icon {
+        font-size: 16px;
+      }
+
+      /* ── Workspace columns ───────────────────────────────────────────── */
+      .workspace {
+        display: grid;
+        grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--inspector-w);
+        min-height: 0;
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      /* ── Sidebar ─────────────────────────────────────────────────────── */
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        background: color-mix(in oklab, var(--surface) 96%, var(--bg));
+        border-right: 1px solid var(--border);
+      }
+
+      .sidebar-head {
+        padding: 14px 14px 10px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      .workspace-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .workspace-title h1 {
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+      }
+
+      .workspace-sub {
+        margin-top: 3px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+      }
+
+      .sidebar-section {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 12px 6px;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .sidebar-list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 0 6px 8px;
+      }
+
+      .video-item {
+        display: grid;
+        grid-template-columns: 52px minmax(0, 1fr) auto;
+        gap: 9px;
+        align-items: center;
+        width: 100%;
+        padding: 7px;
+        border: 1px solid transparent;
+        border-radius: 9px;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        min-width: 0;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+          border-color var(--motion-fast) var(--ease-standard);
+      }
+
+      .video-item:hover {
+        background: var(--surface-warm);
+      }
+
+      .video-item[aria-current="true"] {
+        background: var(--surface-warm);
+        border-color: var(--border);
+      }
+
+      .video-thumb {
+        position: relative;
+        width: 52px;
+        aspect-ratio: 16 / 9;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: #0c3b2a;
+        overflow: hidden;
+        flex: none;
+      }
+
+      .video-thumb::before {
+        content: "";
+        position: absolute;
+        inset: 4px 8px;
+        border: 1px solid rgba(233, 242, 234, 0.3);
+      }
+
+      .video-thumb::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 4px;
+        bottom: 4px;
+        border-left: 1px dashed rgba(233, 242, 234, 0.28);
+      }
+
+      .video-thumb.missing {
+        display: grid;
+        place-items: center;
+        background: var(--surface-warm);
+        border-style: dashed;
+      }
+
+      .video-thumb.missing::before,
+      .video-thumb.missing::after {
+        display: none;
+      }
+
+      .video-thumb.missing .icon {
+        font-size: 15px;
+        color: var(--danger);
+      }
+
+      .video-dur {
+        position: absolute;
+        right: 2px;
+        bottom: 2px;
+        z-index: 1;
+        padding: 0 3px;
+        border-radius: 2px;
+        background: rgba(4, 10, 7, 0.75);
+        color: #f2f5f0;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        line-height: 1.5;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .video-copy {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+
+      .video-title {
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.35;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .video-meta {
+        font-size: 10px;
+        line-height: 1.4;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .video-end {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: none;
+      }
+
+      .video-score {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+        color: var(--fg-2);
+        white-space: nowrap;
+      }
+
+      .video-end .icon {
+        font-size: 13px;
+        color: var(--accent);
+      }
+
+      .video-end .icon.alert {
+        color: var(--danger);
+      }
+
+      .sidebar-empty {
+        display: grid;
+        justify-items: center;
+        gap: 6px;
+        text-align: center;
+        padding: 28px 16px;
+      }
+
+      .sidebar-empty .icon {
+        font-size: 24px;
+        color: var(--muted);
+      }
+
+      .sidebar-empty p {
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .sidebar-empty span {
+        font-size: 11px;
+        color: var(--muted);
+        max-width: 26ch;
+      }
+
+      .sidebar-empty button {
+        margin-top: 4px;
+        border: 0;
+        background: transparent;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      .sidebar-foot {
+        padding: 10px;
+        border-top: 1px solid var(--border-soft);
+      }
+
+      .import-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        height: 32px;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--surface);
+        color: var(--fg);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .import-btn:hover {
+        background: var(--surface-warm);
+      }
+
+      .import-btn .icon {
+        font-size: 16px;
+      }
+
+      .sidebar-count {
+        margin-top: 8px;
+        text-align: center;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+      }
+
+      /* ── Preview ─────────────────────────────────────────────────────── */
+      .preview {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        background: var(--bg);
+      }
+
+      .preview-head {
+        height: 42px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 14px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      .preview-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .preview-title h2 {
+        font-family: var(--font-body);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--fg-2);
+        white-space: nowrap;
+      }
+
+      .preview-title .chip {
+        display: inline-flex;
+        align-items: center;
+        height: 20px;
+        padding: 0 7px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .preview-meta {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        letter-spacing: 0.03em;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .preview-stage {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        background: var(--stage);
+        overflow: hidden;
+        isolation: isolate;
+      }
+
+      .preview-stage .court {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .preview-stage::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        background: linear-gradient(
+          180deg,
+          rgba(4, 10, 7, 0.55) 0%,
+          rgba(4, 10, 7, 0.06) 28%,
+          rgba(4, 10, 7, 0.02) 62%,
+          rgba(4, 10, 7, 0.62) 100%
+        );
+        pointer-events: none;
+      }
+
+      /* ── Score bug ───────────────────────────────────────────────────── */
+      .bug {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 18px 20px 78px;
+        color: var(--stage-ink);
+      }
+
+      .bug-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .bug-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .bug-brand::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 1px;
+        background: var(--stage-signal);
+      }
+
+      .bug-meta {
+        color: rgba(242, 245, 240, 0.58);
+      }
+
+      .bug-live {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: rgba(242, 245, 240, 0.8);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .bug-live i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--stage-signal);
+        flex: none;
+      }
+
+      .bug-score {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: end;
+        gap: 16px;
+        max-width: 560px;
+        margin: 0 auto;
+        width: 100%;
+      }
+
+      .bug-side {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .bug-side.right {
+        align-items: flex-end;
+        text-align: right;
+      }
+
+      .bug-tag {
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(242, 245, 240, 0.58);
+      }
+
+      .bug-num {
+        font-family: var(--font-display);
+        font-size: clamp(44px, 6vw, 72px);
+        font-weight: 700;
+        line-height: 0.82;
+        letter-spacing: -0.045em;
+        font-variant-numeric: tabular-nums;
+        color: var(--stage-ink);
+      }
+
+      .bug-side.serving .bug-tag {
+        color: var(--stage-signal);
+      }
+
+      .bug-side.serving .bug-num {
+        border-bottom: 2px solid var(--stage-signal);
+        padding-bottom: 6px;
+      }
+
+      .bug-colon {
+        font-family: var(--font-display);
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1;
+        color: rgba(242, 245, 240, 0.38);
+        padding-bottom: 9px;
+      }
+
+      .bug-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .bug-serve {
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--stage-signal);
+        border: 1px solid rgba(70, 208, 141, 0.42);
+        border-radius: var(--radius-pill);
+        padding: 3px 7px;
+        white-space: nowrap;
+      }
+
+      .bug-time {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        color: rgba(242, 245, 240, 0.68);
+        white-space: nowrap;
+      }
+
+      /* ── Floating transport ──────────────────────────────────────────── */
+      .floating-transport {
+        position: absolute;
+        left: 50%;
+        bottom: 14px;
+        transform: translateX(-50%);
+        z-index: 4;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        width: min(680px, calc(100% - 40px));
+        padding: 7px 10px;
+        border: 1px solid rgba(242, 245, 240, 0.16);
+        border-radius: 12px;
+        background: rgba(10, 16, 12, 0.9);
+        color: var(--stage-ink);
+        box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+        color-scheme: dark;
+      }
+
+      .stage-btn {
+        display: inline-grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: rgba(242, 245, 240, 0.72);
+        flex: none;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+          color var(--motion-fast) var(--ease-standard);
+      }
+
+      .stage-btn:hover {
+        background: rgba(242, 245, 240, 0.1);
+        color: var(--stage-ink);
+      }
+
+      .stage-btn.play {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--stage-signal);
+        color: #04140c;
+      }
+
+      .stage-btn.play:hover {
+        background: #63dfa4;
+        color: #04140c;
+      }
+
+      .stage-btn .icon {
+        font-size: 17px;
+      }
+
+      .stage-btn.play .icon {
+        font-size: 19px;
+      }
+
+      .transport-time {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: rgba(242, 245, 240, 0.86);
+      }
+
+      .transport-dur {
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: rgba(242, 245, 240, 0.42);
+      }
+
+      .seek {
+        flex: 1;
+        min-width: 60px;
+        height: 4px;
+        margin: 0 2px;
+        accent-color: var(--stage-signal);
+        cursor: pointer;
+      }
+
+      /* ── Missing recording ───────────────────────────────────────────── */
+      .missing-state {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+        text-align: center;
+        background: rgba(5, 9, 6, 0.88);
+      }
+
+      .missing-inner {
+        display: grid;
+        justify-items: center;
+        gap: 8px;
+        max-width: 340px;
+      }
+
+      .missing-inner .icon {
+        font-size: 30px;
+        color: var(--danger);
+      }
+
+      .missing-inner h3 {
+        font-family: var(--font-display);
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--stage-ink);
+      }
+
+      .missing-inner p {
+        font-size: 12px;
+        line-height: 1.5;
+        color: rgba(242, 245, 240, 0.62);
+      }
+
+      .missing-inner .btn {
+        margin-top: 6px;
+      }
+
+      /* ── Inspector ───────────────────────────────────────────────────── */
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        background: var(--surface);
+        border-left: 1px solid var(--border);
+      }
+
+      .inspector-head {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border-soft);
+        flex: none;
+      }
+
+      .inspector-tabs {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 2px;
+        padding: 3px;
+        border: 1px solid var(--border-soft);
+        border-radius: 8px;
+        background: var(--bg);
+      }
+
+      .inspector-tabs button {
+        height: 26px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .inspector-tabs button:hover {
+        color: var(--fg);
+      }
+
+      .inspector-tabs button[aria-selected="true"] {
+        background: var(--surface);
+        color: var(--fg);
+        box-shadow: var(--elev-ring);
+      }
+
+      .inspector-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 14px;
+      }
+
+      .insp-section {
+        margin: 16px 0 8px;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .insp-section:first-child {
+        margin-top: 0;
+      }
+
+      .insp-score {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: end;
+        gap: 10px;
+        padding: 10px 0 12px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      .insp-side {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+      }
+
+      .insp-side.right {
+        align-items: flex-end;
+        text-align: right;
+      }
+
+      .insp-label {
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .insp-num {
+        font-family: var(--font-display);
+        font-size: 52px;
+        font-weight: 700;
+        line-height: 0.84;
+        letter-spacing: -0.04em;
+        font-variant-numeric: tabular-nums;
+        color: var(--fg);
+      }
+
+      .insp-side.serving .insp-label {
+        color: var(--accent);
+      }
+
+      .insp-side.serving .insp-num {
+        border-bottom: 2px solid var(--accent);
+        padding-bottom: 4px;
+      }
+
+      .insp-colon {
+        font-family: var(--font-display);
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--muted);
+        padding-bottom: 8px;
+      }
+
+      .serving-line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 9px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .serving-line .dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--accent);
+        margin-right: 5px;
+      }
+
+      .winner-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-top: 12px;
+      }
+
+      .winner-btn {
+        height: 34px;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--surface);
+        color: var(--fg);
+        font-size: 12px;
+        font-weight: 600;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+          border-color var(--motion-fast) var(--ease-standard);
+      }
+
+      .winner-btn:hover {
+        background: var(--surface-warm);
+        border-color: var(--muted);
+      }
+
+      .winner-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .insp-help {
+        margin-top: 8px;
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .insp-rally {
+        display: grid;
+        grid-template-columns: 26px 44px minmax(0, 1fr) 20px;
+        gap: 6px;
+        align-items: center;
+        width: 100%;
+        padding: 7px 4px;
+        border: 0;
+        border-bottom: 1px solid var(--border-soft);
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        font-size: 11px;
+      }
+
+      .insp-rally:hover {
+        background: var(--surface-warm);
+      }
+
+      .insp-rally:last-child {
+        border-bottom: 0;
+      }
+
+      .insp-rally .num {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      .insp-rally .time {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+        color: var(--fg-2);
+      }
+
+      .insp-rally .tag {
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .insp-rally .side {
+        font-family: var(--font-display);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--accent);
+        text-align: right;
+      }
+
+      .clip-headline {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .clip-headline h3 {
+        font-family: var(--font-display);
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .clip-headline .dur {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .clip-range {
+        margin-top: 4px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+      }
+
+      .meta-list {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 6px 12px;
+        margin-top: 12px;
+        font-size: 11px;
+      }
+
+      .meta-list dt {
+        color: var(--muted);
+      }
+
+      .meta-list dd {
+        margin: 0;
+        color: var(--fg-2);
+        text-align: right;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 10px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        height: 20px;
+        padding: 0 7px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .switch {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 34px;
+        margin-top: 14px;
+        font-size: 12px;
+        color: var(--fg-2);
+        cursor: pointer;
+      }
+
+      .switch input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .switch-track {
+        position: relative;
+        width: 34px;
+        height: 19px;
+        border-radius: var(--radius-pill);
+        background: var(--border);
+        transition: background-color var(--motion-fast) var(--ease-standard);
+        flex: none;
+      }
+
+      .switch-track::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: var(--surface);
+        transition: transform var(--motion-fast) var(--ease-standard);
+      }
+
+      .switch input:checked + .switch-track {
+        background: var(--accent);
+      }
+
+      .switch input:checked + .switch-track::after {
+        transform: translateX(15px);
+      }
+
+      .switch input:focus-visible + .switch-track {
+        box-shadow: var(--focus-ring);
+      }
+
+      .empty-inspector {
+        display: grid;
+        justify-items: center;
+        gap: 6px;
+        padding: 28px 12px;
+        text-align: center;
+      }
+
+      .empty-inspector .icon {
+        font-size: 26px;
+        color: var(--muted);
+      }
+
+      .empty-inspector p {
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .empty-inspector span {
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--muted);
+        max-width: 26ch;
+      }
+
+      .inspector-foot {
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 12px;
+        border-top: 1px solid var(--border-soft);
+      }
+
+      .reel-summary {
+        min-width: 0;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        letter-spacing: 0.03em;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .reel-summary strong {
+        display: block;
+        font-family: var(--font-body);
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--fg-2);
+        letter-spacing: 0;
+      }
+
+      .mini-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 28px;
+        padding: 0 9px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--fg-2);
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+        flex: none;
+      }
+
+      .mini-btn:hover {
+        background: var(--surface-warm);
+        color: var(--fg);
+      }
+
+      .export-btn:disabled,
+      .mini-btn:disabled,
+      .stage-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .export-btn:disabled:hover {
+        background: var(--accent);
+      }
+
+      .mini-btn .icon {
+        font-size: 15px;
+      }
+
+      /* ── Timeline dock ───────────────────────────────────────────────── */
+      .timeline-dock {
+        display: grid;
+        grid-template-rows: 34px minmax(0, 1fr);
+        min-width: 0;
+        min-height: 0;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+      }
+
+      .timeline-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      .timeline-title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--fg-2);
+      }
+
+      .timeline-title .icon {
+        font-size: 15px;
+        color: var(--muted);
+      }
+
+      .timeline-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        letter-spacing: 0.03em;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .timeline-meta .chip {
+        display: inline-flex;
+        align-items: center;
+        height: 18px;
+        padding: 0 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        color: var(--muted);
+        font-size: 9px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .timeline-body {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        min-width: 0;
+        min-height: 0;
+      }
+
+      .track-labels {
+        display: grid;
+        grid-template-rows: 24px 44px 32px;
+        border-right: 1px solid var(--border-soft);
+        background: var(--surface);
+      }
+
+      .track-label {
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--border-soft);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .track-label:first-child {
+        color: var(--fg-2);
+      }
+
+      .track-area {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        background: var(--bg);
+        overflow: hidden;
+        cursor: crosshair;
+      }
+
+      .ruler {
+        position: relative;
+        height: 24px;
+        border-bottom: 1px solid var(--border-soft);
+        background: var(--surface);
+      }
+
+      .ruler span {
+        position: absolute;
+        top: 4px;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        white-space: nowrap;
+        transform: translateX(-50%);
+      }
+
+      .ruler span:first-child {
+        transform: none;
+      }
+
+      .ruler span:last-child {
+        transform: translateX(-100%);
+      }
+
+      .track {
+        position: relative;
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      .track.rallies {
+        height: 44px;
+        background: color-mix(in oklab, var(--surface-warm), transparent 35%);
+      }
+
+      .track.score {
+        height: 32px;
+        background: var(--bg);
+      }
+
+      .rally-seg {
+        position: absolute;
+        top: 8px;
+        height: 26px;
+        min-width: 14px;
+        padding: 0 2px;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        background: var(--surface);
+        color: var(--fg-2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        overflow: hidden;
+        white-space: nowrap;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 600;
+        transition: border-color var(--motion-fast) var(--ease-standard),
+          background-color var(--motion-fast) var(--ease-standard);
+      }
+
+      .rally-seg:hover {
+        border-color: var(--muted);
+        background: var(--surface-warm);
+      }
+
+      .rally-seg.kept {
+        background: color-mix(in oklab, var(--accent), transparent 68%);
+        border-color: color-mix(in oklab, var(--accent), transparent 50%);
+        color: var(--fg);
+      }
+
+      .rally-seg.kept:hover {
+        background: color-mix(in oklab, var(--accent), transparent 58%);
+      }
+
+      .rally-seg[aria-pressed="true"] {
+        outline: 2px solid var(--fg);
+        outline-offset: 1px;
+        z-index: 2;
+      }
+
+      .rally-seg .icon {
+        font-size: 10px;
+      }
+
+      .score-chip {
+        position: absolute;
+        top: 6px;
+        transform: translateX(-50%);
+        min-width: 18px;
+        height: 18px;
+        padding: 0 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--surface);
+        color: var(--fg-2);
+        display: grid;
+        place-items: center;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 600;
+      }
+
+      .score-chip.left {
+        border-color: color-mix(in oklab, var(--accent), transparent 55%);
+        color: var(--accent);
+      }
+
+      .playhead-line {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: var(--accent);
+        z-index: 4;
+        pointer-events: none;
+      }
+
+      .playhead-line::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -4px;
+        width: 9px;
+        height: 7px;
+        border-radius: 2px;
+        background: var(--accent);
+      }
+
+      .timeline-empty {
+        position: absolute;
+        inset: 24px 0 0;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      /* ── Status bar ──────────────────────────────────────────────────── */
+      .statusbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        height: var(--status-h);
+        padding: 0 12px;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        letter-spacing: 0.03em;
+        color: var(--muted);
+        white-space: nowrap;
+        min-width: 0;
+      }
+
+      .status-left,
+      .status-right {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+      }
+
+      .status-right {
+        margin-left: auto;
+      }
+
+      .status-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .status-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--accent);
+        flex: none;
+      }
+
+      .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 18px;
+        padding: 0 6px;
+        border: 1px solid color-mix(in oklab, var(--accent), transparent 55%);
+        border-radius: var(--radius-pill);
+        color: var(--accent);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      /* ── Buttons and fields ──────────────────────────────────────────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 34px;
+        padding: 0 13px;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1;
+        white-space: nowrap;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+          border-color var(--motion-fast) var(--ease-standard),
+          color var(--motion-fast) var(--ease-standard);
+      }
+
+      .btn .icon {
+        font-size: 16px;
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+
+      .btn-primary:hover {
+        background: var(--accent-hover);
+      }
+
+      .btn-secondary {
+        background: var(--surface);
+        color: var(--fg);
+        border-color: var(--border);
+      }
+
+      .btn-secondary:hover {
+        background: var(--surface-warm);
+      }
+
+      .btn-ghost {
+        background: transparent;
+        color: var(--fg-2);
+      }
+
+      .btn-ghost:hover {
+        background: var(--surface-warm);
+        color: var(--fg);
+      }
+
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .field {
+        display: grid;
+        gap: 5px;
+      }
+
+      .field + .field {
+        margin-top: 12px;
+      }
+
+      .field > label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--fg-2);
+      }
+
+      .field input[type="text"],
+      .field select {
+        width: 100%;
+        height: 34px;
+        padding: 0 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--fg);
+        font-size: 12px;
+      }
+
+      .field input:focus,
+      .field select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: var(--focus-ring);
+      }
+
+      .field .hint {
+        font-size: 10px;
+        color: var(--muted);
+      }
+
+      .field.error input {
+        border-color: var(--danger);
+      }
+
+      .field.error .hint {
+        color: var(--danger);
+      }
+
+      .check-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--fg-2);
+      }
+
+      .check-row + .check-row {
+        margin-top: 8px;
+      }
+
+      .check-row input {
+        width: 15px;
+        height: 15px;
+        margin: 1px 0 0;
+        accent-color: var(--accent);
+        flex: none;
+      }
+
+      /* ── Export sheet ────────────────────────────────────────────────── */
+      .sheet {
+        width: min(440px, calc(100vw - 32px));
+        max-height: calc(100vh - 32px);
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface);
+        color: var(--fg);
+        box-shadow: var(--elev-raised);
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+
+      .sheet::backdrop {
+        background: rgba(2, 6, 3, 0.66);
+      }
+
+      .sheet-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      .sheet-head h2 {
+        font-family: var(--font-display);
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .sheet-close {
+        width: 26px;
+        height: 26px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted);
+      }
+
+      .sheet-close:hover {
+        background: var(--surface-warm);
+        color: var(--fg);
+      }
+
+      .sheet-close .icon {
+        font-size: 17px;
+      }
+
+      .sheet-body {
+        padding: 16px;
+      }
+
+      .sheet-summary {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1px;
+        margin: 14px 0;
+        border: 1px solid var(--border-soft);
+        border-radius: 7px;
+        background: var(--border-soft);
+        overflow: hidden;
+      }
+
+      .sheet-summary > div {
+        background: var(--surface-warm);
+        padding: 9px;
+        min-width: 0;
+      }
+
+      .sheet-summary strong {
+        display: block;
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .sheet-summary span {
+        font-size: 9px;
+        color: var(--muted);
+      }
+
+      .sheet-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 7px;
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-soft);
+      }
+
+      .export-progress {
+        display: grid;
+        gap: 8px;
+      }
+
+      .export-progress p {
+        font-size: 12px;
+        color: var(--fg-2);
+      }
+
+      .progress-track {
+        height: 5px;
+        border-radius: var(--radius-pill);
+        background: var(--surface-warm);
+        overflow: hidden;
+      }
+
+      .progress-track span {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: inherit;
+        background: var(--accent);
+        transition: width 1.2s linear;
+      }
+
+      .progress-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        color: var(--muted);
+      }
+
+      .export-success {
+        display: grid;
+        justify-items: center;
+        gap: 7px;
+        padding: 8px 0 2px;
+        text-align: center;
+      }
+
+      .export-success .icon {
+        font-size: 30px;
+        color: var(--success);
+      }
+
+      .export-success h3 {
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .export-success p {
+        max-width: 32ch;
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .export-success .btn {
+        margin-top: 4px;
+      }
+
+      /* ── Toast ───────────────────────────────────────────────────────── */
+      .toast {
+        position: absolute;
+        left: 50%;
+        bottom: 42px;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        max-width: min(420px, calc(100% - 24px));
+        padding: 9px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: var(--elev-raised);
+        font-size: 12px;
+        color: var(--fg-2);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateX(-50%) translateY(6px);
+        transition: opacity var(--motion-fast) var(--ease-standard),
+          transform var(--motion-fast) var(--ease-standard);
+      }
+
+      .toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      .toast .icon {
+        font-size: 17px;
+        color: var(--success);
+      }
+
+      .toast.error .icon {
+        color: var(--danger);
+      }
+
+      /* ── Responsive ──────────────────────────────────────────────────── */
+      @media (max-width: 1200px) {
+        .window {
+          --sidebar-w: 240px;
+          --inspector-w: 292px;
+        }
+      }
+
+      @media (max-width: 1040px) {
+        .window {
+          --sidebar-w: 222px;
+          --inspector-w: 270px;
+        }
+
+        .command {
+          width: min(280px, 100%);
+        }
+
+        .breadcrumb {
+          display: none;
+        }
+
+        .transport-dur {
+          display: none;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .desktop {
+          padding: 16px;
+        }
+
+        .command {
+          display: none;
+        }
+
+        .window {
+          width: calc(100vw - 32px);
+          height: calc(100vh - 32px);
+          min-height: 560px;
+        }
+      }
+
+      @media (max-width: 860px) {
+        body {
+          overflow: auto;
+        }
+
+        .desktop {
+          display: block;
+          padding: 0;
+          overflow: visible;
+        }
+
+        .desk-court,
+        .desktop::after {
+          display: none;
+        }
+
+        .window {
+          width: 100%;
+          height: auto;
+          min-height: 100vh;
+          border: 0;
+          border-radius: 0;
+          grid-template-rows: var(--toolbar-h) auto 150px var(--status-h);
+          overflow: visible;
+        }
+
+        .workspace {
+          grid-template-columns: minmax(0, 1fr);
+          overflow: visible;
+        }
+
+        .sidebar {
+          max-height: 224px;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-list {
+          display: flex;
+          flex-direction: row;
+          gap: 4px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding: 0 8px 10px;
+        }
+
+        .video-item {
+          min-width: 216px;
+          border: 1px solid var(--border-soft);
+        }
+
+        .sidebar-foot {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .import-btn {
+          width: auto;
+          padding: 0 12px;
+        }
+
+        .sidebar-count {
+          margin: 0;
+          text-align: left;
+        }
+
+        .preview {
+          min-height: 430px;
+        }
+
+        .preview-stage {
+          min-height: 310px;
+        }
+
+        .inspector {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+
+        .inspector-body {
+          max-height: 340px;
+        }
+
+        .toolbar {
+          grid-template-columns: auto minmax(0, 1fr) auto;
+        }
+
+        .rail-toggle {
+          display: none;
+        }
+
+        .timeline-body {
+          grid-template-columns: 90px minmax(0, 1fr);
+        }
+
+        .track-label {
+          padding: 0 8px;
+          font-size: 9px;
+        }
+
+        .status-hide-sm {
+          display: none;
+        }
+
+        .toast {
+          position: fixed;
+          bottom: 20px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .traffic {
+          gap: 6px;
+        }
+
+        .traffic i {
+          width: 10px;
+          height: 10px;
+        }
+
+        .brand {
+          font-size: 12px;
+        }
+
+        .toolbar {
+          gap: 8px;
+          padding: 0 8px;
+        }
+
+        .export-btn span:last-child {
+          display: none;
+        }
+
+        .export-btn {
+          width: 30px;
+          padding: 0;
+          margin-left: 2px;
+        }
+
+        .preview {
+          min-height: 360px;
+        }
+
+        .preview-stage {
+          min-height: 250px;
+        }
+
+        .bug {
+          padding: 14px 14px 70px;
+        }
+
+        .bug-meta {
+          display: none;
+        }
+
+        .floating-transport {
+          width: calc(100% - 20px);
+          gap: 4px;
+          padding: 6px 8px;
+        }
+
+        .transport-dur {
+          display: none;
+        }
+
+        .seek {
+          min-width: 40px;
+        }
+
+        .timeline-meta .chip {
+          display: none;
+        }
+
+        .statusbar {
+          padding: 0 8px;
+          gap: 8px;
+        }
+
+        .status-left,
+        .status-right {
+          gap: 8px;
+        }
+
+        .status-hide-xs {
+          display: none;
+        }
+      }
+
+      @media (max-width: 400px) {
+        .status-left {
+          display: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .video-item,
+        .tool-btn,
+        .export-btn,
+        .stage-btn,
+        .rally-seg,
+        .winner-btn,
+        .switch-track,
+        .switch-track::after,
+        .progress-track span,
+        .toast {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" aria-hidden="true" focusable="false" style="position: absolute">
+      <defs>
+        <symbol id="court" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid slice">
+          <rect width="640" height="400" fill="#0c3b2a" />
+          <ellipse cx="320" cy="200" rx="320" ry="200" fill="#ffffff" opacity="0.04" />
+          <g fill="none" stroke="#e9f2ea" stroke-width="1.5">
+            <rect x="70" y="50" width="500" height="300" stroke-opacity="0.34" />
+            <line x1="70" y1="76" x2="570" y2="76" stroke-opacity="0.18" />
+            <line x1="70" y1="324" x2="570" y2="324" stroke-opacity="0.18" />
+            <line x1="190" y1="50" x2="190" y2="350" stroke-opacity="0.18" />
+            <line x1="450" y1="50" x2="450" y2="350" stroke-opacity="0.18" />
+            <line x1="98" y1="50" x2="98" y2="350" stroke-opacity="0.11" />
+            <line x1="542" y1="50" x2="542" y2="350" stroke-opacity="0.11" />
+            <line x1="320" y1="50" x2="320" y2="350" stroke-opacity="0.24" stroke-dasharray="6 7" />
+            <line x1="70" y1="200" x2="190" y2="200" stroke-opacity="0.18" />
+            <line x1="450" y1="200" x2="570" y2="200" stroke-opacity="0.18" />
+          </g>
+          <circle cx="320" cy="200" r="3" fill="#46d08d" opacity="0.55" />
+        </symbol>
+      </defs>
+    </svg>
+
+    <svg class="desk-court" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <use href="#court"></use>
+    </svg>
+
+    <div class="desktop">
+      <div class="window" id="app-window">
+        <header class="toolbar">
+          <div class="toolbar-left">
+            <div class="traffic" aria-hidden="true">
+              <i class="close"></i><i class="min"></i><i class="max"></i>
+            </div>
+            <span class="brand">
+              <span class="mark" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2">
+                  <rect x="1.5" y="2.5" width="11" height="9" />
+                  <path d="M7 2.5v9M4 2.5v9M10 2.5v9" stroke-dasharray="1.5 1.5" />
+                </svg>
+              </span>
+              <span>Sportcut</span>
+            </span>
+            <span class="breadcrumb" aria-hidden="true">
+              <span class="sep">/</span>
+              <strong id="breadcrumb-match">Club session · Court 3</strong>
+            </span>
+          </div>
+
+          <div class="command">
+            <span class="icon" aria-hidden="true">search</span>
+            <label class="sr-only" for="video-search">Search videos</label>
+            <input id="video-search" type="search" placeholder="Search videos" autocomplete="off" spellcheck="false" />
+            <kbd>⌘K</kbd>
+          </div>
+
+          <div class="toolbar-right">
+            <button class="tool-btn rail-toggle" id="toggle-library" type="button" aria-pressed="true" aria-label="Toggle library" title="Toggle library">
+              <span class="icon" aria-hidden="true">left_panel_close</span>
+            </button>
+            <button class="tool-btn" id="toggle-focus" type="button" aria-pressed="false" aria-label="Focus mode" title="Focus mode (F)">
+              <span class="icon" aria-hidden="true">fullscreen</span>
+            </button>
+            <button class="tool-btn rail-toggle" id="toggle-inspector" type="button" aria-pressed="true" aria-label="Toggle inspector" title="Toggle inspector">
+              <span class="icon" aria-hidden="true">right_panel_close</span>
+            </button>
+            <button class="export-btn" id="open-export" type="button" aria-label="Export highlight reel" title="Export highlight reel">
+              <span class="icon" aria-hidden="true">download</span>
+              <span>Export</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="workspace">
+          <aside class="sidebar" aria-label="Video library">
+            <div class="sidebar-head">
+              <div class="workspace-title">
+                <h1>Club session</h1>
+              </div>
+              <p class="workspace-sub" id="workspace-sub">3 videos · 1 missing</p>
+            </div>
+            <div class="sidebar-section">
+              <span>Videos</span>
+              <span id="video-count">3</span>
+            </div>
+            <div class="sidebar-list" id="video-list" aria-label="Videos">
+              <button class="video-item" type="button" data-video="court3" aria-current="true">
+                <span class="video-thumb"><span class="video-dur">42:17</span></span>
+                <span class="video-copy">
+                  <span class="video-title">Club session · Court 3</span>
+                  <span class="video-meta">1080p · Imported 12 Oct</span>
+                </span>
+                <span class="video-end">
+                  <span class="icon" aria-hidden="true">check_circle</span>
+                  <span class="video-score">18–16</span>
+                </span>
+              </button>
+              <button class="video-item" type="button" data-video="court1">
+                <span class="video-thumb"><span class="video-dur">38:04</span></span>
+                <span class="video-copy">
+                  <span class="video-title">Club session · Court 1</span>
+                  <span class="video-meta">1080p · Imported 12 Oct</span>
+                </span>
+                <span class="video-end">
+                  <span class="video-score">21–19</span>
+                </span>
+              </button>
+              <button class="video-item" type="button" data-video="finals">
+                <span class="video-thumb missing"><span class="icon" aria-hidden="true">error</span></span>
+                <span class="video-copy">
+                  <span class="video-title">Finals · Court 2</span>
+                  <span class="video-meta">Recording missing</span>
+                </span>
+                <span class="video-end">
+                  <span class="icon alert" aria-hidden="true">error</span>
+                </span>
+              </button>
+            </div>
+            <div class="sidebar-foot">
+              <button class="import-btn" id="import-video" type="button">
+                <span class="icon" aria-hidden="true">add</span>Import video
+              </button>
+              <input id="import-input" type="file" accept="video/*" hidden />
+              <p class="sidebar-count" id="sidebar-count">3 videos · 1 missing</p>
+            </div>
+          </aside>
+
+          <main class="preview" aria-label="Match preview">
+            <div class="preview-head">
+              <div class="preview-title">
+                <h2>Preview</h2>
+                <span class="chip" id="preview-resolution">1080p</span>
+              </div>
+              <div class="preview-meta">
+                <span id="preview-fps">29.97 fps</span>
+                <span aria-hidden="true">·</span>
+                <span>On-device</span>
+              </div>
+            </div>
+
+            <div class="preview-stage" id="preview-stage">
+              <svg class="court" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                <use href="#court"></use>
+              </svg>
+
+              <div class="bug" id="score-bug">
+                <div class="bug-top">
+                  <span class="bug-brand">Sportcut</span>
+                  <span class="bug-meta" id="bug-rally">Rally 14 / 32</span>
+                  <span class="bug-live"><i></i><span id="bug-time">00:42:17</span></span>
+                </div>
+                <div class="bug-score">
+                  <div class="bug-side serving" id="bug-left">
+                    <span class="bug-tag">L · Left side</span>
+                    <span class="bug-num" id="bug-left-num">18</span>
+                  </div>
+                  <div class="bug-colon">:</div>
+                  <div class="bug-side right" id="bug-right">
+                    <span class="bug-tag">R · Right side</span>
+                    <span class="bug-num" id="bug-right-num">16</span>
+                  </div>
+                </div>
+                <div class="bug-foot">
+                  <span class="bug-serve" id="bug-serve">Serve L</span>
+                  <span class="bug-time" id="bug-rally-time">Rally 14 · 0:42</span>
+                </div>
+              </div>
+
+              <div class="floating-transport" role="group" aria-label="Playback controls">
+                <button class="stage-btn" id="skip-back" type="button" aria-label="Back 5 seconds" title="Back 5 seconds">
+                  <span class="icon" aria-hidden="true">replay_5</span>
+                </button>
+                <button class="stage-btn play" id="play-toggle" type="button" aria-label="Play" title="Play or pause (Space)">
+                  <span class="icon fill" id="play-icon" aria-hidden="true">play_arrow</span>
+                </button>
+                <button class="stage-btn" id="skip-forward" type="button" aria-label="Forward 5 seconds" title="Forward 5 seconds">
+                  <span class="icon" aria-hidden="true">forward_5</span>
+                </button>
+                <span class="transport-time" id="transport-time">00:42:17</span>
+                <input class="seek" id="seek" type="range" min="0" max="3511" step="1" value="2537" aria-label="Seek through the match" />
+                <span class="transport-dur" id="transport-dur">00:58:31</span>
+              </div>
+
+              <div class="missing-state" id="missing-state" hidden>
+                <div class="missing-inner">
+                  <span class="icon" aria-hidden="true">error</span>
+                  <h3>Recording missing</h3>
+                  <p>This file moved. Locate it to restore the score, rallies, and clips.</p>
+                  <button class="btn btn-secondary" id="locate-file" type="button">
+                    <span class="icon" aria-hidden="true">folder_open</span>Locate file
+                  </button>
+                  <input id="locate-input" type="file" accept="video/*" hidden />
+                </div>
+              </div>
+            </div>
+          </main>
+
+          <aside class="inspector" aria-label="Inspector">
+            <div class="inspector-head">
+              <div class="inspector-tabs" role="tablist" aria-label="Inspector sections">
+                <button role="tab" id="tab-rally" type="button" aria-selected="true" aria-controls="panel-rally" tabindex="0">Rally</button>
+                <button role="tab" id="tab-clip" type="button" aria-selected="false" aria-controls="panel-clip" tabindex="-1">Clip</button>
+              </div>
+            </div>
+
+            <div class="inspector-body">
+              <section id="panel-rally" role="tabpanel" aria-labelledby="tab-rally" tabindex="0">
+                <p class="insp-section" id="insp-rally-label">Game 2 · Rally 14</p>
+                <div class="insp-score">
+                  <div class="insp-side serving" id="insp-left">
+                    <span class="insp-label">L · Left</span>
+                    <span class="insp-num" id="insp-left-num">18</span>
+                  </div>
+                  <div class="insp-colon">:</div>
+                  <div class="insp-side right" id="insp-right">
+                    <span class="insp-label">R · Right</span>
+                    <span class="insp-num" id="insp-right-num">16</span>
+                  </div>
+                </div>
+                <div class="serving-line">
+                  <span class="status-item"><span class="dot"></span><span id="serving-text">L serving</span></span>
+                  <span id="insp-score-note">18–16</span>
+                </div>
+                <div class="winner-row">
+                  <button class="winner-btn" id="score-l" type="button">L won</button>
+                  <button class="winner-btn" id="score-r" type="button">R won</button>
+                </div>
+                <p class="insp-help">One tap updates the score and serving side. The timeline follows.</p>
+                <p class="insp-section">Last rallies</p>
+                <div id="rally-list">
+                  <button class="insp-rally" type="button" data-rally-id="14">
+                    <span class="num">14</span><span class="time">0:42</span><span class="tag">Long rally</span><span class="side">L</span>
+                  </button>
+                  <button class="insp-rally" type="button" data-rally-id="13">
+                    <span class="num">13</span><span class="time">0:21</span><span class="tag">Net error</span><span class="side">R</span>
+                  </button>
+                  <button class="insp-rally" type="button" data-rally-id="12">
+                    <span class="num">12</span><span class="time">0:33</span><span class="tag">Smash winner</span><span class="side">L</span>
+                  </button>
+                </div>
+              </section>
+
+              <section id="panel-clip" role="tabpanel" aria-labelledby="tab-clip" tabindex="0" hidden>
+                <div class="clip-headline">
+                  <h3 id="clip-title">Rally 14</h3>
+                  <span class="dur" id="clip-dur">0:42</span>
+                </div>
+                <p class="clip-range" id="clip-range">42:17 – 42:59</p>
+                <dl class="meta-list">
+                  <dt>Winner</dt>
+                  <dd id="clip-winner">Left</dd>
+                  <dt>Score after</dt>
+                  <dd id="clip-score">18–16</dd>
+                  <dt>Type</dt>
+                  <dd id="clip-type">Long rally</dd>
+                </dl>
+                <div class="tag-row" id="clip-tags">
+                  <span class="tag">Long rally</span>
+                  <span class="tag">Left won</span>
+                </div>
+                <label class="switch">
+                  <span>Keep as highlight</span>
+                  <input type="checkbox" id="keep-clip" checked />
+                  <span class="switch-track" aria-hidden="true"></span>
+                </label>
+                <p class="insp-help">Dismissed clips stay recoverable until export. Kept clips feed the reel.</p>
+              </section>
+            </div>
+
+            <div class="inspector-foot">
+              <div class="reel-summary">
+                <strong id="reel-count">6 clips · 2:51</strong>
+                <span>Highlight reel</span>
+              </div>
+              <button class="mini-btn" id="open-export-inspector" type="button">
+                <span class="icon" aria-hidden="true">download</span>Export
+              </button>
+            </div>
+          </aside>
+        </div>
+
+        <section class="timeline-dock" aria-label="Timeline">
+          <div class="timeline-head">
+            <div class="timeline-title">
+              <span class="icon" aria-hidden="true">timeline</span>
+              Timeline
+            </div>
+            <div class="timeline-meta">
+              <span id="timeline-window">37:17 – 47:17</span>
+              <span class="chip">10 min view</span>
+              <span id="timeline-rally-count">5 rallies</span>
+            </div>
+          </div>
+          <div class="timeline-body">
+            <div class="track-labels" aria-hidden="true">
+              <div class="track-label">Time</div>
+              <div class="track-label">Rallies</div>
+              <div class="track-label">Score</div>
+            </div>
+            <div class="track-area" id="timeline-area" role="group" aria-label="Rally timeline. Click to move the playhead.">
+              <div class="ruler" id="timeline-ruler">
+                <span style="left: 0%">37:17</span>
+                <span style="left: 25%">39:47</span>
+                <span style="left: 50%">42:17</span>
+                <span style="left: 75%">44:47</span>
+                <span style="left: 100%">47:17</span>
+              </div>
+              <div class="track rallies" id="rally-track"></div>
+              <div class="track score" id="score-track"></div>
+              <div class="playhead-line" id="playhead" style="left: 50%"></div>
+              <div class="timeline-empty" id="timeline-empty" hidden>No rallies in this window.</div>
+            </div>
+          </div>
+        </section>
+
+        <footer class="statusbar">
+          <div class="status-left">
+            <span class="status-item"><span class="status-dot"></span>On-device · No cloud</span>
+            <span class="status-item status-hide-sm" id="status-videos">3 videos</span>
+            <span class="status-item status-hide-sm" id="status-missing">1 missing</span>
+          </div>
+          <div class="status-right">
+            <span class="status-item" id="status-rally">Rally 14 / 32 · 18–16</span>
+            <span class="status-item status-hide-sm">1080p</span>
+            <span class="status-item status-hide-xs" id="status-time">42:17</span>
+            <span class="status-chip" id="status-export">Ready to export</span>
+          </div>
+        </footer>
+
+        <div class="toast" id="toast" role="status" aria-live="polite">
+          <span class="icon" id="toast-icon" aria-hidden="true">check_circle</span>
+          <span id="toast-text"></span>
+        </div>
+      </div>
+    </div>
+
+    <dialog class="sheet" id="export-dialog" aria-labelledby="export-title">
+      <form id="export-form">
+        <div class="sheet-head">
+          <h2 id="export-title">Export highlight reel</h2>
+          <button class="sheet-close" id="close-export" type="button" aria-label="Close export dialog" title="Close">
+            <span class="icon" aria-hidden="true">close</span>
+          </button>
+        </div>
+        <div class="sheet-body">
+          <div id="export-fields">
+            <div class="field" id="export-name-field">
+              <label for="export-name">File name</label>
+              <input id="export-name" type="text" value="club-session-highlights" />
+              <span class="hint" id="export-name-hint">MP4 · saved to your chosen folder.</span>
+            </div>
+            <div class="field">
+              <label for="export-music">Music</label>
+              <select id="export-music">
+                <option>None</option>
+                <option>User-provided audio</option>
+              </select>
+            </div>
+            <div class="sheet-summary">
+              <div><strong id="export-clips">6</strong><span id="export-clips-label">clips</span></div>
+              <div><strong id="export-runtime">2:51</strong><span>runtime</span></div>
+              <div><strong id="export-score">18–16</strong><span>final score</span></div>
+            </div>
+            <label class="check-row">
+              <input type="checkbox" checked />
+              Include score overlays
+            </label>
+            <label class="check-row" style="margin-top: 8px">
+              <input type="checkbox" checked />
+              Remove rest periods
+            </label>
+          </div>
+
+          <div class="export-progress" id="export-progress" hidden>
+            <p>Exporting highlight reel…</p>
+            <div class="progress-track"><span id="export-bar"></span></div>
+            <div class="progress-meta">
+              <span id="export-percent">0%</span>
+              <span>1080p · H.264 · on-device</span>
+            </div>
+          </div>
+
+          <div class="export-success" id="export-success" hidden>
+            <span class="icon" aria-hidden="true">check_circle</span>
+            <h3>Highlight reel exported</h3>
+            <p id="export-success-copy">club-session-highlights.mp4 · 6 clips · 2:51</p>
+            <button class="btn btn-secondary" id="done-export" type="button">Done</button>
+          </div>
+        </div>
+        <div class="sheet-foot" id="export-foot">
+          <button class="btn btn-ghost" id="cancel-export" type="button">Cancel</button>
+          <button class="btn btn-primary" id="start-export" type="submit">Export</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script>
+      (function () {
+        "use strict";
+
+        const MATCHES = [
+          {
+            id: "court3",
+            title: "Club session · Court 3",
+            meta: "1080p · Imported 12 Oct",
+            left: 18,
+            right: 16,
+            duration: 3511,
+            time: 2537,
+            rallySeq: 14,
+            totalRallies: 32,
+            missing: false,
+            selectedRally: 14,
+            viewStart: 2237,
+            viewEnd: 2837,
+            rallies: [
+              { id: 7, start: 1800, dur: 22, winner: "R", kept: false, tag: "Net error" },
+              { id: 8, start: 1920, dur: 30, winner: "L", kept: true, tag: "Long rally" },
+              { id: 9, start: 2040, dur: 18, winner: "R", kept: false, tag: "Serve error" },
+              { id: 10, start: 2170, dur: 26, winner: "L", kept: true, tag: "Smash winner" },
+              { id: 11, start: 2304, dur: 19, winner: "R", kept: true, tag: "Quick point" },
+              { id: 12, start: 2405, dur: 33, winner: "L", kept: true, tag: "Smash winner" },
+              { id: 13, start: 2500, dur: 21, winner: "R", kept: true, tag: "Net error" },
+              { id: 14, start: 2537, dur: 42, winner: "L", kept: true, tag: "Long rally" }
+            ]
+          },
+          {
+            id: "court1",
+            title: "Club session · Court 1",
+            meta: "1080p · Imported 12 Oct",
+            left: 21,
+            right: 19,
+            duration: 2284,
+            time: 1300,
+            rallySeq: 9,
+            totalRallies: 24,
+            missing: false,
+            selectedRally: 9,
+            viewStart: 1000,
+            viewEnd: 1600,
+            rallies: [
+              { id: 5, start: 760, dur: 24, winner: "L", kept: true, tag: "Long rally" },
+              { id: 6, start: 980, dur: 19, winner: "R", kept: false, tag: "Net error" },
+              { id: 7, start: 1100, dur: 31, winner: "L", kept: true, tag: "Smash winner" },
+              { id: 8, start: 1280, dur: 26, winner: "R", kept: true, tag: "Quick point" },
+              { id: 9, start: 1300, dur: 38, winner: "L", kept: true, tag: "Long rally" }
+            ]
+          },
+          {
+            id: "finals",
+            title: "Finals · Court 2",
+            meta: "Recording missing",
+            left: 11,
+            right: 14,
+            duration: 3511,
+            time: 1460,
+            rallySeq: 5,
+            totalRallies: 24,
+            missing: true,
+            selectedRally: 5,
+            viewStart: 1200,
+            viewEnd: 1800,
+            rallies: [
+              { id: 1, start: 180, dur: 28, winner: "L", kept: false, tag: "Long rally" },
+              { id: 2, start: 420, dur: 22, winner: "R", kept: false, tag: "Net error" },
+              { id: 3, start: 780, dur: 35, winner: "L", kept: true, tag: "Smash winner" },
+              { id: 4, start: 1120, dur: 19, winner: "R", kept: false, tag: "Serve error" },
+              { id: 5, start: 1460, dur: 31, winner: "L", kept: false, tag: "Long rally" }
+            ]
+          }
+        ];
+
+        const state = {
+          matchId: "court3",
+          tab: "rally",
+          playing: false,
+          search: ""
+        };
+
+        const byId = (id) => document.getElementById(id);
+        const windowEl = byId("app-window");
+        const videoList = byId("video-list");
+        const videoCount = byId("video-count");
+        const workspaceSub = byId("workspace-sub");
+        const sidebarCount = byId("sidebar-count");
+        const search = byId("video-search");
+        const breadcrumb = byId("breadcrumb-match");
+        const previewResolution = byId("preview-resolution");
+        const previewFps = byId("preview-fps");
+        const scoreBug = byId("score-bug");
+        const transport = document.querySelector(".floating-transport");
+        const missingState = byId("missing-state");
+        const bugLeft = byId("bug-left");
+        const bugRight = byId("bug-right");
+        const bugLeftNum = byId("bug-left-num");
+        const bugRightNum = byId("bug-right-num");
+        const bugRally = byId("bug-rally");
+        const bugRallyTime = byId("bug-rally-time");
+        const bugServe = byId("bug-serve");
+        const bugTime = byId("bug-time");
+        const transportTime = byId("transport-time");
+        const transportDur = byId("transport-dur");
+        const seek = byId("seek");
+        const playToggle = byId("play-toggle");
+        const playIcon = byId("play-icon");
+        const skipBack = byId("skip-back");
+        const skipForward = byId("skip-forward");
+        const timelineArea = byId("timeline-area");
+        const timelineRuler = byId("timeline-ruler");
+        const rallyTrack = byId("rally-track");
+        const scoreTrack = byId("score-track");
+        const playhead = byId("playhead");
+        const timelineEmpty = byId("timeline-empty");
+        const timelineWindowLabel = byId("timeline-window");
+        const timelineRallyCount = byId("timeline-rally-count");
+        const inspLeft = byId("insp-left");
+        const inspRight = byId("insp-right");
+        const inspLeftNum = byId("insp-left-num");
+        const inspRightNum = byId("insp-right-num");
+        const servingText = byId("serving-text");
+        const inspScoreNote = byId("insp-score-note");
+        const inspRallyLabel = byId("insp-rally-label");
+        const rallyList = byId("rally-list");
+        const panelRally = byId("panel-rally");
+        const panelClip = byId("panel-clip");
+        const tabRally = byId("tab-rally");
+        const tabClip = byId("tab-clip");
+        const reelCount = byId("reel-count");
+        const scoreL = byId("score-l");
+        const scoreR = byId("score-r");
+        const statusRally = byId("status-rally");
+        const statusTime = byId("status-time");
+        const statusVideos = byId("status-videos");
+        const statusMissing = byId("status-missing");
+        const toast = byId("toast");
+        const toastText = byId("toast-text");
+        const toastIcon = byId("toast-icon");
+        const openExportBtn = byId("open-export");
+        const openExportInspector = byId("open-export-inspector");
+        const exportDialog = byId("export-dialog");
+        const exportForm = byId("export-form");
+        const exportFields = byId("export-fields");
+        const exportProgress = byId("export-progress");
+        const exportSuccess = byId("export-success");
+        const exportFoot = byId("export-foot");
+        const exportName = byId("export-name");
+        const exportNameField = byId("export-name-field");
+        const exportNameHint = byId("export-name-hint");
+        const exportBar = byId("export-bar");
+        const exportPercent = byId("export-percent");
+        const exportClips = byId("export-clips");
+        const exportRuntime = byId("export-runtime");
+        const exportScore = byId("export-score");
+        const exportSuccessCopy = byId("export-success-copy");
+        const doneExport = byId("done-export");
+        const closeExport = byId("close-export");
+        const cancelExport = byId("cancel-export");
+        const importButton = byId("import-video");
+        const importInput = byId("import-input");
+        const locateButton = byId("locate-file");
+        const locateInput = byId("locate-input");
+
+        let toastTimer = null;
+        let progressTimer = null;
+        let exporting = false;
+        let lastExportTrigger = null;
+        let locatingMatchId = null;
+
+        function current() {
+          return MATCHES.find((match) => match.id === state.matchId) || MATCHES[0];
+        }
+
+        function formatClock(seconds) {
+          const total = Math.max(0, Math.floor(seconds));
+          const hours = Math.floor(total / 3600);
+          const minutes = Math.floor((total % 3600) / 60);
+          const secs = total % 60;
+          return [hours, minutes, secs]
+            .map((value) => String(value).padStart(2, "0"))
+            .join(":");
+        }
+
+        function formatShort(seconds) {
+          const total = Math.max(0, Math.floor(seconds));
+          const minutes = Math.floor(total / 60);
+          const secs = total % 60;
+          return minutes + ":" + String(secs).padStart(2, "0");
+        }
+
+        function servingOf(match) {
+          const last = match.rallies[match.rallies.length - 1];
+          return last ? last.winner : "L";
+        }
+
+        function keptRallies(match) {
+          return match.rallies.filter((rally) => rally.kept);
+        }
+
+        function reelRuntime(match) {
+          return keptRallies(match).reduce((total, rally) => total + rally.dur, 0);
+        }
+
+        function centerView(match, time) {
+          const span = Math.min(600, Math.max(60, match.duration));
+          let start = Math.max(0, Math.min(time - span / 2, match.duration - span));
+          if (start < 0) {
+            start = 0;
+          }
+          match.viewStart = start;
+          match.viewEnd = Math.min(match.duration, start + span);
+        }
+
+        function ensureView(match) {
+          if (
+            match.viewEnd == null ||
+            match.viewStart == null ||
+            match.viewEnd <= match.viewStart
+          ) {
+            centerView(match, match.time);
+          }
+        }
+
+        function showToast(message, icon, tone) {
+          toastText.textContent = message;
+          toastIcon.textContent = icon || "check_circle";
+          toast.classList.toggle("error", tone === "error");
+          toast.classList.add("show");
+          window.clearTimeout(toastTimer);
+          toastTimer = window.setTimeout(function () {
+            toast.classList.remove("show");
+          }, 2800);
+        }
+
+        function updateTimeDom(match) {
+          const clock = formatClock(match.time);
+          transportTime.textContent = clock;
+          bugTime.textContent = clock;
+          statusTime.textContent = formatShort(match.time);
+          if (document.activeElement !== seek) {
+            seek.value = String(Math.round(match.time));
+          }
+          const span = Math.max(1, match.viewEnd - match.viewStart);
+          const ratio = Math.max(
+            0,
+            Math.min(1, (match.time - match.viewStart) / span)
+          );
+          playhead.style.left = ratio * 100 + "%";
+        }
+
+        function renderSidebar() {
+          const visible = MATCHES.filter(function (match) {
+            return match.title.toLowerCase().includes(state.search);
+          });
+
+          videoCount.textContent = String(visible.length);
+
+          if (visible.length === 0) {
+            videoList.innerHTML =
+              '<div class="sidebar-empty">' +
+              '<span class="icon" aria-hidden="true">search_off</span>' +
+              "<p>No videos match</p>" +
+              "<span>Try a different title, or clear the search.</span>" +
+              '<button type="button" data-clear-search>Clear search</button>' +
+              "</div>";
+          } else {
+            videoList.innerHTML = visible
+              .map(function (match) {
+                const selected = match.id === state.matchId;
+                const duration = match.missing
+                  ? ""
+                  : '<span class="video-dur">' +
+                    formatShort(match.duration) +
+                    "</span>";
+                const thumb = match.missing
+                  ? '<span class="video-thumb missing"><span class="icon" aria-hidden="true">error</span></span>'
+                  : '<span class="video-thumb">' + duration + "</span>";
+                let end = "";
+                if (match.missing) {
+                  end =
+                    '<span class="icon alert" aria-hidden="true">error</span>';
+                } else {
+                  if (selected) {
+                    end +=
+                      '<span class="icon" aria-hidden="true">check_circle</span>';
+                  }
+                  end +=
+                    '<span class="video-score">' +
+                    (match.rallies.length
+                      ? match.left + "–" + match.right
+                      : "—") +
+                    "</span>";
+                }
+                return (
+                  '<button class="video-item" type="button" data-video="' +
+                  match.id +
+                  '" aria-current="' +
+                  selected +
+                  '">' +
+                  thumb +
+                  '<span class="video-copy">' +
+                  '<span class="video-title">' +
+                  escapeHtml(match.title) +
+                  "</span>" +
+                  '<span class="video-meta">' +
+                  escapeHtml(match.meta) +
+                  "</span>" +
+                  "</span>" +
+                  '<span class="video-end">' +
+                  end +
+                  "</span>" +
+                  "</button>"
+                );
+              })
+              .join("");
+          }
+
+          const total = MATCHES.length;
+          const missing = MATCHES.filter(function (match) {
+            return match.missing;
+          }).length;
+          const summary =
+            total +
+            " video" +
+            (total === 1 ? "" : "s") +
+            (missing ? " · " + missing + " missing" : "");
+          workspaceSub.textContent = summary;
+          sidebarCount.textContent = summary;
+          statusVideos.textContent =
+            total + " video" + (total === 1 ? "" : "s");
+          statusMissing.textContent = missing + " missing";
+          statusMissing.hidden = missing === 0;
+        }
+
+        function renderPreview(match) {
+          breadcrumb.textContent = match.title;
+          previewResolution.textContent = match.missing ? "No file" : "1080p";
+          previewFps.textContent = match.missing ? "—" : "29.97 fps";
+
+          scoreBug.hidden = match.missing;
+          transport.hidden = match.missing;
+          missingState.hidden = !match.missing;
+
+          const serving = servingOf(match);
+          const hasRallies = match.rallies.length > 0;
+          bugLeftNum.textContent = String(match.left);
+          bugRightNum.textContent = String(match.right);
+          bugLeft.classList.toggle("serving", hasRallies && serving === "L");
+          bugRight.classList.toggle("serving", hasRallies && serving === "R");
+          bugRally.textContent =
+            "Rally " + match.rallySeq + " / " + (match.totalRallies || 0);
+          const last = match.rallies[match.rallies.length - 1];
+          bugRallyTime.textContent = last
+            ? "Rally " + match.rallySeq + " · " + formatShort(last.dur)
+            : "No rallies yet";
+          bugServe.textContent = hasRallies
+            ? "Serve " + serving
+            : "No rallies yet";
+          statusRally.textContent =
+            "Rally " +
+            match.rallySeq +
+            " / " +
+            (match.totalRallies || 0) +
+            " · " +
+            match.left +
+            "–" +
+            match.right;
+
+          const disabled = Boolean(match.missing);
+          playToggle.disabled = disabled;
+          skipBack.disabled = disabled;
+          skipForward.disabled = disabled;
+          seek.disabled = disabled;
+          scoreL.disabled = disabled;
+          scoreR.disabled = disabled;
+          openExportBtn.disabled = disabled;
+          openExportInspector.disabled = disabled;
+        }
+
+        function renderTimeline(match) {
+          if (match.missing) {
+            timelineRuler.hidden = true;
+            rallyTrack.hidden = true;
+            scoreTrack.hidden = true;
+            playhead.hidden = true;
+            timelineEmpty.hidden = false;
+            timelineEmpty.textContent =
+              "No recording. Locate the file to restore the timeline.";
+            timelineWindowLabel.textContent = "No recording";
+            timelineRallyCount.textContent = "—";
+            return;
+          }
+
+          timelineRuler.hidden = false;
+          rallyTrack.hidden = false;
+          scoreTrack.hidden = false;
+          playhead.hidden = false;
+          ensureView(match);
+
+          if (match.time < match.viewStart || match.time > match.viewEnd) {
+            centerView(match, match.time);
+          }
+
+          const span = Math.max(1, match.viewEnd - match.viewStart);
+          const rulerTimes = [0, 0.25, 0.5, 0.75, 1].map(function (ratio) {
+            return match.viewStart + span * ratio;
+          });
+          timelineRuler.innerHTML = rulerTimes
+            .map(function (time, index) {
+              return (
+                '<span style="left:' +
+                index * 25 +
+                '%">' +
+                formatShort(time) +
+                "</span>"
+              );
+            })
+            .join("");
+          timelineWindowLabel.textContent =
+            formatShort(match.viewStart) + " – " + formatShort(match.viewEnd);
+
+          const visible = match.rallies.filter(function (rally) {
+            return (
+              rally.start < match.viewEnd &&
+              rally.start + rally.dur > match.viewStart
+            );
+          });
+
+          timelineRallyCount.textContent =
+            visible.length + " rally" + (visible.length === 1 ? "" : "s");
+          timelineEmpty.hidden = visible.length !== 0;
+          timelineEmpty.textContent = "No rallies in this window.";
+
+          rallyTrack.innerHTML = visible
+            .map(function (rally) {
+              const start = Math.max(rally.start, match.viewStart);
+              const end = Math.min(rally.start + rally.dur, match.viewEnd);
+              const left = ((start - match.viewStart) / span) * 100;
+              const width = Math.max(0.6, ((end - start) / span) * 100);
+              const selected = match.selectedRally === rally.id;
+              const label =
+                "Rally " +
+                rally.id +
+                ", " +
+                formatShort(rally.start) +
+                ", " +
+                (rally.winner === "L" ? "left" : "right") +
+                " won, " +
+                (rally.kept ? "kept" : "not kept");
+              return (
+                '<button class="rally-seg' +
+                (rally.kept ? " kept" : "") +
+                '" type="button" data-rally-id="' +
+                rally.id +
+                '" aria-pressed="' +
+                selected +
+                '" aria-label="' +
+                label +
+                '" title="' +
+                label +
+                '" style="left:' +
+                left +
+                "%;width:" +
+                width +
+                '%">' +
+                rally.id +
+                "</button>"
+              );
+            })
+            .join("");
+
+          scoreTrack.innerHTML = visible
+            .map(function (rally) {
+              const end = Math.min(
+                rally.start + rally.dur,
+                match.viewEnd
+              );
+              const left = ((end - match.viewStart) / span) * 100;
+              return (
+                '<span class="score-chip' +
+                (rally.winner === "L" ? " left" : "") +
+                '" style="left:' +
+                left +
+                '%" aria-hidden="true">' +
+                rally.winner +
+                "</span>"
+              );
+            })
+            .join("");
+
+          const ratio = Math.max(
+            0,
+            Math.min(1, (match.time - match.viewStart) / span)
+          );
+          playhead.style.left = ratio * 100 + "%";
+        }
+
+        function updateTransportState(match) {
+          playIcon.textContent = state.playing ? "pause" : "play_arrow";
+          playIcon.classList.toggle("fill", !state.playing);
+          playToggle.setAttribute(
+            "aria-label",
+            state.playing ? "Pause" : "Play"
+          );
+          playToggle.title = state.playing
+            ? "Pause (Space)"
+            : "Play (Space)";
+        }
+
+        function renderTransport(match) {
+          transportDur.textContent = formatClock(match.duration);
+          seek.max = String(Math.max(1, Math.round(match.duration)));
+          seek.value = String(Math.round(match.time));
+          seek.disabled = Boolean(match.missing);
+          updateTransportState(match);
+          updateTimeDom(match);
+        }
+
+        function updateExportSummary(match) {
+          const kept = keptRallies(match);
+          const runtime = formatShort(reelRuntime(match));
+          const clipLabel = kept.length === 1 ? "clip" : "clips";
+          exportClips.textContent = String(kept.length);
+          exportRuntime.textContent = runtime;
+          exportScore.textContent = match.left + "–" + match.right;
+          const exportLabel = byId("export-clips-label");
+          if (exportLabel) {
+            exportLabel.textContent = clipLabel;
+          }
+          reelCount.textContent =
+            kept.length + " " + clipLabel + " · " + runtime;
+        }
+
+        function renderAll() {
+          const match = current();
+          if (!match) {
+            return;
+          }
+          ensureView(match);
+          if (!match.missing) {
+            if (match.time < match.viewStart || match.time > match.viewEnd) {
+              centerView(match, match.time);
+            }
+          }
+          renderSidebar();
+          renderPreview(match);
+          renderInspector(match);
+          renderTimeline(match);
+          renderTransport(match);
+          updateExportSummary(match);
+        }
+
+        function escapeHtml(value) {
+          return String(value).replace(/[&<>"']/g, function (character) {
+            return {
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;"
+            }[character];
+          });
+        }
+
+        function renderInspector(match) {
+          const serving = servingOf(match);
+          const hasRallies = match.rallies.length > 0;
+          inspLeftNum.textContent = String(match.left);
+          inspRightNum.textContent = String(match.right);
+          inspLeft.classList.toggle("serving", hasRallies && serving === "L");
+          inspRight.classList.toggle("serving", hasRallies && serving === "R");
+          servingText.textContent = hasRallies
+            ? serving + " serving"
+            : "No rallies yet";
+          inspScoreNote.textContent = match.left + "–" + match.right;
+          inspRallyLabel.textContent = match.rallies.length
+            ? "Rally " + match.rallySeq
+            : "No rallies yet";
+
+          const lastThree = match.rallies
+            .slice()
+            .sort(function (a, b) {
+              return b.id - a.id;
+            })
+            .slice(0, 3);
+
+          rallyList.innerHTML = lastThree.length
+            ? lastThree
+                .map(function (rally) {
+                  return (
+                    '<button class="insp-rally" type="button" data-rally-id="' +
+                    rally.id +
+                    '">' +
+                    '<span class="num">' +
+                    rally.id +
+                    "</span>" +
+                    '<span class="time">' +
+                    formatShort(rally.start) +
+                    "</span>" +
+                    '<span class="tag">' +
+                    escapeHtml(rally.tag) +
+                    "</span>" +
+                    '<span class="side">' +
+                    rally.winner +
+                    "</span>" +
+                    "</button>"
+                  );
+                })
+                .join("")
+            : '<p class="insp-help">Score a rally to start the timeline.</p>';
+
+          const clip = match.rallies.find(function (rally) {
+            return rally.id === match.selectedRally;
+          });
+
+          if (!clip) {
+            panelClip.innerHTML =
+              '<div class="empty-inspector">' +
+              '<span class="icon" aria-hidden="true">movie</span>' +
+              "<p>No clip selected</p>" +
+              "<span>Choose a rally on the timeline to inspect it.</span>" +
+              "</div>";
+          } else {
+            const winner = clip.winner === "L" ? "Left" : "Right";
+            panelClip.innerHTML =
+              '<div class="clip-headline">' +
+              "<h3>Rally " +
+              clip.id +
+              "</h3>" +
+              '<span class="dur">' +
+              formatShort(clip.dur) +
+              "</span>" +
+              "</div>" +
+              '<p class="clip-range">' +
+              formatShort(clip.start) +
+              " – " +
+              formatShort(clip.start + clip.dur) +
+              "</p>" +
+              '<dl class="meta-list">' +
+              "<dt>Winner</dt><dd>" +
+              winner +
+              "</dd>" +
+              "<dt>Match score</dt><dd>" +
+              match.left +
+              "–" +
+              match.right +
+              "</dd>" +
+              "<dt>Type</dt><dd>" +
+              escapeHtml(clip.tag) +
+              "</dd>" +
+              "</dl>" +
+              '<div class="tag-row">' +
+              '<span class="tag">' +
+              escapeHtml(clip.tag) +
+              "</span>" +
+              '<span class="tag">' +
+              winner +
+              " won</span>" +
+              '<span class="tag">' +
+              (clip.kept ? "Kept" : "Dismissed") +
+              "</span>" +
+              "</div>" +
+              '<label class="switch">' +
+              "<span>Keep as highlight</span>" +
+              '<input type="checkbox" id="keep-clip" ' +
+              (clip.kept ? "checked" : "") +
+              " />" +
+              '<span class="switch-track" aria-hidden="true"></span>' +
+              "</label>" +
+              '<p class="insp-help">Dismissed clips stay recoverable until export. Kept clips feed the reel.</p>';
+          }
+
+          const kept = keptRallies(match);
+          const clipLabel = kept.length === 1 ? "clip" : "clips";
+          reelCount.textContent =
+            kept.length +
+            " " +
+            clipLabel +
+            " · " +
+            formatShort(reelRuntime(match));
+          const exportChip = byId("status-export");
+          if (exportChip) {
+            exportChip.textContent = kept.length
+              ? "Ready to export"
+              : "Needs a clip";
+          }
+
+          updateTabs();
+        }
+
+        function updateTabs() {
+          const rallyActive = state.tab === "rally";
+          tabRally.setAttribute("aria-selected", String(rallyActive));
+          tabRally.tabIndex = rallyActive ? 0 : -1;
+          tabClip.setAttribute("aria-selected", String(!rallyActive));
+          tabClip.tabIndex = rallyActive ? -1 : 0;
+          panelRally.hidden = !rallyActive;
+          panelClip.hidden = rallyActive;
+        }
+
+        function setTab(tab, focusTab) {
+          state.tab = tab;
+          renderInspector(current());
+          if (focusTab) {
+            (tab === "rally" ? tabRally : tabClip).focus();
+          }
+        }
+
+        function selectVideo(id) {
+          const match = MATCHES.find(function (item) {
+            return item.id === id;
+          });
+          if (!match) {
+            return;
+          }
+          state.matchId = id;
+          state.playing = false;
+          state.tab = "rally";
+          if (!match.missing) {
+            ensureView(match);
+            if (
+              match.time < match.viewStart ||
+              match.time > match.viewEnd
+            ) {
+              centerView(match, match.time);
+            }
+          }
+          renderAll();
+          window.requestAnimationFrame(function () {
+            const item = document.querySelector(
+              '.video-item[data-video="' + id + '"]'
+            );
+            if (item) {
+              item.focus();
+            }
+          });
+        }
+
+        function selectRally(id) {
+          const match = current();
+          if (!match || match.missing) {
+            return;
+          }
+          const rally = match.rallies.find(function (item) {
+            return item.id === id;
+          });
+          if (!rally) {
+            return;
+          }
+          match.selectedRally = rally.id;
+          state.tab = "clip";
+          match.time = rally.start;
+          if (
+            match.time < match.viewStart ||
+            match.time > match.viewEnd
+          ) {
+            centerView(match, match.time);
+          }
+          renderAll();
+          window.requestAnimationFrame(function () {
+            const segment = document.querySelector(
+              '.rally-seg[data-rally-id="' + rally.id + '"]'
+            );
+            if (segment) {
+              segment.focus();
+            } else {
+              panelClip.focus();
+            }
+          });
+        }
+
+        function scoreRally(side) {
+          const match = current();
+          if (!match || match.missing) {
+            return;
+          }
+          if (state.playing) {
+            state.playing = false;
+            updateTransportState(match);
+          }
+          match.rallySeq += 1;
+          match.totalRallies = Math.max(
+            match.totalRallies || 0,
+            match.rallySeq
+          );
+          if (side === "L") {
+            match.left += 1;
+          } else {
+            match.right += 1;
+          }
+          const start = Math.min(
+            Math.max(0, match.duration - 1),
+            Math.max(0, match.time + 2)
+          );
+          match.rallies.push({
+            id: match.rallySeq,
+            start: start,
+            dur: 28,
+            winner: side,
+            kept: false,
+            tag: "New rally"
+          });
+          match.selectedRally = match.rallySeq;
+          match.time = start;
+          state.tab = "rally";
+          if (
+            match.time < match.viewStart ||
+            match.time > match.viewEnd
+          ) {
+            centerView(match, match.time);
+          }
+          renderAll();
+          showToast(
+            (side === "L" ? "Left" : "Right") +
+              " won. Score " +
+              match.left +
+              "–" +
+              match.right +
+              "."
+          );
+          window.requestAnimationFrame(function () {
+            const button = byId(side === "L" ? "score-l" : "score-r");
+            if (button) {
+              button.focus();
+            }
+          });
+        }
+
+        function setKept(kept) {
+          const match = current();
+          const rally = match.rallies.find(function (item) {
+            return item.id === match.selectedRally;
+          });
+          if (!rally) {
+            return;
+          }
+          rally.kept = kept;
+          renderAll();
+          showToast(
+            kept ? "Clip kept in the reel." : "Clip dismissed from the reel."
+          );
+          window.requestAnimationFrame(function () {
+            const toggle = byId("keep-clip");
+            if (toggle) {
+              toggle.focus();
+            }
+          });
+        }
+
+        function togglePlay() {
+          const match = current();
+          if (!match || match.missing) {
+            return;
+          }
+          if (state.playing) {
+            state.playing = false;
+            updateTransportState(match);
+            return;
+          }
+          if (match.time >= match.duration) {
+            match.time = 0;
+            centerView(match, 0);
+            renderTimeline(match);
+            updateTimeDom(match);
+          }
+          state.playing = true;
+          updateTransportState(match);
+        }
+
+        function seekTo(seconds) {
+          const match = current();
+          if (!match || match.missing) {
+            return;
+          }
+          match.time = Math.max(0, Math.min(match.duration, seconds));
+          if (
+            match.time < match.viewStart ||
+            match.time > match.viewEnd
+          ) {
+            centerView(match, match.time);
+          }
+          renderTimeline(match);
+          updateTimeDom(match);
+        }
+
+        function setFocus(on) {
+          windowEl.classList.toggle("focus-mode", on);
+          const focusButton = byId("toggle-focus");
+          focusButton.setAttribute("aria-pressed", String(on));
+          syncRailButtons();
+          if (on) {
+            showToast(
+              "Focus mode on. Press F or Esc to exit.",
+              "fullscreen"
+            );
+          }
+        }
+
+        function syncRailButtons() {
+          const focused = windowEl.classList.contains("focus-mode");
+          const libraryVisible =
+            !focused && !windowEl.classList.contains("hide-library");
+          const inspectorVisible =
+            !focused && !windowEl.classList.contains("hide-inspector");
+          const libraryButton = byId("toggle-library");
+          const inspectorButton = byId("toggle-inspector");
+          libraryButton.setAttribute(
+            "aria-pressed",
+            String(libraryVisible)
+          );
+          inspectorButton.setAttribute(
+            "aria-pressed",
+            String(inspectorVisible)
+          );
+          libraryButton.querySelector(".icon").textContent = libraryVisible
+            ? "left_panel_close"
+            : "left_panel_open";
+          inspectorButton.querySelector(".icon").textContent =
+            inspectorVisible ? "right_panel_close" : "right_panel_open";
+        }
+
+        function toggleRail(which) {
+          if (windowEl.classList.contains("focus-mode")) {
+            setFocus(false);
+            return;
+          }
+          windowEl.classList.toggle("hide-" + which);
+          syncRailButtons();
+        }
+
+        function resetExport() {
+          if (progressTimer) {
+            window.clearInterval(progressTimer);
+            progressTimer = null;
+          }
+          exporting = false;
+          exportFields.hidden = false;
+          exportProgress.hidden = true;
+          exportSuccess.hidden = true;
+          exportFoot.hidden = false;
+          exportBar.style.width = "0%";
+          exportPercent.textContent = "0%";
+          exportNameField.classList.remove("error");
+          exportNameHint.textContent = "MP4 · saved to your chosen folder.";
+        }
+
+        function openExport(trigger) {
+          const match = current();
+          if (!match) {
+            return;
+          }
+          if (match.missing) {
+            showToast("Locate the recording first.", "error", "error");
+            return;
+          }
+          if (keptRallies(match).length === 0) {
+            showToast(
+              "Keep at least one clip before exporting.",
+              "error",
+              "error"
+            );
+            return;
+          }
+          if (exportDialog.open) {
+            return;
+          }
+          lastExportTrigger = trigger || openExportBtn;
+          resetExport();
+          updateExportSummary(match);
+          exportDialog.showModal();
+          window.requestAnimationFrame(function () {
+            exportName.focus();
+            exportName.select();
+          });
+        }
+
+        function finishExport(name, count, runtime) {
+          exporting = false;
+          exportProgress.hidden = true;
+          exportSuccess.hidden = false;
+          const clipLabel = count === 1 ? "clip" : "clips";
+          exportSuccessCopy.textContent =
+            name + ".mp4 · " + count + " " + clipLabel + " · " + runtime;
+          window.requestAnimationFrame(function () {
+            doneExport.focus();
+          });
+        }
+
+        function startExport() {
+          if (exporting) {
+            return;
+          }
+          const name = exportName.value.trim();
+          if (!name) {
+            exportNameField.classList.add("error");
+            exportNameHint.textContent =
+              "Name the file before exporting.";
+            exportName.focus();
+            return;
+          }
+          exportNameField.classList.remove("error");
+          exportNameHint.textContent =
+            "MP4 · saved to your chosen folder.";
+          const match = current();
+          if (!match) {
+            return;
+          }
+          const kept = keptRallies(match);
+          if (kept.length === 0) {
+            showToast(
+              "Keep at least one clip before exporting.",
+              "error",
+              "error"
+            );
+            return;
+          }
+          const base = name.replace(/\.mp4$/i, "");
+          const runtime = formatShort(reelRuntime(match));
+          exporting = true;
+          exportFields.hidden = true;
+          exportProgress.hidden = false;
+          exportFoot.hidden = true;
+          exportSuccess.hidden = true;
+          exportBar.style.width = "0%";
+          exportPercent.textContent = "0%";
+          void exportBar.offsetWidth;
+          exportBar.style.width = "100%";
+          let percent = 0;
+          progressTimer = window.setInterval(function () {
+            percent = Math.min(100, percent + 8);
+            exportPercent.textContent = percent + "%";
+            if (percent >= 100) {
+              window.clearInterval(progressTimer);
+              progressTimer = null;
+              finishExport(base, kept.length, runtime);
+            }
+          }, 110);
+        }
+
+        function closeExportDialog() {
+          if (exportDialog.open) {
+            exportDialog.close();
+          }
+        }
+
+        function handleImport() {
+          const file = importInput.files && importInput.files[0];
+          importInput.value = "";
+          if (!file) {
+            return;
+          }
+          const name =
+            file.name.replace(/\.[^.]+$/, "") || "Imported match";
+          const id = "import-" + Date.now();
+          const match = {
+            id: id,
+            title: name,
+            meta: "Importing · 0%",
+            left: 0,
+            right: 0,
+            duration: 600,
+            time: 0,
+            rallySeq: 0,
+            totalRallies: 0,
+            missing: false,
+            selectedRally: null,
+            viewStart: 0,
+            viewEnd: 600,
+            rallies: []
+          };
+          MATCHES.push(match);
+          state.matchId = id;
+          state.tab = "rally";
+          state.playing = false;
+          renderAll();
+          showToast("Importing " + name + "…", "movie");
+          window.setTimeout(function () {
+            match.meta = "1080p · Ready for court calibration";
+            if (state.matchId === id) {
+              renderAll();
+            } else {
+              renderSidebar();
+            }
+            showToast("Import finished. Calibrate the court next.", "movie");
+          }, 1400);
+        }
+
+        function handleLocate() {
+          const file = locateInput.files && locateInput.files[0];
+          locateInput.value = "";
+          if (!file) {
+            return;
+          }
+          const match = MATCHES.find(function (item) {
+            return item.id === locatingMatchId;
+          });
+          if (!match) {
+            return;
+          }
+          match.missing = false;
+          match.meta = "1080p · Reconnected";
+          if (!match.duration) {
+            match.duration = 3511;
+          }
+          ensureView(match);
+          if (
+            match.time < match.viewStart ||
+            match.time > match.viewEnd
+          ) {
+            centerView(match, match.time);
+          }
+          const isCurrent = state.matchId === match.id;
+          renderAll();
+          showToast("Recording reconnected. Rallies restored.");
+          if (isCurrent) {
+            window.requestAnimationFrame(function () {
+              playToggle.focus();
+            });
+          }
+        }
+
+        function handleGlobalKeydown(event) {
+          if (exportDialog.open) {
+            return;
+          }
+          const meta = event.metaKey || event.ctrlKey;
+          if (meta && event.key.toLowerCase() === "k") {
+            event.preventDefault();
+            search.focus();
+            search.select();
+            return;
+          }
+          if (meta) {
+            return;
+          }
+          const element = document.activeElement;
+          const typing =
+            element &&
+            (element.tagName === "INPUT" ||
+              element.tagName === "TEXTAREA" ||
+              element.tagName === "SELECT" ||
+              element.isContentEditable);
+          if (typing) {
+            return;
+          }
+          if (event.key === " ") {
+            if (
+              element &&
+              element.closest &&
+              element.closest("button, a")
+            ) {
+              return;
+            }
+            event.preventDefault();
+            togglePlay();
+            return;
+          }
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            seekTo(current().time - 5);
+            return;
+          }
+          if (event.key === "ArrowRight") {
+            event.preventDefault();
+            seekTo(current().time + 5);
+            return;
+          }
+          const key = event.key.toLowerCase();
+          if (key === "l" && !event.altKey) {
+            event.preventDefault();
+            scoreRally("L");
+            return;
+          }
+          if (key === "r" && !event.altKey) {
+            event.preventDefault();
+            scoreRally("R");
+            return;
+          }
+          if (key === "f") {
+            event.preventDefault();
+            setFocus(!windowEl.classList.contains("focus-mode"));
+            return;
+          }
+          if (key === "e") {
+            event.preventDefault();
+            openExport(openExportBtn);
+            return;
+          }
+          if (event.key === "Escape") {
+            if (windowEl.classList.contains("focus-mode")) {
+              event.preventDefault();
+              setFocus(false);
+            }
+          }
+        }
+
+        videoList.addEventListener("click", function (event) {
+          const clear = event.target.closest("[data-clear-search]");
+          if (clear) {
+            search.value = "";
+            state.search = "";
+            renderSidebar();
+            search.focus();
+            return;
+          }
+          const item = event.target.closest("[data-video]");
+          if (item) {
+            selectVideo(item.getAttribute("data-video"));
+          }
+        });
+
+        rallyList.addEventListener("click", function (event) {
+          const row = event.target.closest("[data-rally-id]");
+          if (row) {
+            selectRally(Number(row.getAttribute("data-rally-id")));
+          }
+        });
+
+        timelineArea.addEventListener("click", function (event) {
+          const segment = event.target.closest(".rally-seg");
+          if (segment) {
+            selectRally(Number(segment.getAttribute("data-rally-id")));
+            return;
+          }
+          const match = current();
+          if (!match || match.missing) {
+            return;
+          }
+          const rect = timelineArea.getBoundingClientRect();
+          if (rect.width <= 0) {
+            return;
+          }
+          const ratio = Math.max(
+            0,
+            Math.min(1, (event.clientX - rect.left) / rect.width)
+          );
+          seekTo(match.viewStart + (match.viewEnd - match.viewStart) * ratio);
+        });
+
+        panelClip.addEventListener("change", function (event) {
+          if (event.target && event.target.id === "keep-clip") {
+            setKept(event.target.checked);
+          }
+        });
+
+        seek.addEventListener("input", function () {
+          seekTo(Number(seek.value));
+        });
+
+        playToggle.addEventListener("click", togglePlay);
+        skipBack.addEventListener("click", function () {
+          seekTo(current().time - 5);
+        });
+        skipForward.addEventListener("click", function () {
+          seekTo(current().time + 5);
+        });
+        scoreL.addEventListener("click", function () {
+          scoreRally("L");
+        });
+        scoreR.addEventListener("click", function () {
+          scoreRally("R");
+        });
+
+        tabRally.addEventListener("click", function () {
+          setTab("rally");
+        });
+        tabClip.addEventListener("click", function () {
+          setTab("clip");
+        });
+        document
+          .querySelector(".inspector-tabs")
+          .addEventListener("keydown", function (event) {
+            if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+              event.preventDefault();
+              event.stopPropagation();
+              setTab(state.tab === "rally" ? "clip" : "rally", true);
+            }
+          });
+
+        byId("toggle-library").addEventListener("click", function () {
+          toggleRail("library");
+        });
+        byId("toggle-inspector").addEventListener("click", function () {
+          toggleRail("inspector");
+        });
+        byId("toggle-focus").addEventListener("click", function () {
+          setFocus(!windowEl.classList.contains("focus-mode"));
+        });
+
+        openExportBtn.addEventListener("click", function () {
+          openExport(openExportBtn);
+        });
+        openExportInspector.addEventListener("click", function () {
+          openExport(openExportInspector);
+        });
+        closeExport.addEventListener("click", closeExportDialog);
+        cancelExport.addEventListener("click", closeExportDialog);
+        doneExport.addEventListener("click", closeExportDialog);
+        exportForm.addEventListener("submit", function (event) {
+          event.preventDefault();
+          startExport();
+        });
+        exportDialog.addEventListener("close", function () {
+          if (progressTimer) {
+            window.clearInterval(progressTimer);
+            progressTimer = null;
+          }
+          exporting = false;
+          if (lastExportTrigger && document.contains(lastExportTrigger)) {
+            lastExportTrigger.focus();
+          }
+        });
+
+        importButton.addEventListener("click", function () {
+          importInput.click();
+        });
+        importInput.addEventListener("change", handleImport);
+        locateButton.addEventListener("click", function () {
+          locatingMatchId = state.matchId;
+          locateInput.click();
+        });
+        locateInput.addEventListener("change", handleLocate);
+
+        search.addEventListener("input", function () {
+          state.search = search.value.trim().toLowerCase();
+          renderSidebar();
+        });
+        search.addEventListener("keydown", function (event) {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            if (search.value) {
+              search.value = "";
+              state.search = "";
+              renderSidebar();
+            } else {
+              search.blur();
+            }
+          }
+        });
+
+        document.addEventListener("keydown", handleGlobalKeydown);
+
+        window.setInterval(function () {
+          const match = current();
+          if (!state.playing || !match || match.missing) {
+            return;
+          }
+          match.time = Math.min(match.duration, match.time + 0.25);
+          if (match.time >= match.duration) {
+            state.playing = false;
+            updateTransportState(match);
+          }
+          if (
+            match.time < match.viewStart ||
+            match.time > match.viewEnd
+          ) {
+            centerView(match, match.time);
+            renderTimeline(match);
+          }
+          updateTimeDom(match);
+        }, 250);
+
+        syncRailButtons();
+        renderAll();
+      })();
+    </script>
+  </body>
+</html>

@@ -118,6 +118,9 @@ license and verdict; a crate that is not listed is treated as unaudited.
 
 | Component | Kind | Version | Source | License | Distribution verdict | Shipped in | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| Archivo | font | variable (`wght` 100–900) | [Google Fonts](https://github.com/google/fonts/tree/main/ofl/archivo), downloaded 2026-10-28 | OFL-1.1 | shippable | macos-client | Bundled at `app/assets/fonts/Archivo-Variable.ttf`; license at `OFL-Archivo.txt`. Used for display and scoreboard type via the `wght` axis. |
+| IBM Plex Sans | font | 3.201 (variable `wght` 100–700) | [Google Fonts](https://github.com/google/fonts/tree/main/ofl/ibmplexsans), downloaded 2026-10-28 | OFL-1.1 | shippable | macos-client | Bundled at `app/assets/fonts/IBMPlexSans-Variable.ttf`; license at `OFL-IBMPlexSans.txt`. Body and UI type. |
+| IBM Plex Mono | font | 2.3 | [Google Fonts](https://github.com/google/fonts/tree/main/ofl/ibmplexmono), downloaded 2026-10-28 | OFL-1.1 | shippable | macos-client | Bundled Regular and Medium at `app/assets/fonts/IBMPlexMono-*.ttf`; license at `OFL-IBMPlexMono.txt`. Timecodes and micro-labels. |
 | Score overlay font | font | none | not bundled | n/a | shippable | none | Not bundled and not distributed. The scoreboard and title card are drawn by the application at runtime with the platform's own font, then handed to the renderer as an image, so nothing is redistributed. |
 | Background music tracks | audio | none | not selected | n/a | unresolved | none-yet | Export music is bundled or user-provided; either way the redistribution terms are recorded here. |
 | Brand assets (icon, logo) | asset | none | project-owned | project copyright | unresolved | none-yet | Project-owned; confirm any third-party components used to produce them. |
