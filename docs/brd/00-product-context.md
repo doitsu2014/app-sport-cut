@@ -346,6 +346,8 @@ feature BRD may add a stricter local rule but may not weaken these.
 | Rust service executable | Separate backend process: engine, catalog, recording store, jobs, export | Signed and notarized with the app; project code MIT |
 | SQLite (via `rusqlite`, bundled or system linkage) | Service-owned catalog storage | Licensed and recorded (SQLite public domain; the crate is MIT). Linkage model is ADR-0001 Q-4 and must be resolved before release: bundled SQLite affects binary size and deployment target, system SQLite affects the minimum macOS version. No release with an unresolved row (BR-10, NFR-10) |
 | Local IPC (Unix domain socket; XPC fallback) | Client–service transport | OS-provided; no additional dependency |
+| `rand` 0.8 (Rust service) | Per-launch token and instance-id generation (`security.rs`) | MIT/Apache-2.0; shippable; pinned through `[workspace.dependencies]` |
+| `nix` 0.31 (Rust service) | Safe wrappers for `getpeereid`, `flock`, `kill`, and `statvfs` (`os_glue.rs`, health) | MIT; shippable; pinned through `[workspace.dependencies]`. Transitive crates are covered by the same workspace lockfile review |
 | Fonts (Archivo, IBM Plex Sans, IBM Plex Mono) | Offline typography | OFL-1.1; bundled, client-only |
 
 **History.** `flutter_rust_bridge` 2.13.0 and `libsportcut_api.dylib` were the

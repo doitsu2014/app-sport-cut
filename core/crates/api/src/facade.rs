@@ -737,5 +737,7 @@ fn edit_list_from(request: &ExportRequestDto, match_dir: &MatchDirectory) -> Edi
 }
 
 pub(crate) fn to_anyhow(error: SportcutError) -> anyhow::Error {
-    anyhow!(error.to_string())
+    // Keep the typed error in the chain so the service can map protocol codes
+    // by variant instead of matching diagnostic text.
+    anyhow::Error::new(error)
 }

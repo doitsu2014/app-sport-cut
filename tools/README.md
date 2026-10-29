@@ -32,3 +32,19 @@ Exit codes for `preflight.sh`:
 | `0` | Every component required by the selected profile is present; any media licensing conflict is reported as a warning only. |
 | `1` | One or more required components are missing. Every missing component is listed. |
 | `2` | `--strict-license` was given and the detected media toolchain contains GPL components. |
+
+## Service foundation (Phase 0-1)
+
+ADR-0001 moves the Rust backend into a separate background service process. The
+Phase 0-1 scripts are:
+
+| Script | Purpose |
+| --- | --- |
+| `build-service.sh` | Builds `sportcut-service` in release and prints the artifact path. |
+| `embed-service.sh <app-bundle>` | Copies the service to `Contents/Helpers/SportcutService`, sets mode `0755`, and signs it when `CODESIGN_IDENTITY` is set; otherwise prints the exact `codesign` command and exits 0. |
+| `run-service.sh` | Builds and runs the service in development with a temporary or explicit state root, and prints the endpoint and token path. |
+| `check-no-rust-in-app.sh` | Scans `app/` and any given bundle for FRB, `dart:ffi`, `DynamicLibrary`, `RustLib`, generated bindings, and `libsportcut_api`. It runs in warning mode against `no-rust-in-app.allowlist`; `--strict` fails on findings. |
+
+The allowlist records the known FFI debt and is deleted at Phase 5, when the
+guard becomes blocking. The script does not replace the FFI removal checklist in
+the [migration plan](../docs/architecture/migration-from-ffi.md#6-complete-ffi-removal-checklist).

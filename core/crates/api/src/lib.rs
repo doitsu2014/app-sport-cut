@@ -22,12 +22,18 @@ pub mod track_artifact;
 // file is not committed and is compiled only into the `bridge` build, so an
 // engine-only checkout works with no Dart toolchain present.
 //
+// `include!` rather than an out-of-line `mod` keeps `cargo fmt` working on a
+// checkout where the generated file has not been produced: rustfmt resolves
+// `mod name;` paths even behind `cfg`. The code is identical.
+//
 // The allow is limited to this generated module: it contains the FFI entry
 // points, which are necessarily `unsafe`. Nothing hand-written in the engine
 // uses unsafe code.
 #[allow(unsafe_code)]
 #[cfg(feature = "bridge")]
-mod frb_generated;
+mod frb_generated {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/frb_generated.rs"));
+}
 
 /// The bridge surface.
 ///

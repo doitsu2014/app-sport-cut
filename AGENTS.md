@@ -14,7 +14,8 @@ device, and no cloud or online-API dependency may be introduced.
 
 The product is deliberately semi-automatic. The app proposes rally boundaries
 and a suggested winner; the user confirms. Do not build features that claim
-fully automatic officiating — the reasoning is in `docs/architecture.md`.
+fully automatic officiating — the reasoning is in
+`docs/architecture/background-service.md`.
 
 ## Stack
 
@@ -35,7 +36,7 @@ fully automatic officiating — the reasoning is in `docs/architecture.md`.
 | `app/` | Flutter client: match library, import, playback, and the typed bridge wrapper. |
 | `models/` | Model assets and weights that ship with the app, plus the notes mapping each to its license-register entry. |
 | `tools/` | Supported developer entry points: preflight, engine verification, bridge generation, engine library build, macOS run. |
-| `docs/` | Architecture (`docs/architecture.md`), feature list and road map (`docs/features-roadmap.md`), external dependencies (`docs/external-dependencies.md`), data and storage models (`docs/data-storage-models.md`), verification records (`docs/verification/`). |
+| `docs/` | Requirements (`docs/brd/`), architecture decisions (`docs/adr/`), service architecture and protocol (`docs/architecture/`). |
 | `flutter_rust_bridge.yaml` | Codegen configuration. Generated files are never committed. |
 
 ## The two tracks
@@ -55,6 +56,10 @@ cd app && flutter analyze             # client static analysis
 tools/generate-bridge.sh              # Dart bindings + Rust glue (not committed)
 tools/build-engine-lib.sh             # core/crates/api/target/release/libsportcut_api.*
 tools/run-macos.sh                    # dev run of the client on macOS
+
+tools/build-service.sh                # core/target/release/sportcut-service
+tools/run-service.sh                  # dev service on a temporary state root
+tools/check-no-rust-in-app.sh         # FFI guard (warning mode in Phase 0-1)
 ```
 
 If Flutter is not on `PATH`, set `SPORTCUT_FLUTTER_BIN` to the directory
@@ -156,7 +161,8 @@ recorded evidence, so run `tools/verify-engine.sh` and/or `flutter test` in
 ### Licensing gate
 
 Every third-party dependency, model, pretrained weight, dataset, font, audio
-asset, and codec gets a row in `docs/external-dependencies.md` **before** the
+asset, and codec gets a row in the licensing register in
+`docs/brd/00-product-context.md` **before** the
 change that introduces it is complete. A component that cannot ship in a
 proprietary build is recorded as `not-shippable` with the specific conflict
 named. GPL FFmpeg builds are not shippable — `tools/preflight.sh` flags them.

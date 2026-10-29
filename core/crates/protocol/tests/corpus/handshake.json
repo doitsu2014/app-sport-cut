@@ -1,0 +1,20 @@
+{
+  "description": "Golden version-negotiation and capability shapes, protocol sections 2.2 and 2.3.",
+  "negotiation": [
+    { "service": { "major": 1, "minor": 4 }, "client": { "major": 1, "minor": 2 }, "effective": { "major": 1, "minor": 2 } },
+    { "service": { "major": 1, "minor": 4 }, "client": { "major": 1, "minor": 9 }, "effective": { "major": 1, "minor": 4 } },
+    { "service": { "major": 1, "minor": 0 }, "client": { "major": 1, "minor": 0 }, "effective": { "major": 1, "minor": 0 } },
+    { "service": { "major": 1, "minor": 0 }, "client": { "major": 2, "minor": 0 }, "mismatch": { "major": 1, "minor": 0 } }
+  ],
+  "capabilities": [
+    "engine.v1",
+    "catalog.v1",
+    "custody.v1",
+    "notifications.v1",
+    "idempotency.v1",
+    "playback.path.v1",
+    "metrics.v1",
+    "diagnostics.v1"
+  ],
+  "servedCapabilities": ["engine.v1", "notifications.v1", "idempotency.v1"]
+}

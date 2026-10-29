@@ -5,11 +5,12 @@ time, makes score confirmation fast, suggests the best rallies as highlights,
 and exports a polished video — entirely on-device, with no cloud processing.
 
 This repository is greenfield. The architecture lives in
-[docs/architecture.md](docs/architecture.md); the feature list and road map live
-in [docs/features-roadmap.md](docs/features-roadmap.md), and dependencies and
-storage models are documented in
-[docs/external-dependencies.md](docs/external-dependencies.md) and
-[docs/data-storage-models.md](docs/data-storage-models.md).
+[docs/architecture/background-service.md](docs/architecture/background-service.md);
+the feature list and road map live in
+[docs/brd/README.md](docs/brd/README.md), and dependencies and storage models
+are documented in
+[docs/brd/00-product-context.md](docs/brd/00-product-context.md) and
+[docs/architecture/background-service.md#6-data-ownership](docs/architecture/background-service.md#6-data-ownership).
 
 ## Repository layout
 
@@ -38,7 +39,7 @@ tools/preflight.sh --profile engine # only what the engine needs
   - The probe, proxy, audio, and frame stages shell out to this toolchain, so
     the license-affecting build configuration matters. `tools/preflight.sh`
     reads it and flags GPL components, which are not shippable in a proprietary
-    build (see [docs/external-dependencies.md](docs/external-dependencies.md)).
+    build (see [docs/brd/00-product-context.md](docs/brd/00-product-context.md)).
 
 **Client track (macOS, requires a toolchain install).**
 
@@ -77,6 +78,15 @@ Bridge generation and the engine library the app links against:
 ```bash
 tools/generate-bridge.sh     # Dart bindings + Rust glue (not committed)
 tools/build-engine-lib.sh    # core/crates/api/target/release/libsportcut_api.*
+```
+
+Service foundation (Phase 0-1):
+
+```bash
+tools/build-service.sh         # core/target/release/sportcut-service
+tools/run-service.sh           # development service on a temporary state root
+tools/embed-service.sh <app>   # copy and sign Contents/Helpers/SportcutService
+tools/check-no-rust-in-app.sh  # FFI guard; warning mode during the migration
 ```
 
 If the Flutter SDK is not on `PATH`, export `SPORTCUT_FLUTTER_BIN` first (see
