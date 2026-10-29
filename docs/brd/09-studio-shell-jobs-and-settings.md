@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document ID | BRD-SPORTCUT-009 |
-| Version | 1.0 |
+| Version | 1.1 |
 | Status | Draft — for approval |
 | Date | 2026-10-29 |
 | Product | Sportcut — offline macOS badminton match analyzer |
@@ -53,10 +53,13 @@ rank, or render.
 
 ## 2. Scope
 ### 2.1 In scope
-- Geometry: 52 px toolbar, 264 px video rail, 320 px feature rail, flexible
-  preview, 30 px status bar, 12 px rail gutter, 1100×720 minimum window.
-- Navigation: workspace list to studio, pipeline rail and groups, per-video
-  stage state, back to the workspace list.
+- Geometry: 52 px toolbar, 40 px stage strip, 264 px video rail, 320 px
+  inspector, flexible preview, 176 px shared timeline dock, 30 px status bar,
+  12 px rail gutter, 1100×720 minimum window.
+- Navigation: workspace list to studio, the stage strip, per-video stage state,
+  back to the workspace list.
+- Preview overlay: the score bug, calibration handles, and tracking boxes drawn
+  over one shared stage, plus the export sheet (ADR-0003 D2, D3, D14).
 - Status bar content, including the local-only promise and export readiness.
 - Focus mode, library search, the DESIGN.md §10 keyboard map, and transport.
 - System-appearance theming with no in-app switch; shell accessibility
@@ -71,8 +74,9 @@ Each item needs a change request; none may enter silently.
 - A settings screen, preference file, or in-app theme switch; shortcut rebinding.
 - Multi-window, tabs, job queuing, cross-device scheduling, or concurrent heavy
   jobs.
-- A shared global timeline dock. DESIGN.md §10 lists it; the client draws the
-  timeline inside the Score and Highlights views.
+- Drag-to-resize rails, drag-to-trim rally boundaries, and playback volume.
+  Volume needs a controller API change; trim needs a repository method that
+  rewrites a rally span (ADR-0003 D12).
 - Telemetry, crash reporting, or any remote diagnostics.
 - Mobile or web transports; v1 is one macOS window (BR-12).
 
@@ -105,13 +109,13 @@ is Present, Partial, or Absent at `1541c64`.
 | FR-SHL-05 | Never render the preview narrower than 480 px while rails are open. | Must | At the minimum window the preview is at least 480 px wide; if it cannot be, rails collapse first. | Absent |
 | FR-SHL-06 | Collapse both rails below 980 px of available width, stacking preview, videos, then pipeline. | Must | At 979 px available width the studio stacks in that order and does not scroll horizontally. | Absent |
 | FR-SHL-07 | Open the studio when the user selects a workspace. | Must | Selecting a workspace on the home screen shows the studio for that workspace. | Present |
-| FR-SHL-08 | Order the pipeline rail: Play, then Analysis (Mark court, Prepare analysis, Player analysis, Review & score), then Studio (Highlights, Export). | Must | The rail renders those labels in that order, with the two section headers. | Present |
+| FR-SHL-08 | Order the stage strip: Play, Mark court, Prepare analysis, Player analysis, Review & score, Highlights, Export. | Must | The 40 px strip renders those labels in that order under the toolbar; no second persistent pipeline rail exists (ADR-0003 D2, D14). | Absent |
 | FR-SHL-09 | Show each stage's state for the selected video, labelled in words or a distinct icon. | Must | Done shows a check, ready shows an accent dot plus the word READY, blocked shows a danger icon plus BLOCKED; no state is colour alone. | Partial |
 | FR-SHL-10 | Share one playback controller across every feature view in the studio. | Must | Switching rail items keeps the same loaded recording, position, and play state; no reload occurs. | Present |
 | FR-SHL-11 | Keep every stage selectable; `idle` is guidance, not a gate. | Must | Selecting a stage whose prerequisite is missing opens its view and states what is missing; the app does not block the tap. | Present |
 | FR-SHL-12 | Return to the workspace list from the studio toolbar. | Must | The back control pops the studio and the workspace list is shown unchanged. | Present |
 | FR-SHL-13 | State the local-only promise in the status bar on every studio screen. | Must | The status bar reads "On-device · No cloud" as words at all window sizes and the claim matches behaviour. | Present |
-| FR-SHL-14 | Show video count, missing count, score, current stage, and export readiness in the status bar. | Must | Each value is present or omitted when unknown; readiness reads Needs a clip, Ready to export, or Checking. | Present |
+| FR-SHL-14 | Show video count, missing count, score, current stage, and export readiness in the status bar. | Must | Each value is present or omitted when unknown; readiness reads Needs a clip, Ready to export, or Checking, in sentence case. The uppercase READY/ANALYZING/DONE/BLOCKED vocabulary belongs to the stage strip's state chips, not to the readiness field. | Present |
 | FR-SHL-15 | Report a missing recording as a named count in the status bar and in the affected rail row. | Must | A missing recording shows "N missing" in danger with the word and "Recording missing" in the row; the row does not look normal. | Present |
 | FR-SHL-16 | Toggle focus mode with F and leave it with Esc. | Must | F hides both rails with a visible indicator; Esc restores the previous rail state. | Absent |
 | FR-SHL-38 | Keep the preview, transport, and Export reachable in focus mode. | Must | In focus mode the preview fills the workspace, transport works, and Export can still be opened. | Absent |
@@ -137,6 +141,17 @@ is Present, Partial, or Absent at `1541c64`.
 | FR-SHL-35 | Keep shell layout readable at 200% text scaling. | Must | At 200% text size no label is clipped; rails widen or labels shorten before text shrinks below the type floor. | Absent |
 | FR-SHL-36 | Honour reduced motion. | Must | With reduce motion active, non-essential transitions collapse to near zero; selection, progress, and feedback still work. | Absent |
 | FR-SHL-37 | Keep the shell path free of network access and telemetry. | Must | No network client, analytics, or remote call exists in the shell path; the status promise stays true after a failure. | Present |
+
+### 3.1a Studio surfaces added by ADR-0003
+
+| ID | Requirement | Priority | Acceptance criterion | Baseline |
+| --- | --- | --- | --- | --- |
+| FR-SHL-40 | Provide a 40 px stage strip as the only stage navigation. | Must | Seven stages render in order; selecting one changes the preview panel and inspector without reloading the recording; the strip's height comes from one token. | Absent |
+| FR-SHL-41 | Provide a 176 px shared timeline dock with ruler, rally, and score tracks. | Must | The dock measures 176 px, shows a 10-minute window, seeks on click, and reflects rallies and scores from the current edit; it shows one factual sentence when no rallies are in the window. | Absent |
+| FR-SHL-42 | Draw the score bug over the shared preview. | Must | The bug shows rally index and total, L/R score, serving side, and `HH:MM:SS`, uses the fixed stage tokens, and never animates the score. | Absent |
+| FR-SHL-43 | Present export as a 440 px sheet from the toolbar or the stage strip. | Must | The sheet holds the existing `ExportSettings` plus an ephemeral score-overlay option, blocks on zero kept clips, and shows the engine-produced file name on success. It adds no persisted setting. | Absent |
+| FR-SHL-44 | Make the inspector stage-aware with Rally and Clip tabs plus contextual panels. | Must | Play, Review & score, and Highlights show Rally/Clip; Mark court, Prepare analysis, Player analysis, and Export show their contextual panel. The tab control reports as a tablist, not a filter. | Absent |
+| FR-SHL-45 | Keep one preview and one editing session across every stage. | Must | Switching stages keeps the playback position, play state, and open editing session; the shell opens the session once per selected video. | Absent |
 
 ### 3.2 Job lifecycle (`FR-JOB`)
 
@@ -181,16 +196,17 @@ the client mirrors the DESIGN.md constants in `SportcutTokens`.
 
 | Element | Value | Source | Shared requirement |
 | --- | --- | --- | --- |
-| Window chrome / status bar | 52 px / 30 px | DESIGN.md §4, §10 | DS-7, DS-13 |
-| Video rail / feature rail / gutter | 264 px / 320 px / 12 px (`--space-3`) | DESIGN.md §4, §10 | DS-7, DS-13 |
+| Window chrome / stage strip / status bar | 52 px / 40 px / 30 px | DESIGN.md §4, §10; ADR-0003 D2 | DS-7, DS-13 |
+| Video rail / inspector / gutter | 264 px / 320 px / 12 px (`--space-3`) | DESIGN.md §4, §10 | DS-7, DS-13 |
+| Timeline dock | 176 px: 34 px header, 112 px label gutter, 24/44/32 px tracks | studio.html `--timeline-h`; ADR-0003 D3 | DS-7, DS-13 |
 | Minimum window | 1100 × 720 | DESIGN.md §4, §10 | DS-7, DS-14 |
 | Preview floor / collapse | 480 px / below 980 px | DESIGN.md §5 | DS-14 |
 | Radii / spacing / type | 6, 10, 14, pill / 4–48 / 16 px body, 10 px mono | tokens.css `--radius-*`, `--space-*`, `--text-*` | DS-6, DS-7 |
 | Motion / focus ring | 120 ms, 180 ms, `cubic-bezier(0.2,0,0,1)`; 2 px gap + 2 px accent | tokens.css `--motion-*`, `--focus-ring` | DS-9, DS-11 |
 | Signal / ground | `#0E6E45` / `#46D08D`; `#F1F3EF` / `#0B100D` | tokens.css `--accent`, `--bg` | DS-2, DS-3 |
 | State colours | success `#157347`/`#57C98F`, warn `#8A5A00`/`#E3B24E`, danger `#B42318`/`#F27B70` | tokens.css | DS-2, DS-4 |
-| Footage bed | `#0A0F0C` with `#F2F5F0` chalk | DESIGN.md §2, USAGE.md | DS-1, DS-2 |
-| Status vocabulary | READY, ANALYZING 42%, DONE, BLOCKED, NEEDS REVIEW | USAGE.md status mapping | DS-4, DS-8 |
+| Footage bed | `#050806` with `#F2F5F0` chalk and `#46D08D` signal | studio.html `--stage*`; ADR-0003 D16 (supersedes `#0A0F0C`) | DS-1, DS-2 |
+| Status vocabulary | Stage chips: READY, ANALYZING 42%, DONE, BLOCKED, NEEDS REVIEW. Export readiness: Checking, Ready to export, Needs a clip | USAGE.md status mapping; ADR-0003 D19 | DS-4, DS-8 |
 
 Local design rules: the status bar carries one accent mark and one word for the
 local-only promise, with no second accent element (DS-3), and a chip is a word in
@@ -283,8 +299,8 @@ Local identifiers; they do not replace the shared Q-1..Q-10.
 
 | ID | Question | Why it matters | Owner |
 | --- | --- | --- | --- |
-| Q-SHL-01 | Is the global timeline dock in shell scope for v1, or does it stay in the feature views? | Changes the shell layout and the 176 px dock constant. | Design lead |
-| Q-SHL-02 | Should the toolbar primary action be Export, with Import moving to the video rail? | Resolves the one-primary-action conflict. | Design lead |
+| Q-SHL-01 | **Resolved 2026-10-29.** The 176 px shared timeline dock is in v1 scope (ADR-0003 D3, FR-SHL-41); §2.2 no longer excludes it. | Changes the shell layout and the 176 px dock constant. | Design lead |
+| Q-SHL-02 | **Resolved 2026-10-29.** Export is the single toolbar primary action and Import moves to the video-rail footer (ADR-0003 D4). | Resolves the one-primary-action conflict. | Design lead |
 | Q-SHL-03 | Does v1 include a settings screen, or only system-following appearance? | Determines whether any preferences are persisted; shared Q-7 governs the viewport matrix. | Product owner |
 | Q-SHL-04 | Should a failed background job raise a persistent banner instead of a SnackBar? | Affects whether a failure keeps its only recovery path. | Product owner |
 
