@@ -89,6 +89,6 @@ blocker.
 - Evidence from the analysis, storage, roadmap, dependency-register, and
   verification documents is cited at baseline `1541c64` for provenance. Those
   files are intentionally not part of the working tree; this suite replaces them
-  as the requirements source. README/AGENTS references are reconciled under M-1.
+  as the requirements source. README/CLAUDE.md references are reconciled under M-1.
 - Do not round Partial or Blocked status up to Done. Status and evidence live in
   [00 §3.3](00-product-context.md#33-current-delivery-status).

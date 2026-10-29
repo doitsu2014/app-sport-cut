@@ -375,7 +375,7 @@ Work:
   against the FFI baseline.
 - Finalize diagnostics, the health view, and user-facing service errors.
 - Rehearse the migration on a production-like library and a clean install.
-- Update README, AGENTS, and the dependency register.
+- Update README, CLAUDE.md, and the dependency register.
 
 Exit gate:
 
@@ -457,7 +457,7 @@ release checklist covers the rest.
 | 15 | Dev loader env | No `FRB_DART_LOAD_EXTERNAL_LIBRARY_NATIVE_LIB_DIR` in `tools/run-macos.sh` | 5 |
 | 16 | Preflight text | `tools/preflight.sh` no longer reports bridge generation as a requirement | 5 |
 | 17 | Entitlements | `com.apple.security.network.server` removed from Debug and Release | 5 |
-| 18 | Docs and agents | README, AGENTS, `app/README.md`, `core/README.md`, and `tools/README.md` describe only the service and protocol. Updated in the same change that flips the default transport (Phase 2), not only here | 2, re-checked 5 |
+| 18 | Docs and agents | README, CLAUDE.md, `app/README.md`, `core/README.md`, and `tools/README.md` describe only the service and protocol. Updated in the same change that flips the default transport (Phase 2), not only here | 2, re-checked 5 |
 | 19 | CI guard | `tools/check-no-rust-in-app.sh` is blocking and has no allowlist | 5 |
 | 20 | Binary inspection | `otool -L` shows no Sportcut Rust library; `nm -u` on an unstripped `ci-check` app artifact shows no `sportcut_` symbols; the `sportcut_rust_sentinel` is present in the service and absent from the app. A stripped release `nm` alone is not proof | 5–6 |
 | 21 | Bundle inspection | No `Contents/Frameworks/libsportcut_api.*` and no FRB string in the app binary | 5–6 |

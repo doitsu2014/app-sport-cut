@@ -914,7 +914,7 @@ job. It fails when any of the following is true.
 
 ### 14.4 Review checks
 
-- `app/README.md`, `AGENTS.md`, and `docs/` do not instruct anyone to run
+- `app/README.md`, `CLAUDE.md`, and `docs/` do not instruct anyone to run
   `tools/generate-bridge.sh`, `tools/build-engine-lib.sh`, or
   `tools/embed-engine-lib.sh` for the shipping path. The docs update lands in
   the same change that flips the default transport, not only at Phase 5; this

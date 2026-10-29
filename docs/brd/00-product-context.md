@@ -184,7 +184,7 @@ catalog-migration, and custody-job tests. The table's evidence paths are
 baseline provenance, not the post-migration gate.
 
 Cross-cutting gaps at baseline: no real labeled clip scored by the eval harness
-(`docs/verification/accuracy-evaluation.md` Results table empty); README/AGENTS
+(`docs/verification/accuracy-evaluation.md` Results table empty); README/CLAUDE.md
 still reference the retired documents; the license register is manual-only and
 `cargo-deny` is not wired.
 
@@ -375,7 +375,7 @@ narrow OS-glue allowance in §10.
 | R-6 | Design drift between tokens and implementation | Medium | Medium | Token check in review; reconcile radii, toast duration, raw hexes, selected-rally outline | Design lead |
 | R-7 | Client test gaps and stale tests | High | Medium | Add workspace/studio/tracking/rally tests; fix tests that assert removed screens | QA lead |
 | R-8 | Job-model race and over-broad cancellation invalidation | Medium | Medium | Narrow invalidation to the job's outputs; document or fix the admission-slot race | Engineering lead |
-| R-9 | Retired documentation is still referenced by README/AGENTS and external links | High | Low | Update README/AGENTS and links to point at `docs/brd`; keep baseline copies as provenance only | Engineering lead |
+| R-9 | Retired documentation is still referenced by README/CLAUDE.md and external links | High | Low | Update README/CLAUDE.md and links to point at `docs/brd`; keep baseline copies as provenance only | Engineering lead |
 | R-10 | Scope creep (cloud, social, mobile, auto officiating) | Medium | High | Enforce the out-of-scope list via change control | Product owner |
 | R-11 | FFI-to-service migration regression: a facade call, error, progress, cancellation, checkpoint, artifact, or catalog behavior changes during the move | Medium | High | Phase 0 behavior corpus; parity harness across both transports; phased exit gates; catalog and recording migration rehearsal with rollback; no dual writes | Engineering lead |
 | R-12 | The sandboxed helper cannot resolve an app-created security-scoped bookmark, blocking the primary import path | Medium | High | Bookmark entitlement on both targets; signed sandbox spike with SHA-256 proof; if it fails, first-class inbox handoff with digest, cleanup, and one shipped path (Q-12) | Engineering lead |
@@ -414,7 +414,7 @@ narrow OS-glue allowance in §10.
 
 | Milestone | Exit criterion | Status |
 | --- | --- | --- |
-| M-1 Requirements baseline approved | This BRD suite reviewed and approved; README/AGENTS references reconciled to `docs/brd`; register and model notes agree | Open |
+| M-1 Requirements baseline approved | This BRD suite reviewed and approved; README/CLAUDE.md references reconciled to `docs/brd`; register and model notes agree | Open |
 | M-2 Accuracy baseline | One labeled clip scored; BO-5 metrics reported | Open |
 | M-3 Shippable media backend | LGPL FFmpeg or native renderer selected; export passes on release config | Open |
 | M-4 Client parity and design gaps | Timeline dock, labelled states, search/keyboard/responsive decisions, a11y checklist | Open |
