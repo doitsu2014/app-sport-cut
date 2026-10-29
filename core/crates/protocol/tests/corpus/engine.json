@@ -1,0 +1,167 @@
+{
+  "description": "Golden request/response shapes for the frozen v1 engine surface, protocol section 5. The conformance harness replays every entry through the frame codec and the request/response types.",
+  "cases": [
+    {
+      "method": "engine.importStages",
+      "request": {},
+      "result": { "stages": ["probe", "proxy", "audio", "frames"] }
+    },
+    {
+      "method": "engine.probe",
+      "request": { "source": { "kind": "path", "value": "/state/recordings/match-1/clip.mp4" } },
+      "result": {
+        "path": "/state/recordings/match-1/clip.mp4",
+        "durationSeconds": 1234.5,
+        "frameRate": 29.97,
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "orientation": "landscape",
+        "hasAudio": true,
+        "sizeBytes": 987654321
+      }
+    },
+    {
+      "method": "engine.import.start",
+      "request": { "matchId": "match-1", "samplingRate": 2.0 },
+      "result": { "jobId": "job-1", "matchId": "match-1" }
+    },
+    {
+      "method": "engine.regenerate.start",
+      "request": { "matchId": "match-1", "samplingRate": 2.0 },
+      "result": { "jobId": "job-2", "matchId": "match-1" }
+    },
+    {
+      "method": "engine.rally.start",
+      "request": { "matchId": "match-1", "config": {} },
+      "result": { "jobId": "job-3", "matchId": "match-1" }
+    },
+    {
+      "method": "engine.rally.suggestions",
+      "request": { "matchId": "match-1", "config": {} },
+      "result": null
+    },
+    {
+      "method": "engine.tracks.window",
+      "request": { "matchId": "match-1", "startSeconds": 0.0, "endSeconds": 30.0 },
+      "result": null
+    },
+    {
+      "method": "engine.tracking.start",
+      "request": { "matchId": "match-1", "config": {} },
+      "result": { "jobId": "job-4", "matchId": "match-1" }
+    },
+    {
+      "method": "engine.job.status",
+      "request": { "jobId": "job-1" },
+      "result": {
+        "jobId": "job-1",
+        "matchId": "match-1",
+        "state": "running",
+        "stage": "proxy",
+        "progress": { "stage": "proxy", "value": 0.42, "message": "encoding proxy" },
+        "error": null,
+        "completedStages": ["probe", "audio"]
+      }
+    },
+    {
+      "method": "engine.highlight.rank",
+      "request": {
+        "rallies": [
+          { "rallyId": "rally-1", "startSeconds": 0.0, "endSeconds": 20.0, "motion": 0.5, "scoreContext": 0.4 }
+        ]
+      },
+      "result": {
+        "rallies": [
+          { "rallyId": "rally-1", "startSeconds": 0.0, "endSeconds": 20.0, "motion": 0.5, "scoreContext": 0.4, "score": 0.7, "rank": 1 }
+        ]
+      }
+    },
+    {
+      "method": "engine.servingSides",
+      "request": {
+        "rallies": [
+          { "rallyId": "rally-1", "winner": "left" },
+          { "rallyId": "rally-2", "winner": "right" }
+        ]
+      },
+      "result": {
+        "rallies": [
+          { "rallyId": "rally-1", "side": null },
+          { "rallyId": "rally-2", "side": "left" }
+        ]
+      }
+    },
+    {
+      "method": "engine.court.geometry",
+      "request": {
+        "segment": {
+          "fromMs": 0,
+          "orientation": "away",
+          "corners": [
+            { "x": 0.1, "y": 0.2 },
+            { "x": 0.9, "y": 0.2 },
+            { "x": 0.9, "y": 0.8 },
+            { "x": 0.1, "y": 0.8 }
+          ]
+        }
+      },
+      "result": {
+        "fromMs": 0,
+        "orientation": "away",
+        "homography": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+      }
+    },
+    {
+      "method": "engine.calibration.save",
+      "request": {
+        "matchId": "match-1",
+        "calibration": { "segments": [] }
+      },
+      "result": { "changed": true, "invalidatedKinds": [], "geometry": [] }
+    },
+    {
+      "method": "engine.calibration.get",
+      "request": { "matchId": "match-1" },
+      "result": null
+    },
+    {
+      "method": "engine.job.cancel",
+      "request": { "jobId": "job-1" },
+      "result": {
+        "jobId": "job-1",
+        "matchId": "match-1",
+        "state": "cancelled",
+        "stage": "proxy",
+        "progress": { "stage": "proxy", "value": 0.42, "message": null },
+        "error": null,
+        "completedStages": ["probe"]
+      }
+    },
+    {
+      "method": "engine.export.start",
+      "request": {
+        "matchId": "match-1",
+        "clips": [
+          { "startSeconds": 40.2, "endSeconds": 64.8 }
+        ],
+        "leadInSeconds": 1.5,
+        "leadOutSeconds": 2.0,
+        "musicGain": -6.0
+      },
+      "result": { "jobId": "job-5", "matchId": "match-1" }
+    },
+    {
+      "method": "engine.manifest",
+      "request": { "matchId": "match-1" },
+      "result": {
+        "matchId": "match-1",
+        "originalPath": "/state/recordings/match-1/clip.mp4",
+        "artifacts": [],
+        "missingKinds": ["tracks"],
+        "notRebuildableKinds": ["calibration"],
+        "originalPresent": true
+      }
+    }
+  ]
+}

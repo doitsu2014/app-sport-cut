@@ -1,0 +1,30 @@
+{
+  "description": "Golden protocol error shapes, protocol section 8. Each case names the stable code and kind the client switches on; the diagnostic message is not part of the contract.",
+  "cases": [
+    { "code": -32700, "kind": "parse_error" },
+    { "code": -32600, "kind": "invalid_request" },
+    { "code": -32601, "kind": "method_not_found" },
+    { "code": -32602, "kind": "invalid_params" },
+    { "code": -32603, "kind": "internal" },
+    { "code": -32000, "kind": "unauthorized" },
+    { "code": -32001, "kind": "version_mismatch" },
+    { "code": -32002, "kind": "handshake_required" },
+    { "code": -32003, "kind": "frame_too_large" },
+    { "code": -32020, "kind": "io" },
+    { "code": -32022, "kind": "unsupported" },
+    { "code": -32023, "kind": "toolchain_unavailable" },
+    { "code": -32024, "kind": "media_failed" },
+    { "code": -32025, "kind": "probe_failed" },
+    { "code": -32026, "kind": "artifact" },
+    { "code": -32027, "kind": "response_too_large" },
+    { "code": -32030, "kind": "job_rejected" },
+    { "code": -32031, "kind": "job_failed" },
+    { "code": -32032, "kind": "cancelled" },
+    { "code": -32040, "kind": "not_found" },
+    { "code": -32041, "kind": "conflict" },
+    { "code": -32042, "kind": "job_not_found" },
+    { "code": -32043, "kind": "migration_required" },
+    { "code": -32044, "kind": "catalog_locked" },
+    { "code": -32045, "kind": "endpoint_too_long" }
+  ]
+}

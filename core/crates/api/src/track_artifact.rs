@@ -17,6 +17,13 @@ use sportcut_vision::{CandidateDecision, TrackingConfig, TrackingResult};
 /// Stable relative path consumed by the rally facade and owned by the engine.
 pub const PLAYER_TRACKS_RELATIVE_PATH: &str = "tracks/player_tracks.json";
 
+/// Content fingerprint of the pinned EfficientDet-Lite0 trial model.
+///
+/// The player-tracking job refuses any other model; the service's `vision`
+/// health block applies the same gate so a present-but-unsupported model can
+/// never report as runnable.
+pub const TRIAL_MODEL_FINGERPRINT: &str = "fnv1a64:0a4c9e64faa2dae8";
+
 /// The first producer schema retains the provisional `input` shape already read
 /// by rally segmentation. Additional review fields are ignored by older readers.
 pub const PLAYER_TRACKS_SCHEMA_VERSION: u32 = 1;

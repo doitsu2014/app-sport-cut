@@ -2,7 +2,7 @@
 //
 // The engine runs from two layouts:
 //   repo:      <repo>/core/tools/lib/version.mjs   -> engineRoot = <repo>/core
-//   projected: <project>/.pi/tools/lib/version.mjs -> engineRoot = <project>/.pi
+//   projected: <project>/.claude/tools/lib/version.mjs -> engineRoot = <project>/.claude
 // In both cases engineRoot is two levels up from this file and repoRoot is
 // three levels up. MY_AIDLC_HOME overrides for a global install.
 
