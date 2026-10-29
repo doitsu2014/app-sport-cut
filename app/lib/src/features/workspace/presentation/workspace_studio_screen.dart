@@ -12,6 +12,8 @@ import '../../library/presentation/import_controller.dart';
 import '../../library/presentation/library_providers.dart';
 import '../../library/presentation/match_list_entry.dart';
 import '../../library/presentation/playback_controller.dart';
+import '../../rally/presentation/rally_review_providers.dart';
+import '../../score/presentation/rally_panel.dart';
 import '../domain/pipeline_stage.dart';
 import '../domain/workspace.dart';
 import 'studio/studio_controller.dart';
@@ -39,7 +41,6 @@ class WorkspaceStudioScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
-
   /// The shared player for the selected video.
   PlaybackController? _controller;
 
@@ -199,6 +200,9 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
         selectedRallyId: studio.selectedRallyId,
         onSeekTimeline: _seekTimeline,
         onSelectRally: _selectTimelineRally,
+        onSelectInspectorRally: _selectPanelRally,
+        inspectorTab: studio.inspectorTab,
+        onInspectorTabChanged: studioController.setInspectorTab,
       ),
     );
   }
@@ -227,17 +231,34 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     _studioController.clearSearch();
   }
 
-  /// Score the selected rally.
+  /// Score the rally selected on the timeline.
   ///
-  /// The score panel arrives in PR 6a; until then there is no selected rally,
-  /// so this stays a no-op that keeps the shortcut wiring one line away. A
-  /// missing recording disables scoring outright: the clip it would describe
-  /// cannot be played.
+  /// This resolves the same selected rally the Rally panel's winner buttons
+  /// use and calls the same [scoreRally] helper, so the shortcut and the
+  /// buttons can never disagree. A confirmed rally can be corrected the same
+  /// way the row controls correct it. A missing recording disables scoring
+  /// outright: the clip it would describe cannot be played.
   void _scoreSelectedRally(bool left) {
     final entry = _selectedEntryFromProvider();
     if (entry == null || !entry.recordingAvailable) {
       return;
     }
+    final selectedId =
+        ref.read(studioControllerProvider(widget.workspace.id)).selectedRallyId;
+    final editing = ref.read(editingControllerProvider);
+    final edit = editing.match?.id == entry.match.id ? editing.edit : null;
+    Rally? selected;
+    for (final rally in edit?.rallies ?? const <Rally>[]) {
+      if (rally.id == selectedId) {
+        selected = rally;
+        break;
+      }
+    }
+    if (selected == null) {
+      _studioController.showToast('Select a rally on the timeline.');
+      return;
+    }
+    scoreRally(ref, selected.id, left ? WinnerSide.left : WinnerSide.right);
   }
 
   StudioController get _studioController =>
@@ -294,9 +315,22 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     _controller = ref.read(playbackControllerFactoryProvider)();
     _controller!.state.addListener(_onPlaybackChanged);
     unawaited(_controller!.load(match.videoPath));
-    // One editing session for the shell, opened once per selected video
-    // (FR-SHL-45). Feature views reached from the studio read this session.
+    // One editing session and one rally-review session for the shell, opened
+    // once per selected video (FR-SHL-45). Both are shell-owned, so the Rally
+    // panel never opens them itself in the studio (PR 6a).
     unawaited(ref.read(editingControllerProvider.notifier).ensureOpen(match));
+    unawaited(ref.read(rallyReviewControllerProvider.notifier).open(match));
+  }
+
+  /// Select a rally from the Rally tab and seek to it.
+  ///
+  /// Unlike the timeline's selection, this keeps the inspector on the Rally
+  /// tab: the selection came from the tab the user is already reading.
+  void _selectPanelRally(Rally rally) {
+    _studioController.selectRally(rally.id);
+    _seekTimeline(
+      Duration(milliseconds: (rally.startSeconds * 1000).round()),
+    );
   }
 
   /// The visible window's start for the selected recording.

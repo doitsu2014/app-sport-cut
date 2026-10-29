@@ -73,6 +73,9 @@ class StudioShell extends StatelessWidget {
     this.selectedRallyId,
     this.onSeekTimeline,
     this.onSelectRally,
+    this.onSelectInspectorRally,
+    this.inspectorTab = 0,
+    required this.onInspectorTabChanged,
   });
 
   /// The workspace the studio is showing.
@@ -197,6 +200,15 @@ class StudioShell extends StatelessWidget {
 
   /// Select a rally on the timeline.
   final ValueChanged<Rally>? onSelectRally;
+
+  /// Select a rally from the inspector's Rally tab.
+  final ValueChanged<Rally>? onSelectInspectorRally;
+
+  /// The selected inspector tab: 0 is Rally, 1 is Clip.
+  final int inspectorTab;
+
+  /// Select an inspector tab.
+  final ValueChanged<int> onInspectorTabChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -374,6 +386,13 @@ class StudioShell extends StatelessWidget {
       runningFraction: runningFraction,
       onSelectPlay: () => onSelectStage(null),
       onSelectStage: (PipelineStage stage) => onSelectStage(stage),
+      inspectorTab: inspectorTab,
+      onInspectorTabChanged: onInspectorTabChanged,
+      match: selectedEntry?.match,
+      controller: controller,
+      selectedRallyId: selectedRallyId,
+      onSelectRally: onSelectInspectorRally,
+      recordingAvailable: selectedEntry?.recordingAvailable ?? false,
     );
   }
 

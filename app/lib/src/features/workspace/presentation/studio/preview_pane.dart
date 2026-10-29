@@ -10,7 +10,6 @@ import '../../../highlights/presentation/highlights_view.dart';
 import '../../../library/domain/match_record.dart';
 import '../../../library/presentation/match_list_entry.dart';
 import '../../../library/presentation/playback_controller.dart';
-import '../../../score/presentation/score_view.dart';
 import '../../../tracking/presentation/player_tracking_view.dart';
 import '../../domain/pipeline_stage.dart';
 import 'studio_chrome.dart';
@@ -86,11 +85,12 @@ class PreviewPane extends StatelessWidget {
 
   /// The centre for the current stage.
   ///
-  /// Play and Import share the one stage without any feature takeover. The
-  /// score and highlight stages keep their existing views for now: those views
-  /// size themselves with `Expanded` and a fixed panel stack, so they cannot be
-  /// placed under the stage without editing them. PR 7c replaces them with the
-  /// inspector panels and drops the switch below.
+  /// Play, Import, and Review & score share the one stage without a feature
+  /// takeover; Review & score merely adds the score bug, and its controls live
+  /// in the Rally inspector. The remaining stages keep their existing views
+  /// until PR 7c turns them into panels. Those views size themselves with
+  /// `Expanded` and a fixed panel stack, so they cannot be placed under the
+  /// stage without editing them.
   Widget _centre(
     MatchListEntry entry,
     Map<String, VideoStageFacts>? facts,
@@ -135,7 +135,11 @@ class PreviewPane extends StatelessWidget {
           onOpenScore: () => onSelectStage(PipelineStage.score),
         );
       case PipelineStage.score:
-        return ScoreView(match: entry.match, controller: controller);
+        return VideoPreview(
+          entry: entry,
+          controller: controller,
+          showScoreBug: true,
+        );
       case PipelineStage.highlight:
         return HighlightsView(match: entry.match);
       case PipelineStage.export:
