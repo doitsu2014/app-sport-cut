@@ -8,6 +8,7 @@ import '../../editing/domain/highlight_clip.dart';
 import '../../editing/domain/match_edit.dart';
 import '../../editing/domain/rally.dart';
 import '../../editing/presentation/editing_providers.dart';
+import '../../export/presentation/export_sheet.dart';
 import '../../library/domain/match_record.dart';
 import '../../library/presentation/import_controller.dart';
 import '../../library/presentation/library_providers.dart';
@@ -144,77 +145,88 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     final videosError =
         videos.hasError && !videos.hasValue ? '${videos.error}' : null;
 
-    return StudioShortcuts(
-      controller: _controller,
-      searchQuery: studio.searchQuery,
-      selectedRallyId: studio.selectedRallyId,
-      exportSheetOpen: studio.exportSheetOpen,
-      focusMode: studio.focusMode,
-      onScoreRally: _scoreSelectedRally,
-      onToggleFocusMode: studioController.toggleFocusMode,
-      onSelectExport: () => _selectStage(PipelineStage.export),
-      onFocusSearch: _focusSearch,
-      onCloseExportSheet: () => studioController.setExportSheet(false),
-      onExitFocusMode: studioController.restoreRailsAfterFocus,
-      onClearSearch: _clearSearch,
-      onToast: studioController.showToast,
-      child: StudioShell(
-        workspace: widget.workspace,
-        videos: loadedEntries,
-        videosError: videosError,
-        selectedEntry: selectedEntry,
-        facts: facts,
-        stageStates: stageStates,
-        selectedStage: studio.selectedStage,
-        runningStage: runningForSelected ? PipelineStage.analyze : null,
-        runningFraction: runningForSelected ? analysis.progress : null,
+    return _ExportSheetHost(
+      open: studio.exportSheetOpen,
+      match: selectedEntry?.match,
+      recordingAvailable: selectedEntry?.recordingAvailable ?? false,
+      onExported: _refresh,
+      onClosed: () {
+        if (mounted) {
+          studioController.setExportSheet(false);
+        }
+      },
+      child: StudioShortcuts(
         controller: _controller,
-        importRunning: import.isRunning,
-        importDescription: import.description,
-        searchController: _searchController,
-        searchFocusNode: _searchFocusNode,
         searchQuery: studio.searchQuery,
-        onClearSearch: _clearSearch,
-        toastMessage: studio.toastMessage,
-        onToastShown: () => studioController.showToast(null),
-        libraryVisible: studio.libraryVisible,
-        inspectorVisible: studio.inspectorVisible,
-        focusMode: studio.focusMode,
-        onBack: () => Navigator.of(context).maybePop(),
-        onToggleLibrary: studioController.toggleLibrary,
-        onToggleInspector: studioController.toggleInspector,
-        onToggleFocusMode: studioController.toggleFocusMode,
-        onDeleteWorkspace: _confirmDeleteWorkspace,
-        onSelectVideo: (entry) => _selectVideo(entry.match),
-        onDeleteVideo: (entry) => _confirmDeleteMatch(entry.match),
-        onImport: _import,
-        onCancelImport: () =>
-            ref.read(importControllerProvider.notifier).cancel(),
-        onRetry: () => ref.invalidate(
-          workspaceVideosProvider(widget.workspace.id),
-        ),
-        onSelectStage: _selectStageFromStrip,
-        onPrepare: _startPreparing,
-        onRefresh: _refresh,
-        edit: edit,
-        duration: _durationFor(selectedEntry),
-        timelineWindowStart: studio.timelineWindowStart,
         selectedRallyId: studio.selectedRallyId,
-        onSeekTimeline: _seekTimeline,
-        onSelectRally: _selectTimelineRally,
-        onSelectInspectorRally: _selectPanelRally,
-        inspectorTab: studio.inspectorTab,
-        onInspectorTabChanged: studioController.setInspectorTab,
-        editProblem: editProblem,
-        editBusy: editBusy,
-        onDismissEditProblem: () =>
-            ref.read(editingControllerProvider.notifier).clearProblem(),
-        onSetKept: _setKept,
-        onTrimClip: _trimClip,
-        onReorderClips: _reorderClips,
-        onKeepTop10: _keepTopTen,
-        onSelectClip: _selectTimelineRally,
-        onExport: _startExport,
+        exportSheetOpen: studio.exportSheetOpen,
+        focusMode: studio.focusMode,
+        onScoreRally: _scoreSelectedRally,
+        onToggleFocusMode: studioController.toggleFocusMode,
+        onSelectExport: _openExportSheet,
+        onFocusSearch: _focusSearch,
+        onCloseExportSheet: () => studioController.setExportSheet(false),
+        onExitFocusMode: studioController.restoreRailsAfterFocus,
+        onClearSearch: _clearSearch,
+        onToast: studioController.showToast,
+        child: StudioShell(
+          workspace: widget.workspace,
+          videos: loadedEntries,
+          videosError: videosError,
+          selectedEntry: selectedEntry,
+          facts: facts,
+          stageStates: stageStates,
+          selectedStage: studio.selectedStage,
+          runningStage: runningForSelected ? PipelineStage.analyze : null,
+          runningFraction: runningForSelected ? analysis.progress : null,
+          controller: _controller,
+          importRunning: import.isRunning,
+          importDescription: import.description,
+          searchController: _searchController,
+          searchFocusNode: _searchFocusNode,
+          searchQuery: studio.searchQuery,
+          onClearSearch: _clearSearch,
+          toastMessage: studio.toastMessage,
+          onToastShown: () => studioController.showToast(null),
+          libraryVisible: studio.libraryVisible,
+          inspectorVisible: studio.inspectorVisible,
+          focusMode: studio.focusMode,
+          onBack: () => Navigator.of(context).maybePop(),
+          onToggleLibrary: studioController.toggleLibrary,
+          onToggleInspector: studioController.toggleInspector,
+          onToggleFocusMode: studioController.toggleFocusMode,
+          onDeleteWorkspace: _confirmDeleteWorkspace,
+          onSelectVideo: (entry) => _selectVideo(entry.match),
+          onDeleteVideo: (entry) => _confirmDeleteMatch(entry.match),
+          onImport: _import,
+          onCancelImport: () =>
+              ref.read(importControllerProvider.notifier).cancel(),
+          onRetry: () => ref.invalidate(
+            workspaceVideosProvider(widget.workspace.id),
+          ),
+          onSelectStage: _selectStageFromStrip,
+          onPrepare: _startPreparing,
+          onRefresh: _refresh,
+          edit: edit,
+          duration: _durationFor(selectedEntry),
+          timelineWindowStart: studio.timelineWindowStart,
+          selectedRallyId: studio.selectedRallyId,
+          onSeekTimeline: _seekTimeline,
+          onSelectRally: _selectTimelineRally,
+          onSelectInspectorRally: _selectPanelRally,
+          inspectorTab: studio.inspectorTab,
+          onInspectorTabChanged: studioController.setInspectorTab,
+          editProblem: editProblem,
+          editBusy: editBusy,
+          onDismissEditProblem: () =>
+              ref.read(editingControllerProvider.notifier).clearProblem(),
+          onSetKept: _setKept,
+          onTrimClip: _trimClip,
+          onReorderClips: _reorderClips,
+          onKeepTop10: _keepTopTen,
+          onSelectClip: _selectTimelineRally,
+          onExport: _openExportSheet,
+        ),
       ),
     );
   }
@@ -252,9 +264,19 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     }
   }
 
-  /// Open the Export stage from the reel footer.
-  void _startExport() {
-    _selectStage(PipelineStage.export);
+  /// Open the export sheet for the selected video.
+  ///
+  /// The sheet is the only export editor, so the toolbar action, the reel's
+  /// mini Export, the stage strip's Export tab, and the `E` shortcut all land
+  /// here instead of selecting a centre takeover. A missing recording still
+  /// opens the sheet; the form states the block.
+  void _openExportSheet() {
+    final entry = _selectedEntryFromProvider();
+    if (entry == null) {
+      _studioController.showToast('Select a video to export.');
+      return;
+    }
+    _studioController.setExportSheet(true);
   }
 
   /// Select a stage from the strip or inspector, where null is Play.
@@ -358,6 +380,8 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
       _selectedDuration = _durationOf(match.durationSeconds);
     });
     _studioController.selectStage(null);
+    // The sheet describes the video that was selected when it opened.
+    _studioController.setExportSheet(false);
     // A new recording starts with a fresh window and no selected rally.
     _studioController.selectRally(null);
     _studioController.setTimelineWindow(Duration.zero);
@@ -480,13 +504,18 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     if (stage == PipelineStage.import) {
       return; // import is a one-time custody action, not a screen
     }
+    if (stage == PipelineStage.export) {
+      // Export is a sheet, not a centre takeover; the stage stays where it is.
+      _openExportSheet();
+      return;
+    }
     final entry = _selectedEntryFromProvider();
     if (entry == null) {
       return;
     }
     // Every feature is selectable; a stage that needs an earlier one stays
     // openable and explains what is missing in its own view. Prepare analysis
-    // opens its screen, and the job starts only from its button.
+    // opens its panel, and the job starts only from its button.
     _studioController.selectStage(stage);
   }
 
@@ -579,4 +608,89 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
       Navigator.of(context).pop();
     }
   }
+}
+
+/// Keeps the export sheet's route in step with [StudioState.exportSheetOpen].
+///
+/// The state is the source of truth: opening sets it true, and the shortcut
+/// layer's Escape order or any close action sets it false. The route's own
+/// dismiss (Escape or the barrier) finishes here and writes false back, so the
+/// flag never claims a sheet that is not on screen. No Escape handler is added
+/// on this path; the studio's existing shortcut order stays the only one.
+class _ExportSheetHost extends StatefulWidget {
+  const _ExportSheetHost({
+    required this.open,
+    required this.match,
+    required this.recordingAvailable,
+    required this.onExported,
+    required this.onClosed,
+    required this.child,
+  });
+
+  final bool open;
+  final MatchRecord? match;
+  final bool recordingAvailable;
+  final VoidCallback onExported;
+  final VoidCallback onClosed;
+  final Widget child;
+
+  @override
+  State<_ExportSheetHost> createState() => _ExportSheetHostState();
+}
+
+class _ExportSheetHostState extends State<_ExportSheetHost> {
+  bool _showing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.open) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _show());
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _ExportSheetHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.open && !oldWidget.open) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _show());
+    } else if (!widget.open && oldWidget.open) {
+      _dismiss();
+    }
+  }
+
+  Future<void> _show() async {
+    if (_showing || !mounted || !widget.open) {
+      return;
+    }
+    final MatchRecord? match = widget.match;
+    if (match == null) {
+      widget.onClosed();
+      return;
+    }
+    _showing = true;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) => ExportSheet(
+        match: match,
+        recordingAvailable: widget.recordingAvailable,
+        onExported: widget.onExported,
+      ),
+    );
+    _showing = false;
+    if (mounted) {
+      widget.onClosed();
+    }
+  }
+
+  void _dismiss() {
+    if (!_showing || !mounted) {
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

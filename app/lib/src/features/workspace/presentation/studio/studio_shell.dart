@@ -280,7 +280,7 @@ class StudioShell extends StatelessWidget {
               onToggleInspector: onToggleInspector,
               onToggleFocusMode: onToggleFocusMode,
               onDelete: onDeleteWorkspace,
-              onExport: () => onSelectStage(PipelineStage.export),
+              onExport: onExport ?? () {},
             ),
             StageStrip(
               states: stageStates,
@@ -288,6 +288,7 @@ class StudioShell extends StatelessWidget {
               runningStage: runningStage,
               runningFraction: runningFraction,
               onSelectStage: onSelectStage,
+              onExport: onExport,
             ),
             Expanded(
               child: LayoutBuilder(
@@ -393,7 +394,6 @@ class StudioShell extends StatelessWidget {
       controller: controller,
       stage: selectedStage,
       onSelectStage: (PipelineStage stage) => onSelectStage(stage),
-      onRefresh: onRefresh,
     );
   }
 

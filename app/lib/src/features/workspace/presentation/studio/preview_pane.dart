@@ -6,9 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/design/sc_metrics.dart';
 import '../../../../app/design/sc_typography.dart';
 import '../../../../app/design/sportcut_tokens.dart';
-import '../../../analysis/presentation/analysis_view.dart';
+import '../../../analysis/presentation/analysis_providers.dart';
 import '../../../calibration/presentation/calibration_overlay_host.dart';
-import '../../../export/presentation/export_view.dart';
 import '../../../library/domain/match_record.dart';
 import '../../../library/presentation/match_list_entry.dart';
 import '../../../library/presentation/playback_controller.dart';
@@ -21,11 +20,11 @@ import 'video_preview.dart';
 /// One shared preview in the centre of the studio.
 ///
 /// The pane fills its column, keeps the [ScMetrics.previewMinWidth] floor via
-/// [LayoutBuilder], and sits on the page ground. Play, Import, Mark court,
-/// Player analysis, Review & score, and Highlights draw the shared
-/// [VideoPreview]; Mark court and Player analysis add their overlay to its
-/// aspect-fit box. Prepare analysis and Export still keep their existing view
-/// until PR 7a and PR 7b turn them into panels.
+/// [LayoutBuilder], and sits on the page ground. Every stage keeps the shared
+/// [VideoPreview] in the centre: Mark court and Player analysis add their
+/// overlay to its aspect-fit box, and Prepare analysis and Export leave the
+/// playback untouched because their work surfaces are the inspector panel and
+/// the export sheet.
 class PreviewPane extends StatelessWidget {
   /// Build the centre pane for the selected [entry].
   const PreviewPane({
@@ -34,7 +33,6 @@ class PreviewPane extends StatelessWidget {
     required this.controller,
     required this.stage,
     required this.onSelectStage,
-    required this.onRefresh,
   });
 
   /// The selected video.
@@ -48,9 +46,6 @@ class PreviewPane extends StatelessWidget {
 
   /// Open another feature.
   final void Function(PipelineStage) onSelectStage;
-
-  /// Refresh the rail after a feature writes an artifact.
-  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -82,12 +77,12 @@ class PreviewPane extends StatelessWidget {
 
   /// The centre for the current stage.
   ///
-  /// Play, Import, Mark court, Player analysis, Review & score, and Highlights
-  /// share the one stage without a feature takeover; Review & score adds the
-  /// score bug, and its controls live in the Rally inspector. Mark court and
-  /// Player analysis draw their stage overlays here and put every control in
-  /// the stage-aware inspector (D14). Prepare analysis and Export keep their
-  /// existing views until their own panel PRs land.
+  /// Every stage shares the one stage without a feature takeover; Review &
+  /// score adds the score bug, and its controls live in the Rally inspector.
+  /// Mark court and Player analysis draw their stage overlays here and put
+  /// every control in the stage-aware inspector (D14). Prepare analysis opens
+  /// its job and still plays here; Export opens the sheet and the playback
+  /// stays mounted behind it.
   Widget _centre(MatchListEntry entry, PlaybackController? controller) {
     if (stage == null || stage == PipelineStage.import) {
       return VideoPreview(entry: entry, controller: controller);
@@ -125,16 +120,69 @@ class PreviewPane extends StatelessWidget {
         // reel live in the inspector's Clip tab (PR 6b).
         return VideoPreview(entry: entry, controller: controller);
       case PipelineStage.export:
-        return ExportView(match: entry.match, onExported: onRefresh);
+        // The export sheet is the only editor; the centre stays on playback.
+        return VideoPreview(entry: entry, controller: controller);
       case PipelineStage.analyze:
-        return AnalysisView(
-          match: entry.match,
-          onOpenTracking: () => onSelectStage(PipelineStage.track),
-        );
+        // The panel in the inspector is the work surface; this host only opens
+        // the app-wide analysis controller so the panel and the stage strip
+        // see the manifest and the running job.
+        return _AnalysisStage(entry: entry, controller: controller);
       case PipelineStage.import:
         // Import is not a lens; the center stays on playback.
         return VideoPreview(entry: entry, controller: controller);
     }
+  }
+}
+
+/// Opens the analysis controller once and leaves playback on the stage.
+///
+/// The inspector's [AnalysisPanel] owns the prepare, rebuild, and artifact
+/// controls; this host exists only so selecting Prepare analysis reads the
+/// match's manifest and follows its job even when the inspector is hidden. The
+/// preview itself is the ordinary [VideoPreview], with no takeover.
+class _AnalysisStage extends ConsumerStatefulWidget {
+  const _AnalysisStage({required this.entry, required this.controller});
+
+  final MatchListEntry entry;
+  final PlaybackController controller;
+
+  @override
+  ConsumerState<_AnalysisStage> createState() => _AnalysisStageState();
+}
+
+class _AnalysisStageState extends ConsumerState<_AnalysisStage> {
+  @override
+  void initState() {
+    super.initState();
+    _open();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnalysisStage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.entry.match.id != widget.entry.match.id) {
+      _open();
+    }
+  }
+
+  /// Read this match's manifest; opening the same match is harmless.
+  void _open() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(
+        ref.read(analysisControllerProvider.notifier).open(widget.entry.match),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return VideoPreview(
+      entry: widget.entry,
+      controller: widget.controller,
+    );
   }
 }
 

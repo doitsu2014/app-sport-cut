@@ -70,7 +70,7 @@ class StudioToolbar extends StatelessWidget {
   /// Delete the workspace.
   final VoidCallback onDelete;
 
-  /// Select the Export stage.
+  /// Open the export sheet.
   final VoidCallback onExport;
 
   @override

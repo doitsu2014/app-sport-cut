@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/design/components/sc_actions.dart';
 import '../../../../app/design/components/sc_empty_state.dart';
 import '../../../../app/design/components/sc_panel.dart';
 import '../../../../app/design/components/sc_pipeline_row.dart';
@@ -11,6 +12,7 @@ import '../../../../app/design/sc_status.dart';
 import '../../../../app/design/sc_tints.dart';
 import '../../../../app/design/sc_typography.dart';
 import '../../../../app/design/sportcut_tokens.dart';
+import '../../../analysis/presentation/analysis_panel.dart';
 import '../../../calibration/presentation/calibration_panel.dart';
 import '../../../editing/domain/highlight_clip.dart';
 import '../../../editing/domain/match_edit.dart';
@@ -35,11 +37,12 @@ import '../../domain/pipeline_stage.dart';
 /// persistent rail.
 ///
 /// The pane itself reads no provider: the shell passes the resolved pipeline
-/// states, the selected match, the review, and every callback, and
-/// [RallyPanel] reads the shell-owned editing and rally-review sessions. The
-/// pipeline rows keep the existing [onSelectStage]/[onSelectPlay] callbacks.
-/// [ClipInspectorPanel] and [ReelPanel] watch the ranking provider for the
-/// suggested rank and order, which is the one read they make themselves.
+/// states, the selected match, the review, and every callback, and the
+/// contextual panels read their own stage controllers. [RallyPanel] reads the
+/// shell-owned editing and rally-review sessions; [ClipInspectorPanel] and
+/// [ReelPanel] watch the ranking provider for the suggested rank and order;
+/// [AnalysisPanel], [CalibrationPanel], and [TrackingPanel] read the controller
+/// their stage owns.
 class InspectorPane extends StatelessWidget {
   /// Build the inspector for the selected video's [states].
   const InspectorPane({
@@ -306,9 +309,10 @@ class InspectorPane extends StatelessWidget {
 
   /// The contextual panel for a stage outside the Rally/Clip tablist.
   ///
-  /// Mark court and Player analysis own the inspector body: their controls
-  /// live here and the preview keeps the overlay (D14). Prepare analysis and
-  /// Export keep the honest placeholder until PR 7a and PR 7b land.
+  /// Mark court, Prepare analysis, Player analysis, and Export own the
+  /// inspector body: their controls live here and the preview keeps playback
+  /// or its overlay (D14). Export's editor is the sheet, so its panel only
+  /// explains that and opens it.
   Widget _contextualBody(BuildContext context, PipelineStage? stage) {
     final match = this.match;
     if (match != null) {
@@ -318,6 +322,11 @@ class InspectorPane extends StatelessWidget {
             match: match,
             onSaved: (_) => onRefresh?.call(),
             onCancel: onSelectPlay,
+          );
+        case PipelineStage.analyze:
+          return AnalysisPanel(
+            match: match,
+            onOpenTracking: () => onSelectStage(PipelineStage.track),
           );
         case PipelineStage.track:
           final prepare = onPrepare;
@@ -330,11 +339,11 @@ class InspectorPane extends StatelessWidget {
             onAnalyzed: onRefresh,
             onOpenScore: () => onSelectStage(PipelineStage.score),
           );
+        case PipelineStage.export:
+          return _ExportContextPanel(onExport: onExport);
         case PipelineStage.import:
-        case PipelineStage.analyze:
         case PipelineStage.score:
         case PipelineStage.highlight:
-        case PipelineStage.export:
         case null:
           break;
       }
@@ -412,6 +421,50 @@ class InspectorPane extends StatelessWidget {
   String get _percent {
     final value = (runningFraction ?? 0).clamp(0.0, 1.0);
     return '${(value * 100).round()}%';
+  }
+}
+
+/// The Export stage's contextual panel: the sheet is the only editor.
+class _ExportContextPanel extends StatelessWidget {
+  const _ExportContextPanel({required this.onExport});
+
+  final VoidCallback? onExport;
+
+  @override
+  Widget build(BuildContext context) {
+    final SportcutPalette palette = SportcutPalette.of(context);
+    final SportcutTokens tokens = SportcutTokens.of(context);
+    final SportcutTypography typography = SportcutTypography.of(context);
+    final VoidCallback? export = onExport;
+
+    return ScPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text(
+            'Export',
+            style: typography.body16.copyWith(
+              color: palette.fg,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: tokens.space2),
+          Text(
+            'The reel is assembled and exported in the export sheet. The '
+            'preview stays on playback while you choose its settings.',
+            style: typography.sm14.copyWith(color: palette.fg2),
+          ),
+          SizedBox(height: tokens.space3),
+          ScButton(
+            label: 'Open export sheet',
+            icon: ScIcons.download,
+            expanded: true,
+            enabled: export != null,
+            onPressed: export,
+          ),
+        ],
+      ),
+    );
   }
 }
 

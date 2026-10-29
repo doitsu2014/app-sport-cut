@@ -29,7 +29,9 @@ const List<PipelineStage?> stageStripOrder = <PipelineStage?>[
 ///
 /// Each tab carries its label and a state marker: a done check, an accent dot
 /// plus READY, a danger icon plus BLOCKED, or a running percentage. The
-/// selected stage gets a 2 px accent underline. The widget is data-in /
+/// selected stage gets a 2 px accent underline. Export is the exception: its
+/// tab opens the export sheet through [onExport] instead of selecting a centre
+/// takeover, because the sheet is the only editor. The widget is data-in /
 /// callback-out and reads no provider.
 class StageStrip extends StatelessWidget {
   /// Build the strip for the selected video's [states].
@@ -40,6 +42,7 @@ class StageStrip extends StatelessWidget {
     required this.runningStage,
     required this.runningFraction,
     required this.onSelectStage,
+    this.onExport,
   });
 
   /// The resolved state of every stage for the selected video.
@@ -56,6 +59,9 @@ class StageStrip extends StatelessWidget {
 
   /// Select a stage, where null selects Play.
   final void Function(PipelineStage?) onSelectStage;
+
+  /// Open the export sheet. When null, Export selects its stage as usual.
+  final VoidCallback? onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +84,9 @@ class StageStrip extends StatelessWidget {
                       ? _runningPercent
                       : null,
                   selected: selectedStage == stage,
-                  onTap: () => onSelectStage(stage),
+                  onTap: stage == PipelineStage.export && onExport != null
+                      ? onExport!
+                      : () => onSelectStage(stage),
                 ),
               ),
           ],
