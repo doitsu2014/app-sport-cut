@@ -65,6 +65,9 @@ abstract final class ScMetrics {
   /// Working window shown by the timeline, in seconds.
   static const double timelineWindowSeconds = 600;
 
+  /// [timelineWindowSeconds] in whole milliseconds.
+  static const int timelineWindowSecondsMs = 600 * 1000;
+
   /// Smallest drawn rally segment width.
   static const double rallySegmentMinWidth = 14;
 

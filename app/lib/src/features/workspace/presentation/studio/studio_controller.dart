@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/design/sc_metrics.dart';
 import '../../domain/pipeline_stage.dart';
 
 /// A sentinel that distinguishes "leave this field alone" from "set it to null"
@@ -207,3 +208,80 @@ final studioControllerProvider =
     NotifierProvider.autoDispose.family<StudioController, StudioState, String>(
   (_) => StudioController(),
 );
+
+/// The start of the visible timeline window when the playhead is at [position].
+///
+/// The rule is **recentre when the playhead leaves the visible window**. While
+/// [position] stays inside `[current, current + window)`, [current] is returned
+/// unchanged, so ordinary playback ticks never move the scale and the ruler does
+/// not jitter. When the playhead leaves — because playback ran past the edge,
+/// or an explicit seek or rally selection put it there — the window is
+/// recentred on the playhead, which lands at the middle of the window.
+///
+/// The playhead is clamped to `0..duration` and the result to
+/// `0..max(0, duration - window)`, so neither the playhead nor the window can
+/// sit outside the recording. [duration] is optional: when it is unknown only
+/// the lower bound is enforced. A zero or negative [window] returns
+/// [Duration.zero].
+/// The visible window length for a recording.
+///
+/// Ten minutes by default. A short recording shrinks the window so the
+/// timeline is not mostly empty, but never below one minute; a window longer
+/// than the recording is clamped to it. `studio.html` shrinks the span the
+/// same way, and the ten-minute constant stays the design ceiling.
+Duration timelineWindowFor(Duration? duration) {
+  const ceiling = Duration(
+    milliseconds: ScMetrics.timelineWindowSecondsMs,
+  );
+  if (duration == null || duration <= Duration.zero) {
+    return ceiling;
+  }
+  const floor = Duration(minutes: 1);
+  final span = duration < floor ? floor : duration;
+  return span < ceiling ? span : ceiling;
+}
+
+Duration windowStartFor(
+  Duration position,
+  Duration window, {
+  Duration current = Duration.zero,
+  Duration? duration,
+}) {
+  if (window <= Duration.zero) {
+    return Duration.zero;
+  }
+
+  final recording = duration;
+  Duration? maxStart;
+  var playhead = position;
+  if (recording != null && recording > Duration.zero) {
+    maxStart = recording - window;
+    if (maxStart < Duration.zero) {
+      maxStart = Duration.zero;
+    }
+    if (playhead > recording) {
+      playhead = recording;
+    }
+  }
+  if (playhead < Duration.zero) {
+    playhead = Duration.zero;
+  }
+
+  var start = current;
+  if (start < Duration.zero) {
+    start = Duration.zero;
+  } else if (maxStart != null && start > maxStart) {
+    start = maxStart;
+  }
+
+  final inside = playhead >= start && playhead < start + window;
+  if (!inside) {
+    start = playhead - window ~/ 2;
+    if (start < Duration.zero) {
+      start = Duration.zero;
+    } else if (maxStart != null && start > maxStart) {
+      start = maxStart;
+    }
+  }
+  return start;
+}

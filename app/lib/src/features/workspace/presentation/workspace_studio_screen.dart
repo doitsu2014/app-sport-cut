@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../analysis/presentation/analysis_providers.dart';
 import '../../editing/domain/match_edit.dart';
+import '../../editing/domain/rally.dart';
 import '../../editing/presentation/editing_providers.dart';
 import '../../library/domain/match_record.dart';
 import '../../library/presentation/import_controller.dart';
@@ -38,11 +39,15 @@ class WorkspaceStudioScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
+
   /// The shared player for the selected video.
   PlaybackController? _controller;
 
   /// The selected video, or null until the first video is chosen.
   String? _selectedVideoId;
+
+  /// The selected recording's duration, used to clamp the timeline window.
+  Duration? _selectedDuration;
 
   /// The library search text, mirrored into the studio controller.
   final TextEditingController _searchController = TextEditingController();
@@ -88,6 +93,13 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     final studio = ref.watch(studioControllerProvider(widget.workspace.id));
     final studioController =
         ref.read(studioControllerProvider(widget.workspace.id).notifier);
+    // The session is one at a time; show its review only once it belongs to the
+    // selected video, so switching videos never paints the previous match.
+    final editing = ref.watch(editingControllerProvider);
+    final edit =
+        selectedEntry != null && editing.match?.id == selectedEntry.match.id
+            ? editing.edit
+            : null;
 
     // Preparing analysis runs in the background; announce how it ended, even
     // if the user has moved to another feature or video, and refresh the rail.
@@ -181,6 +193,12 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
         onSelectStage: _selectStageFromStrip,
         onPrepare: _startPreparing,
         onRefresh: _refresh,
+        edit: edit,
+        duration: _durationFor(selectedEntry),
+        timelineWindowStart: studio.timelineWindowStart,
+        selectedRallyId: studio.selectedRallyId,
+        onSeekTimeline: _seekTimeline,
+        onSelectRally: _selectTimelineRally,
       ),
     );
   }
@@ -266,14 +284,112 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     }
     setState(() {
       _selectedVideoId = match.id;
+      _selectedDuration = _durationOf(match.durationSeconds);
     });
     _studioController.selectStage(null);
+    // A new recording starts with a fresh window and no selected rally.
+    _studioController.selectRally(null);
+    _studioController.setTimelineWindow(Duration.zero);
     _controller?.dispose();
     _controller = ref.read(playbackControllerFactoryProvider)();
+    _controller!.state.addListener(_onPlaybackChanged);
     unawaited(_controller!.load(match.videoPath));
     // One editing session for the shell, opened once per selected video
     // (FR-SHL-45). Feature views reached from the studio read this session.
     unawaited(ref.read(editingControllerProvider.notifier).ensureOpen(match));
+  }
+
+  /// The visible window's start for the selected recording.
+  Duration? get _timelineDuration {
+    final known = _selectedDuration;
+    if (known != null && known > Duration.zero) {
+      return known;
+    }
+    final state = _controller?.state.value;
+    if (state == null || state.duration <= Duration.zero) {
+      return null;
+    }
+    return state.duration;
+  }
+
+  /// Keep the window on the playhead as playback moves.
+  ///
+  /// The window is recomputed on every tick, but `windowStartFor` returns the
+  /// current start while the playhead is inside it, so the scale moves only
+  /// when the playhead leaves the visible window. That is the one rule that
+  /// prevents ruler jitter.
+  void _onPlaybackChanged() {
+    if (!mounted) {
+      return;
+    }
+    final state = _controller?.state.value;
+    if (state == null || !state.isReady || state.error != null) {
+      return;
+    }
+    _recentreWindow(state.position, _timelineDuration);
+  }
+
+  /// Seek from the timeline and recentre the window if the target is outside.
+  void _seekTimeline(Duration target) {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+    final state = controller.state.value;
+    if (!state.isReady || state.error != null) {
+      return;
+    }
+    final duration = _timelineDuration;
+    var clamped = target;
+    if (clamped < Duration.zero) {
+      clamped = Duration.zero;
+    }
+    if (duration != null && clamped > duration) {
+      clamped = duration;
+    }
+    controller.seek(clamped);
+    _recentreWindow(clamped, duration);
+  }
+
+  /// Select a rally, open the Clip tab, and seek to its start.
+  void _selectTimelineRally(Rally rally) {
+    _studioController.selectRally(rally.id);
+    _studioController.setInspectorTab(1);
+    _seekTimeline(
+      Duration(milliseconds: (rally.startSeconds * 1000).round()),
+    );
+  }
+
+  /// Apply the one recentring rule and write the window only when it moved.
+  void _recentreWindow(Duration position, Duration? duration) {
+    final current = ref
+        .read(studioControllerProvider(widget.workspace.id))
+        .timelineWindowStart;
+    final next = windowStartFor(
+      position,
+      timelineWindowFor(duration),
+      current: current,
+      duration: duration,
+    );
+    if (next != current) {
+      _studioController.setTimelineWindow(next);
+    }
+  }
+
+  /// A selected video's duration, or null when it is unknown.
+  Duration? _durationFor(MatchListEntry? entry) {
+    if (entry == null) {
+      return null;
+    }
+    return _durationOf(entry.match.durationSeconds);
+  }
+
+  /// Convert a stored duration in seconds, rejecting unusable values.
+  Duration? _durationOf(double seconds) {
+    if (!seconds.isFinite || seconds <= 0) {
+      return null;
+    }
+    return Duration(milliseconds: (seconds * 1000).round());
   }
 
   void _selectStage(PipelineStage stage) {

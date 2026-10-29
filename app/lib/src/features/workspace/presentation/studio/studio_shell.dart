@@ -4,8 +4,9 @@ import '../../../../app/design/components/sc_empty_state.dart';
 import '../../../../app/design/components/sc_toast.dart';
 import '../../../../app/design/sc_icons.dart';
 import '../../../../app/design/sc_metrics.dart';
-import '../../../../app/design/sc_typography.dart';
 import '../../../../app/design/sportcut_tokens.dart';
+import '../../../editing/domain/match_edit.dart';
+import '../../../editing/domain/rally.dart';
 import '../../../library/domain/match_record.dart';
 import '../../../library/presentation/match_list_entry.dart';
 import '../../../library/presentation/playback_controller.dart';
@@ -13,13 +14,15 @@ import '../../domain/pipeline_stage.dart';
 import '../../domain/workspace.dart';
 import 'inspector_pane.dart';
 import 'preview_pane.dart';
+import 'studio_controller.dart';
 import 'stage_strip.dart';
 import 'studio_status_bar.dart';
 import 'studio_toolbar.dart';
+import 'timeline_dock.dart';
 import 'video_rail.dart';
 
-/// The studio frame: toolbar, stage strip, three-column workspace, timeline
-/// placeholder, and status bar.
+/// The studio frame: toolbar, stage strip, three-column workspace, shared
+/// timeline dock, and status bar.
 ///
 /// The shell takes already-resolved data and callbacks; it reads no provider.
 /// Rail widths narrow at the 1200 px and 1040 px breakpoints, and below the
@@ -64,6 +67,12 @@ class StudioShell extends StatelessWidget {
     this.onClearSearch,
     this.toastMessage,
     this.onToastShown,
+    this.edit,
+    this.duration,
+    this.timelineWindowStart = Duration.zero,
+    this.selectedRallyId,
+    this.onSeekTimeline,
+    this.onSelectRally,
   });
 
   /// The workspace the studio is showing.
@@ -171,6 +180,24 @@ class StudioShell extends StatelessWidget {
   /// Refresh the rail after a feature writes an artifact.
   final VoidCallback onRefresh;
 
+  /// The selected match's review, or null while the session opens.
+  final MatchEdit? edit;
+
+  /// The selected recording's duration, or null while it is unknown.
+  final Duration? duration;
+
+  /// The left edge of the timeline's visible window.
+  final Duration timelineWindowStart;
+
+  /// The rally selected on the timeline, or null when none is.
+  final String? selectedRallyId;
+
+  /// Seek from the timeline.
+  final ValueChanged<Duration>? onSeekTimeline;
+
+  /// Select a rally on the timeline.
+  final ValueChanged<Rally>? onSelectRally;
+
   @override
   Widget build(BuildContext context) {
     final palette = SportcutPalette.of(context);
@@ -235,7 +262,7 @@ class StudioShell extends StatelessWidget {
                 },
               ),
             ),
-            const StudioTimelinePlaceholder(),
+            _timeline(selected),
             StudioStatusBar(
               videoCount: videos?.length ?? 0,
               missingCount: missing,
@@ -245,6 +272,49 @@ class StudioShell extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// The shared 176 px timeline dock.
+  ///
+  /// The playhead tracks the shared player, so only the dock rebuilds on a
+  /// playback tick: the shell and the preview do not. The window start comes
+  /// from the studio state; the screen owns the derived rule that moves it.
+  Widget _timeline(MatchListEntry? selected) {
+    final edit = this.edit;
+    final hasSelection = selected != null;
+    final recordingAvailable = selected?.recordingAvailable ?? false;
+    final loading = !hasSelection || (recordingAvailable && edit == null);
+
+    Widget dock(Duration position, Duration? playbackDuration) {
+      final known = duration;
+      final effectiveDuration = known != null && known > Duration.zero
+          ? known
+          : (playbackDuration != null && playbackDuration > Duration.zero
+              ? playbackDuration
+              : null);
+      return TimelineDock(
+        edit: edit,
+        duration: effectiveDuration,
+        position: position,
+        windowStart: timelineWindowStart,
+        windowLength: timelineWindowFor(effectiveDuration),
+        selectedRallyId: selectedRallyId,
+        recordingAvailable: recordingAvailable,
+        loading: loading,
+        onSeek: onSeekTimeline,
+        onSelectRally: onSelectRally,
+      );
+    }
+
+    final player = controller;
+    if (player == null) {
+      return dock(Duration.zero, null);
+    }
+    return ValueListenableBuilder<PlaybackState>(
+      valueListenable: player.state,
+      builder: (BuildContext context, PlaybackState state, Widget? child) =>
+          dock(state.position, state.duration),
     );
   }
 
@@ -409,66 +479,6 @@ class _StudioToastOverlayState extends State<_StudioToastOverlay> {
         widget.child,
         ScToastHost(key: _toastKey),
       ],
-    );
-  }
-}
-
-/// The 176 px timeline dock placeholder.
-///
-/// PR 5a fills this with the ruler, rally segments, score chips, and playhead.
-/// For now it states the empty window honestly and owns no state.
-class StudioTimelinePlaceholder extends StatelessWidget {
-  /// Build the placeholder.
-  const StudioTimelinePlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = SportcutPalette.of(context);
-    final tokens = SportcutTokens.of(context);
-    final typography = SportcutTypography.of(context);
-
-    return Container(
-      height: ScMetrics.timelineHeight,
-      decoration: BoxDecoration(
-        color: palette.surface,
-        border: Border(top: BorderSide(color: palette.border)),
-      ),
-      child: Column(
-        children: <Widget>[
-          Container(
-            height: ScMetrics.timelineHeaderHeight,
-            alignment: Alignment.centerLeft,
-            padding: EdgeInsets.symmetric(horizontal: tokens.space3),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: palette.borderSoft)),
-            ),
-            child: Text(
-              'Timeline',
-              style: typography.sm14.copyWith(
-                color: palette.fg2,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.all(tokens.space3),
-              child: Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: palette.bg,
-                  borderRadius: BorderRadius.circular(ScMetrics.radiusThumb),
-                  border: Border.all(color: palette.borderSoft),
-                ),
-                child: Text(
-                  'No rallies in this window.',
-                  style: typography.xs12.copyWith(color: palette.muted),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
