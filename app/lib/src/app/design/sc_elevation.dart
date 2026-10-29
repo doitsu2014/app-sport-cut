@@ -46,30 +46,18 @@ abstract final class ScElevation {
 
 /// The 2 px surface gap plus 2 px accent ring from `--focus-ring`.
 abstract final class ScFocusRing {
-  /// A focus-ring decoration for the current palette.
-  ///
-  /// The accent shadow is listed first because Flutter paints later shadows
-  /// on top: the surface shadow then covers the inner two pixels and leaves a
-  /// two-pixel accent ring.
-  static BoxDecoration decoration(SportcutPalette palette) {
-    return BoxDecoration(
-      boxShadow: <BoxShadow>[
-        BoxShadow(color: palette.accent, spreadRadius: 4),
-        BoxShadow(color: palette.surface, spreadRadius: 2),
-      ],
-    );
-  }
-
   /// Draw the ring over [child] while [focused], without moving the layout.
   ///
   /// The ring is painted outside the child's bounds, so no padding is added
-  /// and the control keeps its measured size. Use this for any pressable the
-  /// design layer owns; it is the only way to get the two-pixel surface gap,
-  /// because a `BorderSide` can only draw one colour.
+  /// and the control keeps its measured size. A [BoxShadow] cannot be used:
+  /// it fills the whole box with its colour before blurring, which would
+  /// cover the child. This paints two strokes instead — [palette.surface]
+  /// from the edge to two pixels, [palette.accent] from two to four.
   static Widget overlay({
     required SportcutPalette palette,
     required bool focused,
     required Widget child,
+    BorderRadius? borderRadius,
   }) {
     if (!focused) {
       return child;
@@ -80,11 +68,27 @@ abstract final class ScFocusRing {
         child,
         Positioned.fill(
           child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: decoration(palette),
+            child: CustomPaint(
+              painter: _FocusRingPainter(palette, borderRadius),
             ),
           ),
         ),
+      ],
+    );
+  }
+
+  /// The focus decoration as a box decoration, for widgets that can host one.
+  ///
+  /// Prefer [overlay]: a decorated box needs four pixels of padding to show
+  /// the ring, which changes layout.
+  static BoxDecoration decoration(
+    SportcutPalette palette, {
+    BorderRadius? borderRadius,
+  }) {
+    return BoxDecoration(
+      borderRadius: borderRadius,
+      boxShadow: <BoxShadow>[
+        BoxShadow(color: palette.accent, spreadRadius: 2),
       ],
     );
   }
@@ -111,5 +115,31 @@ abstract final class ScFocusRing {
       shape:
           shape == null ? null : WidgetStatePropertyAll<OutlinedBorder?>(shape),
     );
+  }
+}
+
+/// Paints the focus ring outside its box: surface from 0–2 px, accent 2–4 px.
+class _FocusRingPainter extends CustomPainter {
+  const _FocusRingPainter(this.palette, this.borderRadius);
+
+  final SportcutPalette palette;
+  final BorderRadius? borderRadius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final RRect base = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      borderRadius?.topLeft ?? Radius.zero,
+    );
+    final Paint paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 2;
+    canvas
+      ..drawRRect(base.inflate(1), paint..color = palette.surface)
+      ..drawRRect(base.inflate(3), paint..color = palette.accent);
+  }
+
+  @override
+  bool shouldRepaint(_FocusRingPainter oldDelegate) {
+    return oldDelegate.palette != palette ||
+        oldDelegate.borderRadius != borderRadius;
   }
 }

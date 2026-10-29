@@ -154,4 +154,22 @@ abstract final class ScMetrics {
 
   /// Content gutter on a phone-width window.
   static const double containerGutterPhone = 20;
+
+  /// Library thumbnail width.
+  static const double thumbWidth = 52;
+
+  /// Library thumbnail height: the 16:9 frame at [thumbWidth].
+  static const double thumbHeight = 30;
+
+  /// Library thumbnail corner radius.
+  static const double thumbRadius = 4;
+
+  /// Horizontal inset of the sketched court inside a library thumbnail.
+  static const double thumbCourtInsetX = 8;
+
+  /// Vertical inset of the sketched court inside a library thumbnail.
+  static const double thumbCourtInsetY = 4;
+
+  /// Default toolbar search-field width.
+  static const double searchFieldWidth = 260;
 }
