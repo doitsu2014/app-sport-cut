@@ -55,7 +55,7 @@ rank, or render.
 ### 2.1 In scope
 - Geometry: 52 px toolbar, 40 px stage strip, 264 px video rail, 320 px
   inspector, flexible preview, 176 px shared timeline dock, 30 px status bar,
-  12 px rail gutter, 1100×720 minimum window.
+  1 px rail column borders, 1100×720 minimum window.
 - Navigation: workspace list to studio, the stage strip, per-video stage state,
   back to the workspace list.
 - Preview overlay: the score bug, calibration handles, and tracking boxes drawn
@@ -105,7 +105,7 @@ is Present, Partial, or Absent at `1541c64`.
 | FR-SHL-01 | Enforce a 1100×720 minimum studio window. | Must | The window cannot be resized below 1100×720; the studio lays out at that size with both rails open. | Present |
 | FR-SHL-02 | Keep the video rail at 264 px and the feature rail at 320 px, with the preview taking the remainder. | Must | At or above 1100 px, both rails measure their token width and the preview fills the rest; no pane overflows. | Present |
 | FR-SHL-03 | Bind toolbar and status heights to the 52 px and 30 px tokens. | Must | Both heights come from `SportcutTokens`; no literal height appears for these two bars in the studio widget. | Present |
-| FR-SHL-04 | Separate rails from the preview with the 12 px rail gutter. | Should | The gap between a rail and the preview is 12 px from `--space-3`; changing the token changes the gap. | Absent |
+| FR-SHL-04 | Separate the rails from the preview with the design system's hairline column border. | Should | Each rail ends in a 1 px `--border` column border and no gutter, matching `studio.html` (ADR-0003 D15); the border comes from the border token, not a literal. | Absent |
 | FR-SHL-05 | Never render the preview narrower than 480 px while rails are open. | Must | At the minimum window the preview is at least 480 px wide; if it cannot be, rails collapse first. | Absent |
 | FR-SHL-06 | Collapse both rails below 980 px of available width, stacking preview, videos, then pipeline. | Must | At 979 px available width the studio stacks in that order and does not scroll horizontally. | Absent |
 | FR-SHL-07 | Open the studio when the user selects a workspace. | Must | Selecting a workspace on the home screen shows the studio for that workspace. | Present |
@@ -197,7 +197,7 @@ the client mirrors the DESIGN.md constants in `SportcutTokens`.
 | Element | Value | Source | Shared requirement |
 | --- | --- | --- | --- |
 | Window chrome / stage strip / status bar | 52 px / 40 px / 30 px | DESIGN.md §4, §10; ADR-0003 D2 | DS-7, DS-13 |
-| Video rail / inspector / gutter | 264 px / 320 px / 12 px (`--space-3`) | DESIGN.md §4, §10 | DS-7, DS-13 |
+| Video rail / inspector / separation | 264 px / 320 px / 1 px `--border` column border | studio.html `.sidebar`, `.inspector`; ADR-0003 D15 | DS-7, DS-13 |
 | Timeline dock | 176 px: 34 px header, 112 px label gutter, 24/44/32 px tracks | studio.html `--timeline-h`; ADR-0003 D3 | DS-7, DS-13 |
 | Minimum window | 1100 × 720 | DESIGN.md §4, §10 | DS-7, DS-14 |
 | Preview floor / collapse | 480 px / below 980 px | DESIGN.md §5 | DS-14 |
