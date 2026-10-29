@@ -35,6 +35,8 @@ class VideoRail extends StatelessWidget {
     this.importFraction,
     this.loading = false,
     this.error,
+    this.searchQuery = '',
+    this.onClearSearch,
   });
 
   /// The workspace title shown at the top of the rail.
@@ -62,6 +64,12 @@ class VideoRail extends StatelessWidget {
   /// Why the video list could not be read, when it could not.
   final String? error;
 
+  /// The in-memory search query; an empty query lists every video.
+  final String searchQuery;
+
+  /// Clear the search query from the search-empty state.
+  final VoidCallback? onClearSearch;
+
   /// Select a video.
   final void Function(MatchListEntry) onSelect;
 
@@ -84,6 +92,15 @@ class VideoRail extends StatelessWidget {
     final typography = SportcutTypography.of(context);
     final missing = entries.where((entry) => !entry.recordingAvailable).length;
     final countLine = _countLine(entries.length, missing);
+    final query = searchQuery.trim();
+    final visible = query.isEmpty
+        ? entries
+        : entries
+            .where(
+              (entry) =>
+                  entry.match.title.toLowerCase().contains(query.toLowerCase()),
+            )
+            .toList(growable: false);
 
     return Container(
       decoration: BoxDecoration(
@@ -125,15 +142,19 @@ class VideoRail extends StatelessWidget {
               ],
             ),
           ),
-          ScSectionLabel(label: 'Videos', count: entries.length),
-          Expanded(child: _body(context)),
+          ScSectionLabel(label: 'Videos', count: visible.length),
+          Expanded(child: _body(context, visible, query)),
           _footer(context, countLine),
         ],
       ),
     );
   }
 
-  Widget _body(BuildContext context) {
+  Widget _body(
+    BuildContext context,
+    List<MatchListEntry> visible,
+    String query,
+  ) {
     final tokens = SportcutTokens.of(context);
     final error = this.error;
     if (error != null) {
@@ -163,13 +184,25 @@ class VideoRail extends StatelessWidget {
         ),
       );
     }
+    if (visible.isEmpty) {
+      return SingleChildScrollView(
+        padding: EdgeInsets.all(tokens.space2),
+        child: ScEmptyState(
+          compact: true,
+          message: 'No videos match "$query".',
+          actionLabel: onClearSearch == null ? null : 'Clear search',
+          onAction: onClearSearch,
+          icon: ScIcons.search,
+        ),
+      );
+    }
     return ListView.separated(
       padding: EdgeInsets.all(tokens.space2),
-      itemCount: entries.length,
+      itemCount: visible.length,
       separatorBuilder: (BuildContext context, int index) =>
           SizedBox(height: tokens.space1),
       itemBuilder: (BuildContext context, int index) {
-        final entry = entries[index];
+        final entry = visible[index];
         final score = entry.score;
         return ScVideoRow(
           title: entry.match.title,

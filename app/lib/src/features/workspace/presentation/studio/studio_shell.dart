@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/design/components/sc_empty_state.dart';
+import '../../../../app/design/components/sc_toast.dart';
 import '../../../../app/design/sc_icons.dart';
 import '../../../../app/design/sc_metrics.dart';
 import '../../../../app/design/sc_typography.dart';
@@ -58,6 +59,11 @@ class StudioShell extends StatelessWidget {
     required this.onPrepare,
     required this.onRefresh,
     this.importFraction,
+    this.searchFocusNode,
+    this.searchQuery = '',
+    this.onClearSearch,
+    this.toastMessage,
+    this.onToastShown,
   });
 
   /// The workspace the studio is showing.
@@ -101,6 +107,21 @@ class StudioShell extends StatelessWidget {
 
   /// The library search controller, owned by the composition root.
   final TextEditingController searchController;
+
+  /// The search field's focus node, used by the `⌘K` binding.
+  final FocusNode? searchFocusNode;
+
+  /// The in-memory search query filtering the video rail.
+  final String searchQuery;
+
+  /// Clear the search from the rail's search-empty state.
+  final VoidCallback? onClearSearch;
+
+  /// The one-line toast to show, or null when there is none.
+  final String? toastMessage;
+
+  /// Called once a toast has been handed to the host, so it can be cleared.
+  final VoidCallback? onToastShown;
 
   /// Whether the video rail is showing.
   final bool libraryVisible;
@@ -162,62 +183,67 @@ class StudioShell extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: palette.bg,
-      body: Column(
-        children: <Widget>[
-          StudioToolbar(
-            workspace: workspace,
-            searchController: searchController,
-            libraryVisible: libraryVisible,
-            inspectorVisible: inspectorVisible,
-            focusMode: focusMode,
-            onBack: onBack,
-            onToggleLibrary: onToggleLibrary,
-            onToggleInspector: onToggleInspector,
-            onToggleFocusMode: onToggleFocusMode,
-            onDelete: onDeleteWorkspace,
-            onExport: () => onSelectStage(PipelineStage.export),
-          ),
-          StageStrip(
-            states: stageStates,
-            selectedStage: selectedStage,
-            runningStage: runningStage,
-            runningFraction: runningFraction,
-            onSelectStage: onSelectStage,
-          ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints constraints) {
-                if (constraints.maxWidth < ScMetrics.collapseBreakpoint) {
-                  return _stacked(context, loading);
-                }
-                final rails = _RailWidths.forWidth(constraints.maxWidth);
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    if (libraryVisible)
-                      SizedBox(
-                        width: rails.library,
-                        child: _videoRail(loading),
-                      ),
-                    Expanded(child: _preview(context, loading)),
-                    if (inspectorVisible)
-                      SizedBox(
-                        width: rails.inspector,
-                        child: _inspector(),
-                      ),
-                  ],
-                );
-              },
+      body: _StudioToastOverlay(
+        toastMessage: toastMessage,
+        onShown: onToastShown,
+        child: Column(
+          children: <Widget>[
+            StudioToolbar(
+              workspace: workspace,
+              searchController: searchController,
+              searchFocusNode: searchFocusNode,
+              libraryVisible: libraryVisible,
+              inspectorVisible: inspectorVisible,
+              focusMode: focusMode,
+              onBack: onBack,
+              onToggleLibrary: onToggleLibrary,
+              onToggleInspector: onToggleInspector,
+              onToggleFocusMode: onToggleFocusMode,
+              onDelete: onDeleteWorkspace,
+              onExport: () => onSelectStage(PipelineStage.export),
             ),
-          ),
-          const StudioTimelinePlaceholder(),
-          StudioStatusBar(
-            videoCount: videos?.length ?? 0,
-            missingCount: missing,
-            entry: selected,
-            facts: selected == null ? null : facts?[selected.match.id],
-          ),
-        ],
+            StageStrip(
+              states: stageStates,
+              selectedStage: selectedStage,
+              runningStage: runningStage,
+              runningFraction: runningFraction,
+              onSelectStage: onSelectStage,
+            ),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                  if (constraints.maxWidth < ScMetrics.collapseBreakpoint) {
+                    return _stacked(context, loading);
+                  }
+                  final rails = _RailWidths.forWidth(constraints.maxWidth);
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      if (libraryVisible && !focusMode)
+                        SizedBox(
+                          width: rails.library,
+                          child: _videoRail(loading),
+                        ),
+                      Expanded(child: _preview(context, loading)),
+                      if (inspectorVisible && !focusMode)
+                        SizedBox(
+                          width: rails.inspector,
+                          child: _inspector(),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const StudioTimelinePlaceholder(),
+            StudioStatusBar(
+              videoCount: videos?.length ?? 0,
+              missingCount: missing,
+              entry: selected,
+              facts: selected == null ? null : facts?[selected.match.id],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -260,6 +286,8 @@ class StudioShell extends StatelessWidget {
       importRunning: importRunning,
       importDescription: importDescription,
       importFraction: importFraction,
+      searchQuery: searchQuery,
+      onClearSearch: onClearSearch,
       onSelect: onSelectVideo,
       onDelete: onDeleteVideo,
       onImport: onImport,
@@ -288,12 +316,12 @@ class StudioShell extends StatelessWidget {
             height: ScMetrics.stackedPaneHeight,
             child: _preview(context, loading),
           ),
-          if (libraryVisible)
+          if (libraryVisible && !focusMode)
             SizedBox(
               height: ScMetrics.stackedPaneHeight,
               child: _videoRail(loading),
             ),
-          if (inspectorVisible)
+          if (inspectorVisible && !focusMode)
             SizedBox(
               height: ScMetrics.stackedPaneHeight,
               child: _inspector(),
@@ -331,6 +359,56 @@ class _RailWidths {
     return const _RailWidths(
       ScMetrics.libraryWidthNarrow2,
       ScMetrics.inspectorWidthNarrow2,
+    );
+  }
+}
+
+/// Puts the studio content under one toast host.
+///
+/// The shell owns the host, not the controller: the screen places a message in
+/// the studio state and this widget shows the most recent one, then reports it
+/// back so the same message can be raised again later.
+class _StudioToastOverlay extends StatefulWidget {
+  const _StudioToastOverlay({
+    required this.toastMessage,
+    required this.child,
+    this.onShown,
+  });
+
+  final String? toastMessage;
+  final VoidCallback? onShown;
+  final Widget child;
+
+  @override
+  State<_StudioToastOverlay> createState() => _StudioToastOverlayState();
+}
+
+class _StudioToastOverlayState extends State<_StudioToastOverlay> {
+  final GlobalKey<ScToastHostState> _toastKey = GlobalKey<ScToastHostState>();
+
+  @override
+  void didUpdateWidget(_StudioToastOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final message = widget.toastMessage;
+    if (message == null || message == oldWidget.toastMessage) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _toastKey.currentState?.show(ScToastData(message: message));
+      widget.onShown?.call();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: <Widget>[
+        widget.child,
+        ScToastHost(key: _toastKey),
+      ],
     );
   }
 }

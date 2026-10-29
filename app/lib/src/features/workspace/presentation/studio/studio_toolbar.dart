@@ -31,6 +31,7 @@ class StudioToolbar extends StatelessWidget {
     required this.onToggleFocusMode,
     required this.onDelete,
     required this.onExport,
+    this.searchFocusNode,
   });
 
   /// The workspace named in the breadcrumb.
@@ -38,8 +39,12 @@ class StudioToolbar extends StatelessWidget {
 
   /// The search field's controller, owned by the composition root.
   ///
-  /// Filtering and the `⌘K` binding arrive with the ephemeral studio state.
+  /// The field writes the query into the controller; `⌘K` focuses it through
+  /// [searchFocusNode].
   final TextEditingController searchController;
+
+  /// The search field's focus node, so `⌘K` can reach it.
+  final FocusNode? searchFocusNode;
 
   /// Whether the video rail is showing.
   final bool libraryVisible;
@@ -116,6 +121,7 @@ class StudioToolbar extends StatelessWidget {
           SizedBox(width: tokens.space3),
           ScSearchField(
             controller: searchController,
+            focusNode: searchFocusNode,
             hint: 'Search videos',
             clearLabel: 'Clear search',
           ),

@@ -13,7 +13,9 @@ import '../../library/presentation/match_list_entry.dart';
 import '../../library/presentation/playback_controller.dart';
 import '../domain/pipeline_stage.dart';
 import '../domain/workspace.dart';
+import 'studio/studio_controller.dart';
 import 'studio/studio_dialogs.dart';
+import 'studio/studio_shortcuts.dart';
 import 'studio/studio_shell.dart';
 import 'workspace_providers.dart';
 
@@ -42,26 +44,35 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
   /// The selected video, or null until the first video is chosen.
   String? _selectedVideoId;
 
-  /// The selected feature, where null means playback.
-  PipelineStage? _selectedStage;
-
-  /// The library search query. Filtering arrives with the ephemeral state.
+  /// The library search text, mirrored into the studio controller.
   final TextEditingController _searchController = TextEditingController();
 
-  /// Whether the video rail is showing.
-  bool _libraryVisible = true;
+  /// Lets `⌘K` reach the toolbar search field.
+  final FocusNode _searchFocusNode = FocusNode();
 
-  /// Whether the inspector is showing.
-  bool _inspectorVisible = true;
-
-  /// Whether focus mode is engaged.
-  bool _focusMode = false;
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_syncSearchQuery);
+  }
 
   @override
   void dispose() {
     _controller?.dispose();
+    _searchController.removeListener(_syncSearchQuery);
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Keep the ephemeral search query in step with the field's text.
+  void _syncSearchQuery() {
+    if (!mounted) {
+      return;
+    }
+    ref
+        .read(studioControllerProvider(widget.workspace.id).notifier)
+        .setSearchQuery(_searchController.text);
   }
 
   @override
@@ -74,6 +85,9 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     final loadedEntries = videos.value;
     final selectedEntry =
         loadedEntries == null ? null : _selectedEntry(loadedEntries);
+    final studio = ref.watch(studioControllerProvider(widget.workspace.id));
+    final studioController =
+        ref.read(studioControllerProvider(widget.workspace.id).notifier);
 
     // Preparing analysis runs in the background; announce how it ended, even
     // if the user has moved to another feature or video, and refresh the rail.
@@ -115,51 +129,94 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     final videosError =
         videos.hasError && !videos.hasValue ? '${videos.error}' : null;
 
-    return StudioShell(
-      workspace: widget.workspace,
-      videos: loadedEntries,
-      videosError: videosError,
-      selectedEntry: selectedEntry,
-      facts: facts,
-      stageStates: stageStates,
-      selectedStage: _selectedStage,
-      runningStage: runningForSelected ? PipelineStage.analyze : null,
-      runningFraction: runningForSelected ? analysis.progress : null,
+    return StudioShortcuts(
       controller: _controller,
-      importRunning: import.isRunning,
-      importDescription: import.description,
-      searchController: _searchController,
-      libraryVisible: _libraryVisible,
-      inspectorVisible: _inspectorVisible,
-      focusMode: _focusMode,
-      onBack: () => Navigator.of(context).maybePop(),
-      onToggleLibrary: () => setState(() => _libraryVisible = !_libraryVisible),
-      onToggleInspector: () =>
-          setState(() => _inspectorVisible = !_inspectorVisible),
-      onToggleFocusMode: () => setState(() => _focusMode = !_focusMode),
-      onDeleteWorkspace: _confirmDeleteWorkspace,
-      onSelectVideo: (entry) => _selectVideo(entry.match),
-      onDeleteVideo: (entry) => _confirmDeleteMatch(entry.match),
-      onImport: _import,
-      onCancelImport: () =>
-          ref.read(importControllerProvider.notifier).cancel(),
-      onRetry: () => ref.invalidate(
-        workspaceVideosProvider(widget.workspace.id),
+      searchQuery: studio.searchQuery,
+      selectedRallyId: studio.selectedRallyId,
+      exportSheetOpen: studio.exportSheetOpen,
+      focusMode: studio.focusMode,
+      onScoreRally: _scoreSelectedRally,
+      onToggleFocusMode: studioController.toggleFocusMode,
+      onSelectExport: () => _selectStage(PipelineStage.export),
+      onFocusSearch: _focusSearch,
+      onCloseExportSheet: () => studioController.setExportSheet(false),
+      onExitFocusMode: studioController.restoreRailsAfterFocus,
+      onClearSearch: _clearSearch,
+      onToast: studioController.showToast,
+      child: StudioShell(
+        workspace: widget.workspace,
+        videos: loadedEntries,
+        videosError: videosError,
+        selectedEntry: selectedEntry,
+        facts: facts,
+        stageStates: stageStates,
+        selectedStage: studio.selectedStage,
+        runningStage: runningForSelected ? PipelineStage.analyze : null,
+        runningFraction: runningForSelected ? analysis.progress : null,
+        controller: _controller,
+        importRunning: import.isRunning,
+        importDescription: import.description,
+        searchController: _searchController,
+        searchFocusNode: _searchFocusNode,
+        searchQuery: studio.searchQuery,
+        onClearSearch: _clearSearch,
+        toastMessage: studio.toastMessage,
+        onToastShown: () => studioController.showToast(null),
+        libraryVisible: studio.libraryVisible,
+        inspectorVisible: studio.inspectorVisible,
+        focusMode: studio.focusMode,
+        onBack: () => Navigator.of(context).maybePop(),
+        onToggleLibrary: studioController.toggleLibrary,
+        onToggleInspector: studioController.toggleInspector,
+        onToggleFocusMode: studioController.toggleFocusMode,
+        onDeleteWorkspace: _confirmDeleteWorkspace,
+        onSelectVideo: (entry) => _selectVideo(entry.match),
+        onDeleteVideo: (entry) => _confirmDeleteMatch(entry.match),
+        onImport: _import,
+        onCancelImport: () =>
+            ref.read(importControllerProvider.notifier).cancel(),
+        onRetry: () => ref.invalidate(
+          workspaceVideosProvider(widget.workspace.id),
+        ),
+        onSelectStage: _selectStageFromStrip,
+        onPrepare: _startPreparing,
+        onRefresh: _refresh,
       ),
-      onSelectStage: _selectStageFromStrip,
-      onPrepare: _startPreparing,
-      onRefresh: _refresh,
     );
   }
 
   /// Select a stage from the strip or inspector, where null is Play.
   void _selectStageFromStrip(PipelineStage? stage) {
     if (stage == null) {
-      setState(() => _selectedStage = null);
+      _studioController.selectStage(null);
       return;
     }
     _selectStage(stage);
   }
+
+  /// Focus the toolbar search and select what is already there.
+  void _focusSearch() {
+    _searchFocusNode.requestFocus();
+    _searchController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _searchController.text.length,
+    );
+  }
+
+  /// Clear the field and the ephemeral query together.
+  void _clearSearch() {
+    _searchController.clear();
+    _studioController.clearSearch();
+  }
+
+  /// Score the selected rally.
+  ///
+  /// The score panel arrives in PR 6a; until then there is no selected rally,
+  /// so this stays a no-op that keeps the shortcut wiring one line away.
+  void _scoreSelectedRally(bool left) {}
+
+  StudioController get _studioController =>
+      ref.read(studioControllerProvider(widget.workspace.id).notifier);
 
   /// Pick the first video once, so the studio opens with something in view.
   void _ensureSelection(List<MatchListEntry> entries) {
@@ -202,8 +259,8 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     }
     setState(() {
       _selectedVideoId = match.id;
-      _selectedStage = null;
     });
+    _studioController.selectStage(null);
     _controller?.dispose();
     _controller = ref.read(playbackControllerFactoryProvider)();
     unawaited(_controller!.load(match.videoPath));
@@ -220,7 +277,7 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     // Every feature is selectable; a stage that needs an earlier one stays
     // openable and explains what is missing in its own view. Prepare analysis
     // opens its screen, and the job starts only from its button.
-    setState(() => _selectedStage = stage);
+    _studioController.selectStage(stage);
   }
 
   MatchListEntry? _selectedEntryFromProvider() {
@@ -234,7 +291,7 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
 
   /// Show the prepare screen and start its background job.
   void _startPreparing(MatchRecord match) {
-    setState(() => _selectedStage = PipelineStage.analyze);
+    _studioController.selectStage(PipelineStage.analyze);
     unawaited(ref.read(analysisControllerProvider.notifier).prepare(match));
   }
 
