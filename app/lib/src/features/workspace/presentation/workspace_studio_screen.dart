@@ -212,8 +212,15 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
   /// Score the selected rally.
   ///
   /// The score panel arrives in PR 6a; until then there is no selected rally,
-  /// so this stays a no-op that keeps the shortcut wiring one line away.
-  void _scoreSelectedRally(bool left) {}
+  /// so this stays a no-op that keeps the shortcut wiring one line away. A
+  /// missing recording disables scoring outright: the clip it would describe
+  /// cannot be played.
+  void _scoreSelectedRally(bool left) {
+    final entry = _selectedEntryFromProvider();
+    if (entry == null || !entry.recordingAvailable) {
+      return;
+    }
+  }
 
   StudioController get _studioController =>
       ref.read(studioControllerProvider(widget.workspace.id).notifier);
@@ -264,6 +271,9 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     _controller?.dispose();
     _controller = ref.read(playbackControllerFactoryProvider)();
     unawaited(_controller!.load(match.videoPath));
+    // One editing session for the shell, opened once per selected video
+    // (FR-SHL-45). Feature views reached from the studio read this session.
+    unawaited(ref.read(editingControllerProvider.notifier).ensureOpen(match));
   }
 
   void _selectStage(PipelineStage stage) {

@@ -10,17 +10,18 @@ import '../../../highlights/presentation/highlights_view.dart';
 import '../../../library/domain/match_record.dart';
 import '../../../library/presentation/match_list_entry.dart';
 import '../../../library/presentation/playback_controller.dart';
-import '../../../library/presentation/player_view.dart';
 import '../../../score/presentation/score_view.dart';
 import '../../../tracking/presentation/player_tracking_view.dart';
 import '../../domain/pipeline_stage.dart';
 import 'studio_chrome.dart';
+import 'video_preview.dart';
 
 /// One shared preview in the centre of the studio.
 ///
 /// The pane fills its column, keeps the [ScMetrics.previewMinWidth] floor via
-/// [LayoutBuilder], and sits on the page ground. The feature views inside it
-/// are unchanged in this pass; they keep the shared playback controller.
+/// [LayoutBuilder], and sits on the page ground. Play and Import draw the
+/// shared [VideoPreview]; the remaining stages keep their existing feature
+/// view, which still owns the centre until PR 7c turns them into panels.
 class PreviewPane extends StatelessWidget {
   /// Build the centre pane for the selected [entry].
   const PreviewPane({
@@ -73,9 +74,7 @@ class PreviewPane extends StatelessWidget {
               children: <Widget>[
                 CenterHeader(match: entry.match, stage: stage),
                 Expanded(
-                  child: controller == null
-                      ? const Center(child: CircularProgressIndicator())
-                      : _featureView(entry, facts, controller),
+                  child: _centre(entry, facts, controller),
                 ),
               ],
             ),
@@ -85,6 +84,27 @@ class PreviewPane extends StatelessWidget {
     );
   }
 
+  /// The centre for the current stage.
+  ///
+  /// Play and Import share the one stage without any feature takeover. The
+  /// score and highlight stages keep their existing views for now: those views
+  /// size themselves with `Expanded` and a fixed panel stack, so they cannot be
+  /// placed under the stage without editing them. PR 7c replaces them with the
+  /// inspector panels and drops the switch below.
+  Widget _centre(
+    MatchListEntry entry,
+    Map<String, VideoStageFacts>? facts,
+    PlaybackController? controller,
+  ) {
+    if (stage == null || stage == PipelineStage.import) {
+      return VideoPreview(entry: entry, controller: controller);
+    }
+    if (controller == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return _featureView(entry, facts, controller);
+  }
+
   Widget _featureView(
     MatchListEntry entry,
     Map<String, VideoStageFacts>? facts,
@@ -92,7 +112,7 @@ class PreviewPane extends StatelessWidget {
   ) {
     switch (stage) {
       case null:
-        return PlayerView(controller: controller);
+        return VideoPreview(entry: entry, controller: controller);
       case PipelineStage.calibrate:
         return CalibrationView(
           match: entry.match,
@@ -127,7 +147,7 @@ class PreviewPane extends StatelessWidget {
         );
       case PipelineStage.import:
         // Import is not a lens; the center stays on playback.
-        return PlayerView(controller: controller);
+        return VideoPreview(entry: entry, controller: controller);
     }
   }
 }
