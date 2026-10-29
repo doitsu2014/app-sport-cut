@@ -5,6 +5,7 @@ import '../../../../app/design/components/sc_toast.dart';
 import '../../../../app/design/sc_icons.dart';
 import '../../../../app/design/sc_metrics.dart';
 import '../../../../app/design/sportcut_tokens.dart';
+import '../../../editing/domain/highlight_clip.dart';
 import '../../../editing/domain/match_edit.dart';
 import '../../../editing/domain/rally.dart';
 import '../../../library/domain/match_record.dart';
@@ -76,6 +77,15 @@ class StudioShell extends StatelessWidget {
     this.onSelectInspectorRally,
     this.inspectorTab = 0,
     required this.onInspectorTabChanged,
+    this.editProblem,
+    this.editBusy = false,
+    this.onDismissEditProblem,
+    this.onSetKept,
+    this.onTrimClip,
+    this.onReorderClips,
+    this.onKeepTop10,
+    this.onSelectClip,
+    this.onExport,
   });
 
   /// The workspace the studio is showing.
@@ -209,6 +219,37 @@ class StudioShell extends StatelessWidget {
 
   /// Select an inspector tab.
   final ValueChanged<int> onInspectorTabChanged;
+
+  /// Why the last review action failed, when it did.
+  final String? editProblem;
+
+  /// Whether the review is writing a change.
+  final bool editBusy;
+
+  /// Clear the reported review failure.
+  final VoidCallback? onDismissEditProblem;
+
+  /// Put a rally in the reel, or take it out.
+  final void Function(Rally rally, bool kept)? onSetKept;
+
+  /// Write a trim chosen in the Clip tab.
+  final void Function(
+    HighlightClip clip,
+    double startSeconds,
+    double endSeconds,
+  )? onTrimClip;
+
+  /// Write the reel's identifier order.
+  final void Function(List<String> clipIds)? onReorderClips;
+
+  /// Keep the best of the rallies the reel passes back.
+  final void Function(List<Rally> rallies)? onKeepTop10;
+
+  /// Select a clip's rally; the screen also seeks to it.
+  final ValueChanged<Rally>? onSelectClip;
+
+  /// Open the Export stage.
+  final VoidCallback? onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -393,6 +434,16 @@ class StudioShell extends StatelessWidget {
       selectedRallyId: selectedRallyId,
       onSelectRally: onSelectInspectorRally,
       recordingAvailable: selectedEntry?.recordingAvailable ?? false,
+      edit: edit,
+      editBusy: editBusy,
+      editProblem: editProblem,
+      onDismissEditProblem: onDismissEditProblem,
+      onSetKept: onSetKept,
+      onTrimClip: onTrimClip,
+      onReorderClips: onReorderClips,
+      onKeepTop10: onKeepTop10,
+      onSelectClip: onSelectClip,
+      onExport: onExport,
     );
   }
 

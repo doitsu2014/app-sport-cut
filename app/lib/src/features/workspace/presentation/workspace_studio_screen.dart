@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../analysis/presentation/analysis_providers.dart';
+import '../../editing/domain/highlight_clip.dart';
 import '../../editing/domain/match_edit.dart';
 import '../../editing/domain/rally.dart';
 import '../../editing/presentation/editing_providers.dart';
@@ -97,10 +98,11 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     // The session is one at a time; show its review only once it belongs to the
     // selected video, so switching videos never paints the previous match.
     final editing = ref.watch(editingControllerProvider);
-    final edit =
-        selectedEntry != null && editing.match?.id == selectedEntry.match.id
-            ? editing.edit
-            : null;
+    final sessionMatches =
+        selectedEntry != null && editing.match?.id == selectedEntry.match.id;
+    final edit = sessionMatches ? editing.edit : null;
+    final editProblem = sessionMatches ? editing.problem : null;
+    final editBusy = sessionMatches && editing.busy;
 
     // Preparing analysis runs in the background; announce how it ended, even
     // if the user has moved to another feature or video, and refresh the rail.
@@ -203,8 +205,56 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
         onSelectInspectorRally: _selectPanelRally,
         inspectorTab: studio.inspectorTab,
         onInspectorTabChanged: studioController.setInspectorTab,
+        editProblem: editProblem,
+        editBusy: editBusy,
+        onDismissEditProblem: () =>
+            ref.read(editingControllerProvider.notifier).clearProblem(),
+        onSetKept: _setKept,
+        onTrimClip: _trimClip,
+        onReorderClips: _reorderClips,
+        onKeepTop10: _keepTopTen,
+        onSelectClip: _selectTimelineRally,
+        onExport: _startExport,
       ),
     );
+  }
+
+  /// Put a rally in the reel, or take it out.
+  void _setKept(Rally rally, bool kept) {
+    unawaited(
+      ref.read(editingControllerProvider.notifier).setKept(rally, kept),
+    );
+  }
+
+  /// Write a trim chosen in the inspector's Clip tab.
+  void _trimClip(HighlightClip clip, double startSeconds, double endSeconds) {
+    unawaited(
+      ref.read(editingControllerProvider.notifier).trimClip(
+            clip.id,
+            startSeconds: startSeconds,
+            endSeconds: endSeconds,
+          ),
+    );
+  }
+
+  /// Write the reel's identifier order.
+  void _reorderClips(List<String> clipIds) {
+    unawaited(
+      ref.read(editingControllerProvider.notifier).reorderClips(clipIds),
+    );
+  }
+
+  /// Keep the best ten of the rallies the reel passes back.
+  Future<void> _keepTopTen(List<Rally> rallies) async {
+    final controller = ref.read(editingControllerProvider.notifier);
+    for (final Rally rally in rallies.take(10)) {
+      await controller.setKept(rally, true);
+    }
+  }
+
+  /// Open the Export stage from the reel footer.
+  void _startExport() {
+    _selectStage(PipelineStage.export);
   }
 
   /// Select a stage from the strip or inspector, where null is Play.

@@ -11,7 +11,11 @@ import '../../../../app/design/sc_status.dart';
 import '../../../../app/design/sc_tints.dart';
 import '../../../../app/design/sc_typography.dart';
 import '../../../../app/design/sportcut_tokens.dart';
+import '../../../editing/domain/highlight_clip.dart';
+import '../../../editing/domain/match_edit.dart';
 import '../../../editing/domain/rally.dart';
+import '../../../highlights/presentation/clip_inspector_panel.dart';
+import '../../../highlights/presentation/reel_panel.dart';
 import '../../../library/domain/match_record.dart';
 import '../../../library/presentation/playback_controller.dart';
 import '../../../score/presentation/rally_panel.dart';
@@ -19,16 +23,21 @@ import '../../domain/pipeline_stage.dart';
 
 /// The right rail: a stage-aware inspector.
 ///
-/// Play, Review & score, and Highlights show the Rally/Clip tablist. Mark
-/// court, Prepare analysis, Player analysis, and Export show their own
-/// contextual panel instead (ADR-0003 D14). The compact Pipeline panel stays
-/// above the tabs, collapsed by default, so every stage keeps a reachable row
-/// without turning the inspector back into a second persistent rail.
+/// Play, Review & score, and Highlights show the Rally/Clip tablist. The
+/// Rally tab hosts [RallyPanel]; the Clip tab hosts [ClipInspectorPanel] and
+/// the reel footer hosts [ReelPanel], which together carry the highlight
+/// selection (PR 6b). Mark court, Prepare analysis, Player analysis, and
+/// Export show their own contextual panel instead (ADR-0003 D14). The compact
+/// Pipeline panel stays above the tabs, collapsed by default, so every stage
+/// keeps a reachable row without turning the inspector back into a second
+/// persistent rail.
 ///
 /// The pane itself reads no provider: the shell passes the resolved pipeline
-/// states and the selected match, and [RallyPanel] reads the shell-owned
-/// editing and rally-review sessions. The pipeline rows keep the existing
-/// [onSelectStage]/[onSelectPlay] callbacks.
+/// states, the selected match, the review, and every callback, and
+/// [RallyPanel] reads the shell-owned editing and rally-review sessions. The
+/// pipeline rows keep the existing [onSelectStage]/[onSelectPlay] callbacks.
+/// [ClipInspectorPanel] and [ReelPanel] watch the ranking provider for the
+/// suggested rank and order, which is the one read they make themselves.
 class InspectorPane extends StatelessWidget {
   /// Build the inspector for the selected video's [states].
   const InspectorPane({
@@ -46,6 +55,16 @@ class InspectorPane extends StatelessWidget {
     this.selectedRallyId,
     this.onSelectRally,
     this.recordingAvailable = true,
+    this.edit,
+    this.editBusy = false,
+    this.editProblem,
+    this.onDismissEditProblem,
+    this.onSetKept,
+    this.onTrimClip,
+    this.onReorderClips,
+    this.onKeepTop10,
+    this.onSelectClip,
+    this.onExport,
   });
 
   /// The resolved state of every stage for the selected video.
@@ -86,6 +105,40 @@ class InspectorPane extends StatelessWidget {
 
   /// Whether the selected match's recording can still be read.
   final bool recordingAvailable;
+
+  /// The selected match's review, or null while the session loads.
+  final MatchEdit? edit;
+
+  /// Whether the review is writing a change.
+  final bool editBusy;
+
+  /// Why the last review action failed, when it did.
+  final String? editProblem;
+
+  /// Clear the reported review failure.
+  final VoidCallback? onDismissEditProblem;
+
+  /// Put a rally in the reel, or take it out.
+  final void Function(Rally rally, bool kept)? onSetKept;
+
+  /// Write a trim chosen in the Clip tab.
+  final void Function(
+    HighlightClip clip,
+    double startSeconds,
+    double endSeconds,
+  )? onTrimClip;
+
+  /// Write the reel's identifier order.
+  final void Function(List<String> clipIds)? onReorderClips;
+
+  /// Keep the best of the rallies the reel passes back.
+  final void Function(List<Rally> rallies)? onKeepTop10;
+
+  /// Select a clip's rally; the host also seeks to it.
+  final ValueChanged<Rally>? onSelectClip;
+
+  /// Open the Export stage.
+  final VoidCallback? onExport;
 
   /// Features that read the match.
   static const List<PipelineStage> _analysis = <PipelineStage>[
@@ -151,12 +204,49 @@ class InspectorPane extends StatelessWidget {
                 tokens.space4,
               ),
               child: showTabs
-                  ? _tabBody(tab)
+                  ? _tabsBody(context, tab)
                   : _contextualBody(context, selectedStage),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// The tab body plus the shared reel footer.
+  ///
+  /// The reel sits at the end of the inspector's existing scroll body rather
+  /// than in a separately docked strip: at the 720 px window minimum a fixed
+  /// footer would leave the tab body too little height. The Clip tab already
+  /// shows a short panel, so the reel follows it without scrolling.
+  Widget _tabsBody(BuildContext context, int tab) {
+    final SportcutTokens tokens = SportcutTokens.of(context);
+    final MatchEdit? edit = this.edit;
+    final MatchRecord? match = this.match;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _tabBody(tab),
+        if (match != null && edit != null) ...<Widget>[
+          SizedBox(height: tokens.space4),
+          const ScDivider(),
+          SizedBox(height: tokens.space3),
+          ReelPanel(
+            matchId: match.id,
+            edit: edit,
+            selectedRallyId: selectedRallyId,
+            busy: editBusy,
+            // The failure banner is owned by whichever tab panel is showing:
+            // RallyPanel already reports the editing problem on tab 0, and
+            // ClipInspectorPanel reports it on tab 1.
+            onSelectClip: onSelectClip,
+            onSetKept: onSetKept,
+            onReorder: onReorderClips,
+            onKeepTop10: onKeepTop10,
+            onExport: onExport,
+          ),
+        ],
+      ],
     );
   }
 
@@ -168,19 +258,23 @@ class InspectorPane extends StatelessWidget {
 
   /// The tab body for [tab].
   Widget _tabBody(int tab) {
-    if (tab == 1) {
-      return const ScEmptyState(
-        message: 'No clip selected. Choose a rally on the timeline.',
-        icon: ScIcons.movie,
-        compact: true,
-      );
-    }
     final match = this.match;
     if (match == null) {
       return const ScEmptyState(
         message: 'Select a video to review its rallies.',
         icon: ScIcons.scoreboard,
         compact: true,
+      );
+    }
+    if (tab == 1) {
+      return ClipInspectorPanel(
+        edit: edit,
+        selectedRallyId: selectedRallyId,
+        problem: editProblem,
+        busy: editBusy,
+        onDismissProblem: onDismissEditProblem,
+        onSetKept: onSetKept,
+        onTrim: onTrimClip,
       );
     }
     return RallyPanel(

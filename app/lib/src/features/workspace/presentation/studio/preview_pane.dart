@@ -6,7 +6,6 @@ import '../../../../app/design/sportcut_tokens.dart';
 import '../../../analysis/presentation/analysis_view.dart';
 import '../../../calibration/presentation/calibration_view.dart';
 import '../../../export/presentation/export_view.dart';
-import '../../../highlights/presentation/highlights_view.dart';
 import '../../../library/domain/match_record.dart';
 import '../../../library/presentation/match_list_entry.dart';
 import '../../../library/presentation/playback_controller.dart';
@@ -85,12 +84,13 @@ class PreviewPane extends StatelessWidget {
 
   /// The centre for the current stage.
   ///
-  /// Play, Import, and Review & score share the one stage without a feature
-  /// takeover; Review & score merely adds the score bug, and its controls live
-  /// in the Rally inspector. The remaining stages keep their existing views
-  /// until PR 7c turns them into panels. Those views size themselves with
-  /// `Expanded` and a fixed panel stack, so they cannot be placed under the
-  /// stage without editing them.
+  /// Play, Import, Review & score, and Highlights share the one stage without
+  /// a feature takeover; Review & score adds the score bug, and its controls
+  /// live in the Rally inspector, while Highlights keeps the bug off and puts
+  /// the clip details in the Clip inspector (PR 6a/6b). The remaining stages
+  /// keep their existing views until PR 7c turns them into panels. Those views
+  /// size themselves with `Expanded` and a fixed panel stack, so they cannot
+  /// be placed under the stage without editing them.
   Widget _centre(
     MatchListEntry entry,
     Map<String, VideoStageFacts>? facts,
@@ -141,7 +141,9 @@ class PreviewPane extends StatelessWidget {
           showScoreBug: true,
         );
       case PipelineStage.highlight:
-        return HighlightsView(match: entry.match);
+        // The selected clip plays in the shared stage; its details and the
+        // reel live in the inspector's Clip tab (PR 6b).
+        return VideoPreview(entry: entry, controller: controller);
       case PipelineStage.export:
         return ExportView(match: entry.match, onExported: onRefresh);
       case PipelineStage.analyze:
