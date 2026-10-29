@@ -13,7 +13,20 @@
 #   tools/run-service.sh [--state-root <path>] [--keep]
 #
 # Environment:
-#   CARGO_TARGET_DIR   Override the Cargo target directory (optional).
+#   CARGO_TARGET_DIR            Override the Cargo target directory (optional).
+#   SPORTCUT_FFMPEG             Pass --ffmpeg when set.
+#   SPORTCUT_FFPROBE            Pass --ffprobe when set.
+#   SPORTCUT_MACOS_TFLITE_EVAL  Set to 0 to omit the macos-tflite-eval feature on
+#                               macOS (default: enabled on Darwin), matching
+#                               tools/build-service.sh. Non-macOS builds never
+#                               enable it.
+#
+# When third_party/inference contains both libtensorflowlite_c.dylib and
+# model.tflite, they are passed as --tflite-library and --person-model. Fetch
+# them with tools/fetch-inference-assets.sh first. The script builds with the
+# same Darwin-gated feature selection as build-service.sh and checks the
+# artifact reports that feature, so the development path cannot pass inference
+# assets to a build that cannot use them.
 
 set -euo pipefail
 
@@ -31,6 +44,14 @@ usage: run-service.sh [--state-root <path>] [--keep]
   --state-root <path>  Use an explicit state root instead of a temporary one.
   --keep               Keep the temporary state root on exit.
   -h, --help           Print this help.
+
+Environment:
+  SPORTCUT_FFMPEG             ffmpeg executable; passed as --ffmpeg when set.
+  SPORTCUT_FFPROBE            ffprobe executable; passed as --ffprobe when set.
+  SPORTCUT_MACOS_TFLITE_EVAL  Set to 0 to omit the macos-tflite-eval feature on
+                              macOS (default: enabled on Darwin).
+  Inference assets in third_party/inference are passed as --tflite-library and
+  --person-model when both files exist.
 EOF
 }
 
@@ -75,13 +96,41 @@ else
 fi
 BINARY="${TARGET_DIR}/debug/sportcut-service"
 
-echo "==> cargo build -p sportcut-service"
+# Match tools/build-service.sh: the service only compiles the macOS TFLite
+# evaluation runtime when the feature is on.
+FEATURES=""
+if [ "$(uname -s)" = "Darwin" ] && [ "${SPORTCUT_MACOS_TFLITE_EVAL:-1}" != "0" ]; then
+  FEATURES="macos-tflite-eval"
+fi
+
 cd "${CORE_DIR}"
-cargo build -p sportcut-service
+if [ -n "${FEATURES}" ]; then
+  echo "==> features:   ${FEATURES}"
+  echo "==> cargo build -p sportcut-service --features ${FEATURES}"
+  cargo build -p sportcut-service --features "${FEATURES}"
+else
+  echo "==> features:   none"
+  echo "==> cargo build -p sportcut-service"
+  cargo build -p sportcut-service
+fi
 
 if [ ! -x "${BINARY}" ]; then
   echo "run-service: expected binary ${BINARY} was not produced" >&2
   exit 1
+fi
+
+# Smoke check: the artifact itself must claim the feature the build asked for.
+# `--version` is cheap and does not touch the assets, so a stale or mis-built
+# binary cannot be exercised silently.
+VERSION_LINE="$("${BINARY}" --version)"
+if [ -n "${FEATURES}" ]; then
+  case "${VERSION_LINE}" in
+    *"${FEATURES}"*) ;;
+    *)
+      echo "run-service: built binary does not report ${FEATURES}: ${VERSION_LINE}" >&2
+      exit 1
+      ;;
+  esac
 fi
 
 CREATED_STATE_ROOT=0
@@ -112,12 +161,45 @@ cleanup() {
 }
 trap cleanup EXIT
 
+EXTRA_ARGS=()
+INFERENCE_DIR="${REPO_ROOT}/third_party/inference"
+if [ -f "${INFERENCE_DIR}/libtensorflowlite_c.dylib" ] && [ -f "${INFERENCE_DIR}/model.tflite" ]; then
+  EXTRA_ARGS+=(
+    --tflite-library "${INFERENCE_DIR}/libtensorflowlite_c.dylib"
+    --person-model "${INFERENCE_DIR}/model.tflite"
+  )
+  echo "==> inference:   ${INFERENCE_DIR}"
+  if [ -z "${FEATURES}" ]; then
+    echo "run-service: warning: inference assets are present but macos-tflite-eval is off;" >&2
+    echo "  player tracking will report unsupported. Unset SPORTCUT_MACOS_TFLITE_EVAL" >&2
+    echo "  (or set it to 1) on macOS to enable it." >&2
+  fi
+else
+  echo "==> inference:   not bundled (run tools/fetch-inference-assets.sh)"
+fi
+if [ -n "${SPORTCUT_FFMPEG:-}" ]; then
+  EXTRA_ARGS+=(--ffmpeg "${SPORTCUT_FFMPEG}")
+fi
+if [ -n "${SPORTCUT_FFPROBE:-}" ]; then
+  EXTRA_ARGS+=(--ffprobe "${SPORTCUT_FFPROBE}")
+fi
+
 echo "==> state root: ${STATE_ROOT}"
 echo "==> endpoint:   ${ENDPOINT}"
 echo "==> token file: ${TOKEN_FILE}"
 echo "==> binary:     ${BINARY}"
 
-"${BINARY}" \
-  --state-root "${STATE_ROOT}" \
-  --endpoint "${ENDPOINT}" \
-  --token-file "${TOKEN_FILE}"
+# Bash 3.2 (the macOS default) rejects an empty array expansion under `set -u`,
+# so only append the optional flags when there are any.
+if [ "${#EXTRA_ARGS[@]}" -gt 0 ]; then
+  "${BINARY}" \
+    --state-root "${STATE_ROOT}" \
+    --endpoint "${ENDPOINT}" \
+    --token-file "${TOKEN_FILE}" \
+    "${EXTRA_ARGS[@]}"
+else
+  "${BINARY}" \
+    --state-root "${STATE_ROOT}" \
+    --endpoint "${ENDPOINT}" \
+    --token-file "${TOKEN_FILE}"
+fi

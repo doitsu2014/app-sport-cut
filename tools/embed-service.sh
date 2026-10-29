@@ -59,6 +59,21 @@ chmod 0755 "${HELPER}"
 
 echo "==> embedded ${HELPER}"
 
+# Player tracking needs the runtime and model beside the helper. Packaging must
+# not fail when they have not been fetched yet, but a silent bundle without
+# them would only surface as a degraded service at runtime.
+RUNTIME="${APP}/Contents/Frameworks/libtensorflowlite_c.dylib"
+MODEL="${APP}/Contents/Resources/model.tflite"
+if [ ! -f "${RUNTIME}" ] || [ ! -f "${MODEL}" ]; then
+  cat >&2 <<EOF
+embed-service: warning: ${APP} is missing player-tracking assets.
+  expected runtime: ${RUNTIME}
+  expected model:   ${MODEL}
+Run tools/embed-inference-assets.sh after tools/fetch-inference-assets.sh to
+enable player tracking; the service still runs for other work without them.
+EOF
+fi
+
 if [ -n "${CODESIGN_IDENTITY:-}" ]; then
   echo "==> codesign --force --options runtime --timestamp --sign \"${CODESIGN_IDENTITY}\" \"${HELPER}\""
   codesign --force --options runtime --timestamp \

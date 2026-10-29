@@ -18,6 +18,12 @@ path = "src/main.rs"
 [lints]
 workspace = true
 
+[features]
+default = []
+# Enable the local macOS TFLite person detector through the api facade. The
+# service owns the runtime and model paths, so this is the only switch needed.
+macos-tflite-eval = ["sportcut-api/macos-tflite-eval"]
+
 [dependencies]
 anyhow = "1.0"
 nix = { workspace = true }

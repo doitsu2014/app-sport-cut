@@ -19,6 +19,24 @@ objectives, requirements, risks, and milestones in
 `FR-TRK-nn` identifiers are owned here; `BO`, `BR`, `DS`, `NFR`, `R`, `Q`, and
 `M` identifiers are owned by the product BRD.
 
+## Transport and ownership note (ADR-0001)
+
+[ADR-0001](../adr/0001-rust-background-service.md) moves tracking into the Rust
+background service. The Flutter client requests a job over the
+[Sportcut Service Protocol v1](../architecture/protocol.md) and renders the
+returned windows; the service owns detection, tracking, the artifact, and the
+inference assets. The inference runtime and person model are service-owned: the
+service resolves them at startup from its launch flags, the app bundle, or its
+environment. The service protocol never accepts client-supplied `runtimePath` or
+`modelPath`: `engine.tracking.start` rejects either field. (The legacy Flutter
+FFI path retains those parameters until the Phase 2 cutover.) The pinned-asset and offline
+requirements (FR-TRK-05, FR-TRK-27, NFR-TRK-08) still hold; only the owner of
+the paths changes. A build without `macos-tflite-eval`, or without the assets,
+reports `vision.available: false` in `service.health` and returns an actionable
+error. See
+[protocol.md §5](../architecture/protocol.md#5-method-table-engine-facade) and
+[background-service.md §8.4](../architecture/background-service.md#84-media-toolchain-and-inference-asset-packaging).
+
 ## 1. Purpose and users
 
 Player tracking finds the people on the court in each sampled frame, links them

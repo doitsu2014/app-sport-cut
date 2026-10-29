@@ -90,18 +90,6 @@ pub fn state_root_path(
     under_root(&context.state_root, raw, label, false).map(path_string)
 }
 
-/// A signed inference asset: under the state root or next to the service
-/// executable in the app bundle.
-pub fn asset(context: &ServiceContext, raw: &str, label: &str) -> Result<String, ProtocolError> {
-    let mut roots = vec![context.state_root.clone()];
-    if let Ok(executable) = std::env::current_exe() {
-        if let Some(directory) = executable.parent() {
-            roots.push(directory.to_path_buf());
-        }
-    }
-    under_any_root(&roots, raw, label, false).map(path_string)
-}
-
 /// A render input must live directly inside one allocated
 /// `<state-root>/render-inputs/<uuid>/` directory.
 pub fn render_input(

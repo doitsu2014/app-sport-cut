@@ -9,7 +9,10 @@
 #   tools/build-service.sh
 #
 # Environment:
-#   CARGO_TARGET_DIR   Override the Cargo target directory (optional).
+#   CARGO_TARGET_DIR          Override the Cargo target directory (optional).
+#   SPORTCUT_MACOS_TFLITE_EVAL  Set to 0 to omit the macos-tflite-eval feature on
+#                             macOS (default: enabled on Darwin). Non-macOS builds
+#                             never enable it.
 
 set -euo pipefail
 
@@ -32,9 +35,21 @@ else
 fi
 ARTIFACT="${TARGET_DIR}/release/sportcut-service"
 
-echo "==> cargo build -p sportcut-service --release"
+FEATURES=""
+if [ "$(uname -s)" = "Darwin" ] && [ "${SPORTCUT_MACOS_TFLITE_EVAL:-1}" != "0" ]; then
+  FEATURES="macos-tflite-eval"
+fi
+
 cd "${CORE_DIR}"
-cargo build -p sportcut-service --release
+if [ -n "${FEATURES}" ]; then
+  echo "==> features: ${FEATURES}"
+  echo "==> cargo build -p sportcut-service --release --features ${FEATURES}"
+  cargo build -p sportcut-service --release --features "${FEATURES}"
+else
+  echo "==> features: none"
+  echo "==> cargo build -p sportcut-service --release"
+  cargo build -p sportcut-service --release
+fi
 
 if [ ! -x "${ARTIFACT}" ]; then
   echo "build-service: expected artifact ${ARTIFACT} was not produced" >&2

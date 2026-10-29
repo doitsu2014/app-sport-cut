@@ -294,12 +294,49 @@ re-read `engine.job.status`; it must not assume a missed update.
 | Method | Params | Result | Notes |
 | --- | --- | --- | --- |
 | `service.hello` | `protocol`, `client`, `token`, `capabilities` | service/protocol/catalog/paths/limits | Must be first |
-| `service.health` | `{}` | `status`, versions, catalog state, disk free, toolchain, jobs | Callable while a heavy job runs |
+| `service.health` | `{}` | `status`, versions, catalog state, disk free, toolchain, vision, jobs | Callable while a heavy job runs |
 | `service.info` | `{}` | Build metadata, state root, protocol range | Static-ish |
 | `service.metrics` | `{}` | In-memory counters (optional, `metrics.v1`) | No telemetry; local only |
 | `service.ping` | `{}` | `{ "pong": true, "uptimeMs": 1234 }` | Cheap liveness |
 | `service.diagnostics` | `redactPaths?` | `{ "bundlePath": "...", "createdAt": 1761782400000 }` | Builds the local diagnostics bundle; the client never reads `logs/` directly |
 | `service.shutdown` | `cancelRunningJobs`, `reason` | `{ "accepted": true }` then `service.shutdown` notification | Closes the connection |
+
+`service.health` reports two availability blocks:
+
+```json
+{
+  "toolchain": {
+    "available": true,
+    "ffmpeg": "/.../MediaTools/ffmpeg",
+    "ffprobe": "/.../MediaTools/ffprobe",
+    "version": "ffmpeg version 7.1"
+  },
+  "vision": {
+    "available": false,
+    "assetsPresent": true,
+    "runtimePath": "/.../Frameworks/libtensorflowlite_c.dylib",
+    "modelPath": "/.../Resources/model.tflite",
+    "modelFingerprint": "fnv1a64:0a4c9e64faa2dae8",
+    "detail": "this build lacks the macos-tflite-eval feature; rebuild sportcut-service with --features macos-tflite-eval"
+  }
+}
+```
+
+- `toolchain.available` is false when `ffmpeg`/`ffprobe` cannot be resolved;
+  `detail` then names the problem. `ffmpeg`/`ffprobe` are required for probe,
+  proxy, audio, frames, and export.
+- `vision.available` means *runnable*: the build has the `macos-tflite-eval`
+  feature, both service-owned assets resolve to files, **and** the model matches
+  the pinned EfficientDet-Lite0 trial fingerprint the tracking job enforces.
+  `assetsPresent` reports file presence alone, so a present-but-unsupported
+  model is distinguishable. `runtimePath`, `modelPath`, `modelFingerprint`, and
+  `detail` are present in the object; an absent path is `null`. A missing
+  feature, a missing asset, or an unsupported model makes player tracking
+  unavailable but does not stop other work.
+- Either block being unavailable sets `status` to `degraded`, not `not_ready`,
+  as long as the state root and disk are healthy. A build without
+  `macos-tflite-eval` is expected to stay `degraded`; that is an optional
+  capability, not a fault.
 
 ## 5. Method table: engine facade
 
@@ -319,7 +356,7 @@ the state root.
 | 5 | `engine.rally.start` | `start_rally_segmentation` | `matchId`, `config` | `JobHandle` |
 | 6 | `engine.rally.suggestions` | `match_rally_suggestions` | `matchId`, `config` | `RallySuggestions` or `null` |
 | 7 | `engine.tracks.window` | `match_player_tracks` | `matchId`, `startSeconds`, `endSeconds` | `PlayerTracks` or `null` |
-| 8 | `engine.tracking.start` | `start_player_tracking` | `matchId`, `config`, `runtimePath?`, `modelPath?` | `JobHandle` |
+| 8 | `engine.tracking.start` | `start_player_tracking` | `matchId`, `config` | `JobHandle` |
 | 9 | `engine.job.status` | `job_status` | `jobId` | `JobStatus` |
 | 10 | `engine.highlight.rank` | `rank_highlights` | `{ "rallies": [HighlightRally] }` | `{ "rallies": [HighlightRank] }` |
 | 11 | `engine.servingSides` | `serving_sides` | `{ "rallies": [RallyOutcome] }` | `{ "rallies": [ServingSide] }` |
@@ -335,6 +372,14 @@ Notes:
 - `engine.import.start` reads the recording from the service-owned recording
   store. The client must have created the match through `library.match.import`
   first; an unknown `matchId` returns `not_found`.
+- `engine.tracking.start` does **not** accept `runtimePath` or `modelPath`.
+  Inference assets are service-owned: the service resolves its own TFLite
+  runtime and person model at startup (from `--tflite-library`/`--person-model`,
+  the app bundle, or `SPORTCUT_TFLITE_LIBRARY`/`SPORTCUT_PERSON_MODEL`). A
+  request that supplies either field is rejected with `invalid_params` and a
+  message stating the service-owned rule. A build without the
+  `macos-tflite-eval` feature returns `unsupported` naming the feature; use
+  `service.health` `vision` for the current availability and paths.
 - `engine.calibration.save` writes the artifact and the catalog copy in the
   service; the client no longer writes a second copy. The result still names
   `changed`, `invalidatedKinds`, and `geometry` in the same order.
@@ -731,12 +776,12 @@ rollback window closes. A failure at any stage restores the backup and reports
   - files inside a `library.renderInputs.allocate` directory;
   - `dbPath`, `recordingsRoot`, and `artifactsRoot` for
     `library.catalog.adoptLegacy` (the one-time legacy roots);
-  - `runtimePath` and `modelPath` for `engine.tracking.start`, which must
-    resolve to the signed inference assets in the bundle or state root;
   - `musicPath` for `engine.export.start`, which must resolve under the state
     root or be handed off through the same security-scoped path as a recording.
   Every other path comes from the service. The list in this rule is the
   authoritative list; a method table that names a path uses one of these.
+  Inference assets are not a caller path: the service owns and resolves them,
+  and `engine.tracking.start` rejects `runtimePath` and `modelPath`.
 - **Binary:** no base64 payloads in v1 except a security-scoped bookmark, which
   is a typed object `{ "kind": "bookmark", "value": "<base64>" }`. Recordings
   and images are file paths. A bookmark is never logged, persisted after its

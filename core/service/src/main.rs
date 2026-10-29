@@ -27,20 +27,37 @@ fn run() -> anyhow::Result<()> {
             Ok(())
         }
         Parsed::Version => {
-            println!("sportcut-service {}", env!("CARGO_PKG_VERSION"));
+            // The feature marker lets development scripts confirm the built
+            // artifact can run player tracking before they launch it.
+            let features = if cfg!(all(target_os = "macos", feature = "macos-tflite-eval")) {
+                "macos-tflite-eval"
+            } else {
+                "none"
+            };
+            println!(
+                "sportcut-service {} (features: {features})",
+                env!("CARGO_PKG_VERSION")
+            );
             Ok(())
         }
-        Parsed::Run(config) => match Server::bind(config)? {
-            BindResult::Started(server) => server.run(),
-            BindResult::AlreadyRunning { endpoint } => {
-                // background-service §4.2: a second launch reports the existing
-                // endpoint and exits successfully so the client can connect.
-                println!(
-                    "sportcut-service is already running; connecting to {}",
-                    endpoint.display()
-                );
-                Ok(())
+        Parsed::Run(mut config) => {
+            // The service owns the media and inference tool paths. Publish them
+            // before the server starts any worker thread, so the facade's
+            // `PATH` discovery and the player-tracking job see them.
+            config.prepare_runtime();
+            match Server::bind(config)? {
+                BindResult::Started(server) => server.run(),
+                BindResult::AlreadyRunning { endpoint } => {
+                    // background-service §4.2: a second launch reports the
+                    // existing endpoint and exits successfully so the client can
+                    // connect.
+                    println!(
+                        "sportcut-service is already running; connecting to {}",
+                        endpoint.display()
+                    );
+                    Ok(())
+                }
             }
-        },
+        }
     }
 }

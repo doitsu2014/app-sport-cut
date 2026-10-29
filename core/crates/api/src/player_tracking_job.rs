@@ -23,14 +23,13 @@ use crate::facade::{handle_for, spawn_worker};
 use crate::jobs;
 use crate::track_artifact::{
     content_fingerprint, fingerprint_file, fingerprint_samples, save_track_artifact, TrackArtifact,
-    TrackProvenance,
+    TrackProvenance, TRIAL_MODEL_FINGERPRINT,
 };
 
 const ANALYSIS_STAGE: &str = "player_analysis";
 const PUBLISH_STAGE: &str = "publish_tracks";
 const RUNTIME_ENV: &str = "SPORTCUT_TFLITE_LIBRARY";
 const MODEL_ENV: &str = "SPORTCUT_PERSON_MODEL";
-const TRIAL_MODEL_FINGERPRINT: &str = "fnv1a64:0a4c9e64faa2dae8";
 
 #[derive(Debug)]
 struct JobInputs {
@@ -53,17 +52,21 @@ pub(crate) fn start(request: PlayerTrackingRequestDto) -> Result<JobHandleDto> {
         request.runtime_path.as_deref(),
         RUNTIME_ENV,
         "TFLite runtime",
-    )?;
+    )
+    .map_err(to_anyhow)?;
     let model_path = local_asset(
         request.model_path.as_deref(),
         MODEL_ENV,
         "person model weights",
-    )?;
+    )
+    .map_err(to_anyhow)?;
     let model_fingerprint = fingerprint_file(&model_path).map_err(to_anyhow)?;
     if model_fingerprint != TRIAL_MODEL_FINGERPRINT {
-        return Err(anyhow!(
-            "person model bytes differ from the supported EfficientDet-Lite0 trial file"
-        ));
+        return Err(to_anyhow(SportcutError::unsupported(
+            "person model weights",
+            "the file is not the supported EfficientDet-Lite0 trial model; run \
+             tools/fetch-inference-assets.sh",
+        )));
     }
     let runtime_fingerprint = fingerprint_file(&runtime_path).map_err(to_anyhow)?;
     let detector =
@@ -224,25 +227,42 @@ fn run(inputs: &JobInputs, session: &Arc<JobSession>, lease: JobLease) -> Result
 /// A packaged app supplies [explicit] so the engine never reads the development
 /// environment; when it is absent the evaluation build falls back to the
 /// environment variable. Both paths are validated as readable files.
-fn local_asset(explicit: Option<&str>, variable: &str, description: &str) -> Result<PathBuf> {
+///
+/// A missing asset is an availability problem, not an unexpected service
+/// failure, so it is typed as [`SportcutError::Unsupported`]; the service maps
+/// that to the protocol's `unsupported` code instead of `internal`.
+fn local_asset(
+    explicit: Option<&str>,
+    variable: &str,
+    description: &str,
+) -> std::result::Result<PathBuf, SportcutError> {
     if let Some(path) = explicit {
         let path = PathBuf::from(path);
         if !path.is_file() {
-            return Err(anyhow!(
-                "{description} is unavailable at {}; bundle it with the app or set {variable}",
-                path.display()
+            return Err(SportcutError::unsupported(
+                description,
+                format!(
+                    "unavailable at {}; bundle it with the app or set {variable}",
+                    path.display()
+                ),
             ));
         }
         return Ok(path);
     }
     let path = std::env::var_os(variable).ok_or_else(|| {
-        anyhow!("{description} is unavailable; set {variable} to its local file path")
+        SportcutError::unsupported(
+            description,
+            format!("not configured; set {variable} to its local file path"),
+        )
     })?;
     let path = PathBuf::from(path);
     if !path.is_file() {
-        return Err(anyhow!(
-            "{description} is unavailable at {}; set {variable} to a readable local file",
-            path.display()
+        return Err(SportcutError::unsupported(
+            description,
+            format!(
+                "unavailable at {}; set {variable} to a readable local file",
+                path.display()
+            ),
         ));
     }
     Ok(path)
@@ -268,5 +288,7 @@ pub(crate) fn configured_backend_is_current(provenance: &TrackProvenance) -> Res
 }
 
 fn to_anyhow(error: SportcutError) -> anyhow::Error {
-    anyhow!(error.to_string())
+    // Keep the typed error in the chain so the service maps protocol codes by
+    // variant instead of matching diagnostic text.
+    anyhow::Error::new(error)
 }

@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 use sportcut_protocol::{ServiceInfo, ServicePaths};
 
-use crate::config::Config;
+use crate::config::{Config, VisionAssets};
 use crate::idempotency::IdempotencyStore;
 use crate::logging::Logger;
 use crate::os_glue::{self, InstanceLock};
@@ -62,7 +62,10 @@ pub fn service_build() -> &'static str {
 #[derive(Debug)]
 pub enum BindResult {
     /// This process owns the endpoint and should run.
-    Started(Server),
+    ///
+    /// Boxed because `Server` is much larger than the `AlreadyRunning` path,
+    /// and this value is moved exactly once at startup.
+    Started(Box<Server>),
     /// Another process holds the single-instance lock.
     AlreadyRunning {
         /// Endpoint the existing instance owns.
@@ -141,6 +144,7 @@ impl Server {
         write_endpoint_file(&endpoint_file, &endpoint)?;
 
         let control = Arc::new(Control::new(Instant::now()));
+        let vision = config.vision_assets();
         let context = Arc::new(ServiceContext {
             control: Arc::clone(&control),
             state_root: layout.root.clone(),
@@ -152,9 +156,10 @@ impl Server {
             instance_id: security::generate_token(),
             pid: std::process::id(),
             started: Instant::now(),
+            vision,
         });
 
-        Ok(BindResult::Started(Self {
+        Ok(BindResult::Started(Box::new(Self {
             config,
             endpoint,
             token_file,
@@ -165,7 +170,7 @@ impl Server {
             context,
             lock,
             next_connection_id: AtomicU64::new(0),
-        }))
+        })))
     }
 
     /// The bound endpoint.
@@ -627,6 +632,9 @@ pub struct ServiceContext {
     pub pid: u32,
     /// When the service bound its endpoint.
     pub started: Instant,
+    /// Inference assets resolved at startup, including the cached model
+    /// fingerprint that `service.health` reports.
+    pub vision: VisionAssets,
 }
 
 impl fmt::Debug for ServiceContext {
@@ -673,6 +681,7 @@ impl ServiceContext {
             instance_id: "instance-1".to_string(),
             pid: 42,
             started: Instant::now(),
+            vision: VisionAssets::default(),
         }
     }
 

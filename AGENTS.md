@@ -59,8 +59,23 @@ tools/run-macos.sh                    # dev run of the client on macOS
 
 tools/build-service.sh                # core/target/release/sportcut-service
 tools/run-service.sh                  # dev service on a temporary state root
+tools/embed-service.sh <app>          # copy/sign Contents/Helpers/SportcutService
+tools/fetch-inference-assets.sh       # download and verify TFLite runtime + model
+tools/embed-inference-assets.sh <app> # copy the runtime + model into the bundle
 tools/check-no-rust-in-app.sh         # FFI guard (warning mode in Phase 0-1)
 ```
+
+The service owns media-tool discovery and inference asset resolution. On macOS,
+`tools/build-service.sh` enables the `macos-tflite-eval` feature by default; set
+`SPORTCUT_MACOS_TFLITE_EVAL=0` to omit it, and the service then runs everything
+except player tracking. The service accepts `--ffmpeg`, `--ffprobe`,
+`--tflite-library`, and `--person-model`; when the inference flags are absent it
+resolves the bundle files (`Contents/Frameworks/libtensorflowlite_c.dylib`,
+`Contents/Resources/model.tflite`) and then `SPORTCUT_TFLITE_LIBRARY` /
+`SPORTCUT_PERSON_MODEL`. The service protocol never accepts client-supplied
+inference paths: `engine.tracking.start` rejects `runtimePath` and `modelPath`.
+The legacy Flutter FFI path still passes them until the Phase 2 cutover.
+`ffmpeg`/`ffprobe` remain required at runtime.
 
 If Flutter is not on `PATH`, set `SPORTCUT_FLUTTER_BIN` to the directory
 containing the `flutter` executable before running any client-track command.

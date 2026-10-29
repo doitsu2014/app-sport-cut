@@ -311,6 +311,13 @@ feature BRD may add a stricter local rule but may not weaken these.
   check confines the unsafe allowance to the named module.
 - Only the Sportcut service crosses the process boundary; protocol DTOs are the
   frozen client contract. No Rust library is linked into the app.
+- The service owns media-tool discovery and inference asset resolution. The
+  launcher passes `--ffmpeg`/`--ffprobe` and `--tflite-library`/`--person-model`;
+  the service protocol never accepts client-supplied `runtimePath` or
+  `modelPath`, and `engine.tracking.start` rejects them. The legacy Flutter FFI
+  path retains those parameters until the Phase 2 cutover.
+  `ffmpeg`/`ffprobe` remain required at runtime; the inference assets are
+  optional and their absence only disables player tracking.
 - The client and service communicate only over the documented local protocol;
   the service is a separate signed process, not a linked library.
 - Match-directory layout and schema versions are stable.
@@ -329,7 +336,7 @@ feature BRD may add a stricter local rule but may not weaken these.
 | --- | --- | --- |
 | Design system v1.0 | Tokens, states, voice, accessibility contract | Design lead |
 | Engine crates (`core/`) | Media, storage, jobs, court, vision, rally, score, highlight, export | Engineering lead |
-| Rust service (`core/service`) | Engine, catalog, recording custody, jobs, and export in a separate process; frozen 17-call engine contract over the protocol | Engineering lead |
+| Rust service (`core/service`) | Engine, catalog, recording custody, jobs, and export in a separate process; media-tool discovery and service-owned inference asset resolution; frozen 17-call engine contract over the protocol | Engineering lead |
 | Service protocol (`core/crates/protocol`) | Versioned request, response, notification, and error contract | Engineering lead |
 | Flutter client (`app/`) | Studio, features, playback, protocol client, in-memory cache, Riverpod state | Engineering lead |
 | Eval harness (`core/crates/eval`, CLI) | Accuracy scoring and threshold replay | QA lead |
@@ -339,9 +346,9 @@ feature BRD may add a stricter local rule but may not weaken these.
 
 | Dependency | Use | Release condition |
 | --- | --- | --- |
-| FFmpeg / ffprobe | Probe, proxy, audio, frames, render | LGPL build or platform-native replacement; GPL build is dev-only |
-| TensorFlow Lite C runtime | macOS person detection | Apache-2.0 notice; pinned by SHA-256 |
-| EfficientDet-Lite0 int8 weights | Person detection | Weight redistribution verdict reconciled; pinned |
+| FFmpeg / ffprobe | Probe, proxy, audio, frames, render; service-owned tools required at runtime | LGPL build or platform-native replacement; GPL build is dev-only |
+| TensorFlow Lite C runtime | macOS person detection; path resolved by the service, not the client | Apache-2.0 notice; pinned by SHA-256 |
+| EfficientDet-Lite0 int8 weights | Person detection; path resolved by the service, not the client | Weight redistribution verdict reconciled; pinned |
 | Flutter packages (Riverpod, file_picker, video_player, share_plus, path_provider) | Client runtime; `sqflite` retained through the Phase 4 rollback and shadow read, removed at Phase 5 | Recorded shippable in the register |
 | Rust service executable | Separate backend process: engine, catalog, recording store, jobs, export | Signed and notarized with the app; project code MIT |
 | SQLite (via `rusqlite`, bundled or system linkage) | Service-owned catalog storage | Licensed and recorded (SQLite public domain; the crate is MIT). Linkage model is ADR-0001 Q-4 and must be resolved before release: bundled SQLite affects binary size and deployment target, system SQLite affects the minimum macOS version. No release with an unresolved row (BR-10, NFR-10) |

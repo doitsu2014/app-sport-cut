@@ -9,6 +9,7 @@
 
 use serde::Serialize;
 use serde_json::{json, Value};
+use sportcut_api::track_artifact::TRIAL_MODEL_FINGERPRINT;
 use sportcut_protocol::method::{
     required_capability, SERVICE_HEALTH, SERVICE_HELLO, SERVICE_INFO, SERVICE_PING,
     SERVICE_SHUTDOWN,
@@ -317,11 +318,17 @@ fn health(context: &ServiceContext, session: &Session) -> Value {
     let running_jobs = context.control.running_jobs();
     let disk_free_bytes = disk_free(&context.state_root);
     let toolchain = toolchain_health();
+    let vision = vision_health(context);
 
+    // A missing media toolchain disables import/export; a missing inference
+    // runtime disables player tracking. Neither makes the service unusable for
+    // the work that does not need it, so both are `degraded`, not `not_ready`.
     let state_root_ready = context.state_root.is_dir();
     let status = if !state_root_ready || disk_free_bytes.is_none() {
         "not_ready"
-    } else if !toolchain["available"].as_bool().unwrap_or(false) {
+    } else if !toolchain["available"].as_bool().unwrap_or(false)
+        || !vision["available"].as_bool().unwrap_or(false)
+    {
         "degraded"
     } else {
         "ok"
@@ -341,6 +348,7 @@ fn health(context: &ServiceContext, session: &Session) -> Value {
         "runningJobs": running_jobs,
         "diskFreeBytes": disk_free_bytes,
         "toolchain": toolchain,
+        "vision": vision,
         "lastError": context.control.last_error(),
         "jobs": {
             "running": context.control.running_job_ids(),
@@ -368,6 +376,82 @@ fn toolchain_health() -> Value {
             "detail": error.to_string(),
         }),
     }
+}
+
+/// Report the service-owned inference runtime and person model.
+///
+/// `available` means *runnable*: the build has `macos-tflite-eval`, both files
+/// exist, and the model has the pinned trial fingerprint the player-tracking
+/// job enforces. `assetsPresent` distinguishes a missing asset from a
+/// present-but-unsupported one, so a build can never claim health while
+/// tracking is guaranteed to fail.
+fn vision_health(context: &ServiceContext) -> Value {
+    let assets = &context.vision;
+    let runtime = assets.runtime.as_deref();
+    let model = assets.model.as_deref();
+
+    let built_in = cfg!(all(target_os = "macos", feature = "macos-tflite-eval"));
+    let runtime_file = runtime.filter(|path| path.is_file());
+    let model_file = model.filter(|path| path.is_file());
+    let assets_present = runtime_file.is_some() && model_file.is_some();
+    let model_supported = model_file.is_some()
+        && assets.model_fingerprint.as_deref() == Some(TRIAL_MODEL_FINGERPRINT);
+    let available = built_in && runtime_file.is_some() && model_supported;
+
+    let detail = if !built_in {
+        Some(
+            "this build lacks the macos-tflite-eval feature; rebuild sportcut-service with \
+             --features macos-tflite-eval"
+                .to_string(),
+        )
+    } else {
+        missing_vision_asset(runtime, runtime_file, "TFLite runtime")
+            .or_else(|| missing_vision_asset(model, model_file, "person model"))
+            .or_else(|| {
+                (!model_supported).then(|| match assets.model_fingerprint.as_deref() {
+                    Some(fingerprint) => format!(
+                        "person model at {} is not the supported EfficientDet-Lite0 trial file \
+                         (fingerprint {fingerprint}); run tools/fetch-inference-assets.sh",
+                        model.map_or_else(
+                            || "<unknown>".to_string(),
+                            |path| path.display().to_string()
+                        )
+                    ),
+                    None => format!(
+                        "person model at {} could not be read; run tools/fetch-inference-assets.sh",
+                        model.map_or_else(
+                            || "<unknown>".to_string(),
+                            |path| path.display().to_string()
+                        )
+                    ),
+                })
+            })
+    };
+
+    json!({
+        "available": available,
+        "assetsPresent": assets_present,
+        "runtimePath": runtime.map(|path| path.to_string_lossy().into_owned()),
+        "modelPath": model.map(|path| path.to_string_lossy().into_owned()),
+        "modelFingerprint": assets.model_fingerprint,
+        "detail": detail,
+    })
+}
+
+/// Describe a missing inference asset. A path that is set but absent is more
+/// actionable than a path that was never configured.
+fn missing_vision_asset(
+    configured: Option<&std::path::Path>,
+    file: Option<&std::path::Path>,
+    description: &str,
+) -> Option<String> {
+    if file.is_some() {
+        return None;
+    }
+    Some(match configured {
+        Some(path) => format!("{description} is missing at {}", path.display()),
+        None => format!("{description} is not configured"),
+    })
 }
 
 fn media_version(ffmpeg: &std::path::Path) -> Option<String> {
@@ -778,6 +862,12 @@ mod tests {
         );
         assert!(health["diskFreeBytes"].as_u64().is_some() || health["diskFreeBytes"].is_null());
         assert!(health["toolchain"]["available"].is_boolean());
+        assert!(health["vision"]["available"].is_boolean());
+        assert!(health["vision"]["assetsPresent"].is_boolean());
+        assert!(health["vision"].get("runtimePath").is_some());
+        assert!(health["vision"].get("modelPath").is_some());
+        assert!(health["vision"].get("modelFingerprint").is_some());
+        assert!(health["vision"].get("detail").is_some());
         assert!(health.get("lastError").is_some());
         assert_eq!(health["jobs"]["admission"]["heavyJobRunning"], false);
 

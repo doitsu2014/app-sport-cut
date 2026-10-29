@@ -142,6 +142,16 @@ Rollback:
 
 - Set `SPORTCUT_TRANSPORT=ffi`. No data has moved.
 
+**Phase 1 status note (2026-10-29).** The service now hosts the media and vision
+runtime configuration: `--ffmpeg`/`--ffprobe` and
+`--tflite-library`/`--person-model`, bundle-then-environment resolution for the
+inference assets, a service-owned-asset rule that rejects client-supplied
+`runtimePath`/`modelPath` on `engine.tracking.start`, and a `vision` block in
+`service.health`. This is the server half of the phase. The Dart
+`ProtocolMediaEngine`, the transport switch, and the parity harness are not in
+place, so the Flutter client still uses the FFI path and the FFI removal
+checklist remains pending.
+
 ### Phase 2 — Engine cutover in the client (about 1–2 weeks)
 
 Work:

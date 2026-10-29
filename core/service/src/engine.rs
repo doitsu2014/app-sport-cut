@@ -215,18 +215,43 @@ fn tracks_window(context: &ServiceContext, params: &Value) -> Result<EngineReply
 }
 
 fn tracking_start(context: &ServiceContext, params: &Value) -> Result<EngineReply, ProtocolError> {
+    // The service owns the inference assets. A client that still sends its old
+    // FFI-era paths is told so instead of silently overriding the service's
+    // runtime and model.
+    reject_service_owned_asset(params, "runtimePath")?;
+    reject_service_owned_asset(params, "modelPath")?;
+
+    if !cfg!(all(target_os = "macos", feature = "macos-tflite-eval")) {
+        return Err(ProtocolError::new(
+            code::UNSUPPORTED,
+            "player tracking requires the macos-tflite-eval feature; rebuild sportcut-service \
+             with --features macos-tflite-eval on macOS",
+        ));
+    }
+
     let resolved = resolve_match(context, params)?;
-    let runtime_path = optional_asset(context, params, "runtimePath")?;
-    let model_path = optional_asset(context, params, "modelPath")?;
     let request = PlayerTrackingRequestDto {
         match_dir: resolved.dir_string(),
         config: dto_field::<PlayerTrackingConfigDto>(params, "config")?,
-        runtime_path,
-        model_path,
+        // `None` makes the facade use the service-owned paths published by
+        // `Config::prepare_runtime`.
+        runtime_path: None,
+        model_path: None,
     };
     let handle = start_player_tracking(request)
         .map_err(|error| map_facade_error("engine.tracking.start", error))?;
     job_reply(handle)
+}
+
+/// Reject a caller-supplied inference asset path, which the service owns.
+fn reject_service_owned_asset(params: &Value, name: &str) -> Result<(), ProtocolError> {
+    match params.get(name) {
+        None | Some(Value::Null) => Ok(()),
+        Some(_) => Err(ProtocolError::invalid_params(format!(
+            "{name} is not accepted: inference assets are service-owned; the service uses its \
+             own configured TFLite runtime and person model"
+        ))),
+    }
 }
 
 fn job_status_method(params: &Value) -> Result<EngineReply, ProtocolError> {
@@ -431,17 +456,6 @@ fn sampling_rate(params: &Value) -> Result<f64, ProtocolError> {
         ));
     }
     Ok(rate)
-}
-
-fn optional_asset(
-    context: &ServiceContext,
-    params: &Value,
-    name: &str,
-) -> Result<Option<String>, ProtocolError> {
-    match optional_string(params, name)? {
-        Some(raw) => Ok(Some(paths::asset(context, &raw, name)?)),
-        None => Ok(None),
-    }
 }
 
 struct ResolvedMatch {
@@ -1153,8 +1167,27 @@ mod tests {
                 "runtimePath": outside.to_str().expect("utf8")
             }),
         )
-        .expect_err("asset outside the service roots");
+        .expect_err("client-supplied inference asset");
         assert_eq!(error.code, code::INVALID_PARAMS, "{}", error.message);
+        assert!(error.message.contains("service-owned"), "{}", error.message);
+    }
+
+    #[test]
+    fn a_tracking_request_without_the_feature_is_actionable() {
+        #[cfg(not(all(target_os = "macos", feature = "macos-tflite-eval")))]
+        {
+            let error = call(
+                ENGINE_TRACKING_START,
+                json!({ "matchId": "match-1", "config": {} }),
+            )
+            .expect_err("the feature is disabled in this build");
+            assert_eq!(error.code, code::UNSUPPORTED);
+            assert!(
+                error.message.contains("macos-tflite-eval"),
+                "{}",
+                error.message
+            );
+        }
     }
 
     #[test]
