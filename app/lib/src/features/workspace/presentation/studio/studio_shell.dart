@@ -390,11 +390,9 @@ class StudioShell extends StatelessWidget {
     }
     return PreviewPane(
       entry: selected,
-      facts: facts,
       controller: controller,
       stage: selectedStage,
       onSelectStage: (PipelineStage stage) => onSelectStage(stage),
-      onPrepare: onPrepare,
       onRefresh: onRefresh,
     );
   }
@@ -420,6 +418,8 @@ class StudioShell extends StatelessWidget {
   }
 
   Widget _inspector() {
+    final videoFacts =
+        selectedEntry == null ? null : facts?[selectedEntry!.match.id];
     return InspectorPane(
       states: stageStates,
       selectedStage: selectedStage,
@@ -434,6 +434,10 @@ class StudioShell extends StatelessWidget {
       selectedRallyId: selectedRallyId,
       onSelectRally: onSelectInspectorRally,
       recordingAvailable: selectedEntry?.recordingAvailable ?? false,
+      calibrated: videoFacts?.calibrated ?? false,
+      analysisReady: videoFacts?.analysisReady ?? false,
+      onPrepare: onPrepare,
+      onRefresh: onRefresh,
       edit: edit,
       editBusy: editBusy,
       editProblem: editProblem,

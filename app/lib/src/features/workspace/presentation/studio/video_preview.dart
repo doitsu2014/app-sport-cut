@@ -51,6 +51,7 @@ class VideoPreview extends StatelessWidget {
     required this.entry,
     required this.controller,
     this.showScoreBug = false,
+    this.overlay,
   });
 
   /// The selected video and whether its recording can still be read.
@@ -61,6 +62,14 @@ class VideoPreview extends StatelessWidget {
 
   /// Whether the score bug is drawn over the frame.
   final bool showScoreBug;
+
+  /// A stage-specific overlay drawn inside the aspect-fit box.
+  ///
+  /// Calibration and player tracking pass their own overlay here so their
+  /// coordinates share the box the footage occupies. The overlay sits above
+  /// the floating transport; an overlay that only hit-tests its own controls
+  /// still leaves the transport reachable.
+  final Widget? overlay;
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +93,7 @@ class VideoPreview extends StatelessWidget {
       controller: player,
       showScoreBug: showScoreBug,
       fileName: fileName,
+      overlay: overlay,
     );
   }
 }
@@ -111,6 +121,7 @@ class _StageFrame extends StatefulWidget {
     required this.controller,
     required this.showScoreBug,
     required this.fileName,
+    required this.overlay,
   });
 
   /// The shared player, owned by the studio screen.
@@ -121,6 +132,9 @@ class _StageFrame extends StatefulWidget {
 
   /// The recording's file name, named by the error state.
   final String fileName;
+
+  /// A stage-specific overlay drawn inside the aspect-fit box.
+  final Widget? overlay;
 
   @override
   State<_StageFrame> createState() => _StageFrameState();
@@ -189,6 +203,7 @@ class _StageFrameState extends State<_StageFrame> {
           ? _StageOverlay(
               controller: _controller,
               showScoreBug: widget.showScoreBug,
+              overlay: widget.overlay,
             )
           : null,
     );
@@ -197,13 +212,20 @@ class _StageFrameState extends State<_StageFrame> {
 
 /// The controls and overlays drawn inside the video box.
 class _StageOverlay extends StatelessWidget {
-  const _StageOverlay({required this.controller, required this.showScoreBug});
+  const _StageOverlay({
+    required this.controller,
+    required this.showScoreBug,
+    this.overlay,
+  });
 
   /// The shared player.
   final PlaybackController controller;
 
   /// Whether the score bug is drawn over the frame.
   final bool showScoreBug;
+
+  /// A stage-specific overlay, such as the calibration or tracking overlay.
+  final Widget? overlay;
 
   @override
   Widget build(BuildContext context) {
@@ -233,6 +255,7 @@ class _StageOverlay extends StatelessWidget {
             ),
           ),
         ),
+        if (overlay != null) Positioned.fill(child: overlay!),
       ],
     );
   }

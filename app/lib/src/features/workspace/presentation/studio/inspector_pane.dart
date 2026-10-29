@@ -11,6 +11,7 @@ import '../../../../app/design/sc_status.dart';
 import '../../../../app/design/sc_tints.dart';
 import '../../../../app/design/sc_typography.dart';
 import '../../../../app/design/sportcut_tokens.dart';
+import '../../../calibration/presentation/calibration_panel.dart';
 import '../../../editing/domain/highlight_clip.dart';
 import '../../../editing/domain/match_edit.dart';
 import '../../../editing/domain/rally.dart';
@@ -19,6 +20,7 @@ import '../../../highlights/presentation/reel_panel.dart';
 import '../../../library/domain/match_record.dart';
 import '../../../library/presentation/playback_controller.dart';
 import '../../../score/presentation/rally_panel.dart';
+import '../../../tracking/presentation/tracking_panel.dart';
 import '../../domain/pipeline_stage.dart';
 
 /// The right rail: a stage-aware inspector.
@@ -55,6 +57,10 @@ class InspectorPane extends StatelessWidget {
     this.selectedRallyId,
     this.onSelectRally,
     this.recordingAvailable = true,
+    this.calibrated = false,
+    this.analysisReady = false,
+    this.onPrepare,
+    this.onRefresh,
     this.edit,
     this.editBusy = false,
     this.editProblem,
@@ -105,6 +111,18 @@ class InspectorPane extends StatelessWidget {
 
   /// Whether the selected match's recording can still be read.
   final bool recordingAvailable;
+
+  /// Whether the selected match's court is marked.
+  final bool calibrated;
+
+  /// Whether the selected match's analysis proxy and frames exist.
+  final bool analysisReady;
+
+  /// Open the prepare screen and start its background job.
+  final void Function(MatchRecord)? onPrepare;
+
+  /// Refresh the rail after a feature writes an artifact.
+  final VoidCallback? onRefresh;
 
   /// The selected match's review, or null while the session loads.
   final MatchEdit? edit;
@@ -286,8 +304,42 @@ class InspectorPane extends StatelessWidget {
     );
   }
 
-  /// The placeholder panel for a stage whose own panel has not shipped yet.
+  /// The contextual panel for a stage outside the Rally/Clip tablist.
+  ///
+  /// Mark court and Player analysis own the inspector body: their controls
+  /// live here and the preview keeps the overlay (D14). Prepare analysis and
+  /// Export keep the honest placeholder until PR 7a and PR 7b land.
   Widget _contextualBody(BuildContext context, PipelineStage? stage) {
+    final match = this.match;
+    if (match != null) {
+      switch (stage) {
+        case PipelineStage.calibrate:
+          return CalibrationPanel(
+            match: match,
+            onSaved: (_) => onRefresh?.call(),
+            onCancel: onSelectPlay,
+          );
+        case PipelineStage.track:
+          final prepare = onPrepare;
+          return TrackingPanel(
+            match: match,
+            calibrated: calibrated,
+            analysisReady: analysisReady,
+            onMarkCourt: () => onSelectStage(PipelineStage.calibrate),
+            onPrepare: prepare == null ? null : () => prepare(match),
+            onAnalyzed: onRefresh,
+            onOpenScore: () => onSelectStage(PipelineStage.score),
+          );
+        case PipelineStage.import:
+        case PipelineStage.analyze:
+        case PipelineStage.score:
+        case PipelineStage.highlight:
+        case PipelineStage.export:
+        case null:
+          break;
+      }
+    }
+
     final palette = SportcutPalette.of(context);
     final tokens = SportcutTokens.of(context);
     final typography = SportcutTypography.of(context);
