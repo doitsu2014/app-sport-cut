@@ -8,17 +8,22 @@ import '../features/library/domain/match_record.dart';
 import '../features/library/presentation/player_screen.dart';
 import '../features/score/presentation/score_screen.dart';
 import '../features/tracking/presentation/player_tracking_screen.dart';
+import '../features/workspace/domain/workspace.dart';
 import '../features/workspace/presentation/workspace_screen.dart';
+import '../features/workspace/presentation/workspace_studio_screen.dart';
 
 /// Named routes of the application.
 ///
-/// Navigation is deliberately a plain route table: the shell has eight screens
+/// Navigation is deliberately a plain route table: the shell has nine screens
 /// and no deep links yet, so a routing package would add a dependency without
 /// removing code. This table is the single place to change if that stops being
 /// true.
 abstract final class AppRoutes {
   /// Workspace list: the home screen.
   static const String workspace = '/';
+
+  /// The studio for one workspace.
+  static const String studio = '/studio';
 
   /// Local playback of one match.
   static const String player = '/match/player';
@@ -42,6 +47,15 @@ abstract final class AppRoutes {
   static const String export = '/match/export';
 }
 
+/// The arguments `/studio` expects: the workspace to open.
+class StudioRouteArgs {
+  /// Carry the workspace a studio route should show.
+  const StudioRouteArgs({required this.workspace});
+
+  /// The workspace whose videos the studio displays.
+  final Workspace workspace;
+}
+
 /// Builds routes from the named route table.
 abstract final class AppRouter {
   /// Route factory handed to `MaterialApp.onGenerateRoute`.
@@ -49,6 +63,11 @@ abstract final class AppRouter {
     switch (settings.name) {
       case AppRoutes.workspace:
         return _route(settings, const WorkspaceScreen());
+      case AppRoutes.studio:
+        return _route(
+          settings,
+          WorkspaceStudioScreen(workspace: studioFrom(settings).workspace),
+        );
       case AppRoutes.player:
         return _route(settings, PlayerScreen(match: matchFrom(settings)));
       case AppRoutes.calibration:
@@ -81,6 +100,21 @@ abstract final class AppRouter {
     }
     throw ArgumentError(
       'Route ${settings.name} needs a MatchRecord argument, '
+      'got ${argument.runtimeType}',
+    );
+  }
+
+  /// The workspace passed as a studio route argument.
+  ///
+  /// Throws [ArgumentError] when `/studio` is opened without one, which keeps
+  /// a programming mistake visible instead of showing an empty studio.
+  static StudioRouteArgs studioFrom(RouteSettings settings) {
+    final argument = settings.arguments;
+    if (argument is StudioRouteArgs) {
+      return argument;
+    }
+    throw ArgumentError(
+      'Route ${settings.name} needs a StudioRouteArgs argument, '
       'got ${argument.runtimeType}',
     );
   }
