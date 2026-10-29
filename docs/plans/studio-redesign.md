@@ -894,3 +894,24 @@ Recommended linear order for one implementer: 0 → 1 → 2a → 2b → 2c → 2
 - PR0 claims D1–D14 are locked but leaves ten open questions, and it does not schedule amendments for FR-SHL-08 (grouped pipeline rail), FR-SHL-22 (E selects Export stage), FR-SHL-14 (readiness copy), or BRD 08's summary FRs.
 - PR6b cannot "reuse `highlightRankingProvider`" without a defined home for the left-out/reorder UI; sequence that panel with PR6b.
 - PR7b changes `ExportController.render` while `ExportView` still exists; keep both call sites compiling or migrate `ExportView` in the same PR.
+---
+
+## 9. Delivered
+
+The studio refactor landed through PR 8c. The shipped surface is the
+three-pane studio with one shared preview, transport, score bug, 40 px stage
+strip, 176 px timeline dock, stage-aware inspector, export sheet, and the
+studio-family home screen.
+
+- **Landed:** PR 0–3d (contract, tokens, primitives, decomposition, shell,
+  interactions, responsive/focus), PR 4a–4c (stage and transport, score bug,
+  court calibration and player-tracking overlays), PR 5a–5b (timeline dock and
+  wiring), PR 6a–6b (Rally and Clip inspectors), PR 7a–7c (analysis and export
+  panels, legacy takeover removal), PR 8a (home and `/studio` route), PR 8b
+  (semantics, focus traversal, 200% scaling, reduced motion, contrast, hit
+  targets), and PR 8c (dead-code and token cleanup, BRD status).
+- **Deferred, unchanged by this delivery:** playback volume (FR-SHL-28,
+  ADR-0003 D12) and drag-to-trim of rally boundaries (D12). Both need an API
+  change outside the presentation layer.
+- **Not automated:** the accessibility checklist is verified manually in both
+  themes; there is no widget-level a11y test in the tree.

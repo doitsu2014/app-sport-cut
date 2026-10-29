@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../sc_elevation.dart';
 import '../sc_icons.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
 import '../sc_tints.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
@@ -404,7 +405,7 @@ class _DialogButtonState extends State<_DialogButton> {
       case _DialogButtonTone.secondary:
         background = palette.surface;
         foreground = palette.fg;
-        border = palette.border;
+        border = palette.controlBorder;
         hover = palette.surfaceWarm;
       case _DialogButtonTone.danger:
         background = palette.surface;
@@ -414,7 +415,7 @@ class _DialogButtonState extends State<_DialogButton> {
     }
 
     return Opacity(
-      opacity: enabled ? 1 : _disabledOpacity,
+      opacity: enabled ? 1 : ScTints.disabledOpacity,
       child: ScFocusRing.overlay(
         palette: palette,
         focused: _focused,
@@ -430,7 +431,10 @@ class _DialogButtonState extends State<_DialogButton> {
                 setState(() => _focused = focused);
               },
               borderRadius: BorderRadius.circular(tokens.radiusSm),
-              hoverColor: hover,
+              hoverColor: ScMotion.reduced(context)
+                  ? palette.surface.withValues(alpha: 0)
+                  : hover,
+              focusColor: palette.surface.withValues(alpha: 0),
               child: Container(
                 constraints: const BoxConstraints(minHeight: ScMetrics.button),
                 alignment: Alignment.center,
@@ -455,6 +459,3 @@ class _DialogButtonState extends State<_DialogButton> {
     );
   }
 }
-
-/// The disabled treatment from the design's states table.
-const double _disabledOpacity = 0.45;

@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../sc_elevation.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
+import '../sc_tints.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 
@@ -54,17 +56,17 @@ class _ScSwitchState extends State<ScSwitch> {
     final thumbSize = ScMetrics.chip - tokens.space1;
 
     Widget track = AnimatedContainer(
-      duration: tokens.motionFast,
+      duration: ScMotion.duration(context, tokens.motionFast),
       curve: Curves.easeOut,
       width: ScMetrics.iconButtonVisual,
       height: ScMetrics.chip,
       padding: EdgeInsets.all(tokens.space1 / 2),
       decoration: BoxDecoration(
-        color: widget.value ? palette.accent : palette.border,
+        color: widget.value ? palette.accent : palette.controlBorder,
         borderRadius: BorderRadius.circular(tokens.radiusPill),
       ),
       child: AnimatedAlign(
-        duration: tokens.motionFast,
+        duration: ScMotion.duration(context, tokens.motionFast),
         curve: Curves.easeOut,
         alignment: widget.value ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
@@ -144,7 +146,7 @@ class _ScSwitchState extends State<ScSwitch> {
     );
 
     return Opacity(
-      opacity: widget.enabled ? 1 : 0.45,
+      opacity: widget.enabled ? 1 : ScTints.disabledOpacity,
       child: content,
     );
   }

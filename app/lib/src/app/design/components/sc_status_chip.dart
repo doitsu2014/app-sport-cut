@@ -31,8 +31,11 @@ class ScStatusChip extends StatelessWidget {
         : style.label.toUpperCase();
 
     return Container(
-      height: ScMetrics.chip,
-      padding: EdgeInsets.symmetric(horizontal: tokens.space2),
+      constraints: const BoxConstraints(minHeight: ScMetrics.chip),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.space2,
+        vertical: tokens.space1 / 2,
+      ),
       decoration: BoxDecoration(
         color: Color.alphaBlend(
           style.color.withValues(alpha: 0.10),
@@ -41,7 +44,9 @@ class ScStatusChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(tokens.radiusPill),
         border: Border.all(
           color: Color.alphaBlend(
-            style.color.withValues(alpha: 0.45),
+            // 0.70 keeps the tone border at 3.16:1 or better on the surface in
+            // both themes (FR-SHL-32).
+            style.color.withValues(alpha: 0.70),
             palette.surface,
           ),
         ),

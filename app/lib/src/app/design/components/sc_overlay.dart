@@ -266,7 +266,7 @@ class _MissingActionButtonState extends State<_MissingActionButton> {
             palette: palette,
             focused: _focused,
             child: Container(
-              height: ScMetrics.button,
+              constraints: const BoxConstraints(minHeight: ScMetrics.button),
               alignment: Alignment.center,
               padding: EdgeInsets.symmetric(horizontal: tokens.space4),
               decoration: BoxDecoration(

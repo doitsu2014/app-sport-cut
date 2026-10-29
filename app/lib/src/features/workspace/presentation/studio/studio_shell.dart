@@ -64,6 +64,7 @@ class StudioShell extends StatelessWidget {
     required this.onRefresh,
     this.importFraction,
     this.searchFocusNode,
+    this.exportFocusNode,
     this.searchQuery = '',
     this.onClearSearch,
     this.toastMessage,
@@ -132,6 +133,9 @@ class StudioShell extends StatelessWidget {
 
   /// The search field's focus node, used by the `⌘K` binding.
   final FocusNode? searchFocusNode;
+
+  /// The Export action's focus node, so the sheet can return focus to it.
+  final FocusNode? exportFocusNode;
 
   /// The in-memory search query filtering the video rail.
   final String searchQuery;
@@ -272,6 +276,7 @@ class StudioShell extends StatelessWidget {
               workspace: workspace,
               searchController: searchController,
               searchFocusNode: searchFocusNode,
+              exportFocusNode: exportFocusNode,
               libraryVisible: libraryVisible,
               inspectorVisible: inspectorVisible,
               focusMode: focusMode,

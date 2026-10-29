@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../sc_elevation.dart';
 import '../sc_icons.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 
@@ -132,7 +133,10 @@ class _EmptyActionState extends State<_EmptyAction> {
               setState(() => _focused = focused);
             },
             borderRadius: BorderRadius.circular(tokens.radiusSm),
-            hoverColor: palette.surfaceWarm,
+            hoverColor: ScMotion.reduced(context)
+                ? palette.surface.withValues(alpha: 0)
+                : palette.surfaceWarm,
+            focusColor: palette.surface.withValues(alpha: 0),
             child: Container(
               constraints: const BoxConstraints(
                 minHeight: ScMetrics.buttonCompact,

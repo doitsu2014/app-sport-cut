@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 import 'sc_pressable.dart';
@@ -106,9 +107,9 @@ class ScTabs extends StatelessWidget {
           onTap: () => onChanged(index),
           borderRadius: radius,
           child: AnimatedContainer(
-            duration: tokens.motionFast,
+            duration: ScMotion.duration(context, tokens.motionFast),
             curve: Curves.easeOut,
-            height: ScMetrics.tab,
+            constraints: const BoxConstraints(minHeight: ScMetrics.tab),
             alignment: Alignment.center,
             padding: EdgeInsets.symmetric(horizontal: tokens.space2),
             decoration: BoxDecoration(
@@ -120,7 +121,7 @@ class ScTabs extends StatelessWidget {
             foregroundDecoration: selected
                 ? BoxDecoration(
                     borderRadius: radius,
-                    border: Border.all(color: palette.border),
+                    border: Border.all(color: palette.controlBorder),
                   )
                 : null,
             child: Row(

@@ -14,8 +14,9 @@ const double _timecodeInkAlpha = 0.86;
 /// The ink opacity for the score colon.
 const double _colonInkAlpha = 0.38;
 
-/// The signal opacity for the serving pill border.
-const double _pillBorderAlpha = 0.42;
+/// The signal opacity for the serving pill border. 0.42 measures 2.55:1 on
+/// the bed; 0.50 measures 3.19:1, clearing the non-text floor (FR-SHL-32).
+const double _pillBorderAlpha = 0.50;
 
 /// The in-frame score overlay drawn over footage.
 ///

@@ -22,13 +22,6 @@ import '../../../score/presentation/serving_sides_providers.dart';
 /// The ratio used until a player reports a finite one.
 const double _fallbackAspectRatio = 16 / 9;
 
-/// The floating transport's maximum width.
-///
-/// This mirrors `studio.html`'s `min(680px, …)` at the Flutter scale. It is a
-/// stage layout value that `ScMetrics` does not own yet; it stays here, named,
-/// so a later design-layer change can move it without touching the logic.
-const double _transportMaxWidth = 640;
-
 /// The side labels the score bug shows.
 const String _leftLabel = 'L · Left side';
 const String _rightLabel = 'R · Right side';
@@ -247,7 +240,9 @@ class _StageOverlay extends StatelessWidget {
           bottom: inset,
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: _transportMaxWidth),
+              constraints: const BoxConstraints(
+                maxWidth: ScMetrics.transportMaxWidth,
+              ),
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: tokens.space5),
                 child: _StageTransport(controller: controller),

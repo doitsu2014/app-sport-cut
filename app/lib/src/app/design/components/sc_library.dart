@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../sc_elevation.dart';
 import '../sc_icons.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
 import '../sc_overlay_colors.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
@@ -302,7 +303,7 @@ class _ScVideoRowState extends State<ScVideoRow> {
             button: pressable,
             selected: widget.selected,
             child: AnimatedContainer(
-              duration: tokens.motionFast,
+              duration: ScMotion.duration(context, tokens.motionFast),
               constraints: const BoxConstraints(
                 minHeight: ScMetrics.rowCompact,
               ),
@@ -315,7 +316,7 @@ class _ScVideoRowState extends State<ScVideoRow> {
                 borderRadius: BorderRadius.circular(tokens.radiusMd),
                 border: Border.all(
                   color: widget.selected
-                      ? palette.border
+                      ? palette.controlBorder
                       : palette.borderSoft.withValues(alpha: 0),
                   width: _hairline,
                 ),

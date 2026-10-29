@@ -501,6 +501,9 @@ class _PipelinePanelState extends State<_PipelinePanel> {
         children: <Widget>[
           ScPressable(
             onTap: () => setState(() => _expanded = !_expanded),
+            semanticsLabel: _expanded
+                ? 'Collapse pipeline stages'
+                : 'Expand pipeline stages',
             borderRadius: BorderRadius.circular(tokens.radiusSm),
             child: ScRailHeader(
               label: 'Pipeline',

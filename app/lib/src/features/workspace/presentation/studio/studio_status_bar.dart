@@ -59,7 +59,7 @@ class StudioStatusBar extends StatelessWidget {
     final dot = tokens.space1 + tokens.space1 / 4;
 
     return Container(
-      height: ScMetrics.statusHeight,
+      constraints: const BoxConstraints(minHeight: ScMetrics.statusHeight),
       padding: EdgeInsets.symmetric(horizontal: tokens.space3),
       decoration: BoxDecoration(
         color: palette.surface,

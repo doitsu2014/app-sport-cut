@@ -198,4 +198,7 @@ abstract final class ScMetrics {
 
   /// Height of the preview pane's own header strip.
   static const double previewHeaderHeight = 40;
+
+  /// Largest width of the floating transport over the footage.
+  static const double transportMaxWidth = 640;
 }

@@ -5,6 +5,7 @@ import '../sc_elevation.dart';
 import '../sc_icons.dart';
 import '../sc_metrics.dart';
 import '../sc_overlay_colors.dart';
+import '../sc_tints.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 
@@ -13,9 +14,6 @@ const Duration _seekStep = Duration(seconds: 5);
 
 /// The reverse step, kept const so the keyboard map stays const.
 const Duration _seekStepBack = Duration(seconds: -5);
-
-/// The disabled opacity for the whole bar.
-const double _disabledOpacity = 0.45;
 
 /// The hover wash over a transport button.
 const double _hoverTintAlpha = 0.10;
@@ -26,11 +24,13 @@ const double _restIconAlpha = 0.72;
 /// The ink opacity of the elapsed timecode.
 const double _positionInkAlpha = 0.86;
 
-/// The ink opacity of the total timecode.
-const double _durationInkAlpha = 0.42;
+/// The ink opacity of the total timecode. 0.42 measures 3.78:1 on the bed;
+/// 0.50 measures 4.91:1, clearing the body-text floor (FR-SHL-32).
+const double _durationInkAlpha = 0.50;
 
-/// The ink opacity of the scrubber track.
-const double _trackInkAlpha = 0.18;
+/// The ink opacity of the scrubber track. 0.18 measures 1.57:1 on the bed;
+/// 0.38 measures 3.26:1, clearing the non-text floor.
+const double _trackInkAlpha = 0.38;
 
 /// The ink opacity of the bar border.
 const double _borderInkAlpha = 0.16;
@@ -175,7 +175,7 @@ class ScTransport extends StatelessWidget {
       return bar;
     }
     return Opacity(
-      opacity: _disabledOpacity,
+      opacity: ScTints.disabledOpacity,
       child: IgnorePointer(child: bar),
     );
   }

@@ -1,4 +1,6 @@
 import 'dart:io';
+
+import '../../../app/design/sc_overlay_colors.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
@@ -73,7 +75,7 @@ class OverlayRenderer {
           final scale = _scale(height);
           canvas.drawRect(
             Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
-            Paint()..color = const Color(0xFF101010),
+            Paint()..color = ScOverlayColors.bed,
           );
           _drawChip(
             canvas,
@@ -98,6 +100,9 @@ class OverlayRenderer {
     return '$trimmed  $score';
   }
 
+  /// How much of the bed shows through a score chip.
+  static const double _chipScrimAlpha = 0.55;
+
   static double _scale(int height) {
     final value = height / _designHeight;
     return value.clamp(0.15, 8.0);
@@ -116,7 +121,8 @@ class OverlayRenderer {
       text: TextSpan(
         text: text,
         style: TextStyle(
-          color: const Color(0xFFFFFFFF),
+          color: ScOverlayColors.ink,
+          fontFamily: 'Archivo',
           fontSize: fontSize,
           fontWeight: FontWeight.w700,
         ),
@@ -142,7 +148,8 @@ class OverlayRenderer {
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, Radius.circular(12 * scale)),
-      Paint()..color = const Color(0x8C000000),
+      Paint()
+        ..color = ScOverlayColors.bed.withValues(alpha: _chipScrimAlpha),
     );
     painter.paint(canvas, Offset(left + padding, top + border));
   }

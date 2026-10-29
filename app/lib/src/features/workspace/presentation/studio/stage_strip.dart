@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../../app/design/sc_elevation.dart';
 import '../../../../app/design/sc_icons.dart';
 import '../../../../app/design/sc_metrics.dart';
+import '../../../../app/design/sc_motion.dart';
 import '../../../../app/design/sc_status.dart';
 import '../../../../app/design/sc_tints.dart';
 import '../../../../app/design/sc_typography.dart';
@@ -24,6 +25,18 @@ const List<PipelineStage?> stageStripOrder = <PipelineStage?>[
   PipelineStage.highlight,
   PipelineStage.export,
 ];
+
+/// Shorter labels used when text is scaled up, so the strip does not clip
+/// (FR-SHL-35). The full label remains the accessible name and the tooltip.
+const Map<PipelineStage?, String> _shortStageLabels = <PipelineStage?, String>{
+  null: 'Play',
+  PipelineStage.calibrate: 'Court',
+  PipelineStage.analyze: 'Analysis',
+  PipelineStage.track: 'Tracking',
+  PipelineStage.score: 'Score',
+  PipelineStage.highlight: 'Clips',
+  PipelineStage.export: 'Export',
+};
 
 /// The 40 px stage navigation that replaces the old pipeline rail.
 ///
@@ -66,30 +79,46 @@ class StageStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = SportcutPalette.of(context);
-    return Container(
-      height: ScMetrics.stageStripHeight,
-      decoration: BoxDecoration(
-        color: palette.surface,
-        border: Border(bottom: BorderSide(color: palette.border)),
-      ),
-      child: FocusTraversalGroup(
-        child: Row(
-          children: <Widget>[
-            for (final stage in stageStripOrder)
-              Expanded(
-                child: _StageTab(
-                  label: stage?.label ?? 'Play',
-                  status: _statusFor(stage),
-                  detail: stage != null && stage == runningStage
-                      ? _runningPercent
-                      : null,
-                  selected: selectedStage == stage,
-                  onTap: stage == PipelineStage.export && onExport != null
-                      ? onExport!
-                      : () => onSelectStage(stage),
+    final fullLabelFor = <PipelineStage?, String>{
+      for (final stage in stageStripOrder) stage: stage?.label ?? 'Play',
+    };
+    // Above 140% the full stage names no longer fit seven tabs across the
+    // minimum window, so the visible label shortens. The type floor is kept.
+    final textScale =
+        MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0).toDouble();
+    final shortened = textScale > 1.4;
+    // The strip must keep a bounded height: each tab paints into an expanding
+    // stack, and the shell's column would otherwise hand it unbounded height.
+    return SizedBox(
+      height: ScMetrics.stageStripHeight * textScale,
+      child: Container(
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border(bottom: BorderSide(color: palette.border)),
+        ),
+        child: FocusTraversalGroup(
+          child: Row(
+            children: <Widget>[
+              for (final stage in stageStripOrder)
+                Expanded(
+                  child: _StageTab(
+                    label: shortened
+                        ? _shortStageLabels[stage] ?? fullLabelFor[stage]!
+                        : fullLabelFor[stage]!,
+                    semanticLabel: fullLabelFor[stage]!,
+                    status: _statusFor(stage),
+                    showStatusWord: !shortened,
+                    detail: stage != null && stage == runningStage
+                        ? _runningPercent
+                        : null,
+                    selected: selectedStage == stage,
+                    onTap: stage == PipelineStage.export && onExport != null
+                        ? onExport!
+                        : () => onSelectStage(stage),
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -122,14 +151,18 @@ class StageStrip extends StatelessWidget {
 class _StageTab extends StatefulWidget {
   const _StageTab({
     required this.label,
+    required this.semanticLabel,
     required this.status,
+    required this.showStatusWord,
     required this.detail,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
+  final String semanticLabel;
   final ScStatus? status;
+  final bool showStatusWord;
   final String? detail;
   final bool selected;
   final VoidCallback onTap;
@@ -163,7 +196,7 @@ class _StageTabState extends State<_StageTab> {
         Positioned.fill(
           child: IgnorePointer(
             child: AnimatedContainer(
-              duration: tokens.motionFast,
+              duration: ScMotion.duration(context, tokens.motionFast),
               curve: Curves.easeOut,
               decoration: BoxDecoration(
                 color: background,
@@ -177,7 +210,7 @@ class _StageTabState extends State<_StageTab> {
           right: 0,
           bottom: 0,
           child: AnimatedContainer(
-            duration: tokens.motionFast,
+            duration: ScMotion.duration(context, tokens.motionFast),
             curve: Curves.easeOut,
             height: tokens.space1 / 2,
             color: widget.selected
@@ -207,6 +240,7 @@ class _StageTabState extends State<_StageTab> {
                 _StageMarker(
                   status: status,
                   detail: widget.detail,
+                  showWord: widget.showStatusWord,
                   palette: palette,
                 ),
               ],
@@ -263,15 +297,21 @@ class _StageTabState extends State<_StageTab> {
     final stateLabel = status == null
         ? null
         : status == ScStatus.running
-            ? widget.detail
+            ? '${status.label} ${widget.detail}'
             : status.label;
+    final semanticLabel = stateLabel == null
+        ? widget.semanticLabel
+        : '${widget.semanticLabel}, $stateLabel';
+    final Widget labelled = widget.label == widget.semanticLabel
+        ? body
+        : Tooltip(message: widget.semanticLabel, child: body);
     return Semantics(
       container: true,
       button: true,
       selected: widget.selected,
-      label: stateLabel == null ? widget.label : '${widget.label}, $stateLabel',
+      label: semanticLabel,
       excludeSemantics: true,
-      child: body,
+      child: labelled,
     );
   }
 }
@@ -281,11 +321,13 @@ class _StageMarker extends StatelessWidget {
   const _StageMarker({
     required this.status,
     required this.detail,
+    required this.showWord,
     required this.palette,
   });
 
   final ScStatus status;
   final String? detail;
+  final bool showWord;
   final SportcutPalette palette;
 
   @override
@@ -317,11 +359,13 @@ class _StageMarker extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
             ),
-            SizedBox(width: tokens.space1),
-            Text(
-              'READY',
-              style: typography.timecode11.copyWith(color: color),
-            ),
+            if (showWord) ...<Widget>[
+              SizedBox(width: tokens.space1),
+              Text(
+                'READY',
+                style: typography.timecode11.copyWith(color: color),
+              ),
+            ],
           ],
         );
       case ScStatus.blocked:
@@ -333,11 +377,13 @@ class _StageMarker extends StatelessWidget {
               size: tokens.space3,
               color: style.color,
             ),
-            SizedBox(width: tokens.space1),
-            Text(
-              'BLOCKED',
-              style: typography.timecode11.copyWith(color: style.color),
-            ),
+            if (showWord) ...<Widget>[
+              SizedBox(width: tokens.space1),
+              Text(
+                'BLOCKED',
+                style: typography.timecode11.copyWith(color: style.color),
+              ),
+            ],
           ],
         );
       case ScStatus.running:

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../sc_elevation.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 import 'sc_pressable.dart';
@@ -87,9 +88,9 @@ class ScSegmentedControl extends StatelessWidget {
           enabled: enabled,
           borderRadius: radius,
           child: AnimatedContainer(
-            duration: tokens.motionFast,
+            duration: ScMotion.duration(context, tokens.motionFast),
             curve: Curves.easeOut,
-            height: ScMetrics.tab,
+            constraints: const BoxConstraints(minHeight: ScMetrics.tab),
             alignment: Alignment.center,
             padding: EdgeInsets.symmetric(horizontal: tokens.space2),
             decoration: BoxDecoration(
@@ -98,7 +99,7 @@ class ScSegmentedControl extends StatelessWidget {
                   : palette.surface.withValues(alpha: 0),
               borderRadius: radius,
               boxShadow: selected
-                  ? <BoxShadow>[ScElevation.ring(palette.border)]
+                  ? <BoxShadow>[ScElevation.ring(palette.controlBorder)]
                   : null,
             ),
             child: Text(

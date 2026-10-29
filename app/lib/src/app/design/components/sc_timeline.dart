@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../sc_elevation.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
 import '../sc_tints.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
@@ -37,6 +38,7 @@ class ScRuler extends StatelessWidget {
     required this.ticks,
     required this.style,
     this.color,
+    this.height = ScMetrics.timelineRuler,
   });
 
   /// Time at the left edge of the window.
@@ -54,13 +56,17 @@ class ScRuler extends StatelessWidget {
   /// Overrides the label colour; defaults to the palette's muted ink.
   final Color? color;
 
+  /// The track height. Callers scale it with the text scale so labels never
+  /// clip (FR-SHL-35).
+  final double height;
+
   @override
   Widget build(BuildContext context) {
     final palette = SportcutPalette.of(context);
     final resolved = style.copyWith(color: color ?? palette.muted);
     return SizedBox(
       width: double.infinity,
-      height: ScMetrics.timelineRuler,
+      height: height,
       child: CustomPaint(
         painter: _RulerPainter(
           windowStart: windowStart,
@@ -240,10 +246,13 @@ class _ScRallySegmentState extends State<ScRallySegment> {
                   button: _interactive,
                   selected: widget.selected,
                   label: _semanticLabel(),
+                  onTap: _interactive ? widget.onTap : null,
                   child: AnimatedContainer(
-                    duration: tokens.motionFast,
-                    width: width,
-                    height: ScMetrics.rallySegmentHitTarget,
+                    duration: ScMotion.duration(context, tokens.motionFast),
+                    constraints: const BoxConstraints(
+                      minWidth: ScMetrics.rallySegmentMinWidth,
+                      minHeight: ScMetrics.rallySegmentHitTarget,
+                    ),
                     alignment: Alignment.center,
                     clipBehavior: Clip.hardEdge,
                     decoration: BoxDecoration(
@@ -254,7 +263,7 @@ class _ScRallySegmentState extends State<ScRallySegment> {
                     child: Text(
                       label,
                       maxLines: 1,
-                      overflow: TextOverflow.clip,
+                      overflow: TextOverflow.ellipsis,
                       style: type.chrome9.copyWith(color: _ink(palette)),
                     ),
                   ),
@@ -340,15 +349,17 @@ class _ScScoreChipState extends State<ScScoreChip> {
     final type = SportcutTypography.of(context);
     final interactive = widget.onTap != null;
     final chip = AnimatedContainer(
-      duration: tokens.motionFast,
-      height: ScMetrics.chip,
-      constraints: const BoxConstraints(minWidth: ScMetrics.chip),
+      duration: ScMotion.duration(context, tokens.motionFast),
+      constraints: const BoxConstraints(
+        minWidth: ScMetrics.chip,
+        minHeight: ScMetrics.chip,
+      ),
       padding: EdgeInsets.symmetric(horizontal: tokens.space1),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: _hovered && interactive ? palette.surfaceWarm : palette.surface,
         border: Border.all(
-          color: widget.selected ? palette.accent : palette.border,
+          color: widget.selected ? palette.accent : palette.controlBorder,
           width: _hairline,
         ),
         borderRadius: BorderRadius.circular(tokens.radiusSm),
@@ -396,6 +407,7 @@ class _ScScoreChipState extends State<ScScoreChip> {
               button: true,
               selected: widget.selected,
               label: widget.label,
+              onTap: widget.onTap,
               child: chip,
             ),
           ),

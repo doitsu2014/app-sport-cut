@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/design/sc_elevation.dart';
+import '../../../app/design/sc_metrics.dart';
+import '../../../app/design/sc_overlay_colors.dart';
+import '../../../app/design/sc_typography.dart';
+import '../../../app/design/sportcut_tokens.dart';
 import 'formatters.dart';
 import 'playback_controller.dart';
 
@@ -25,7 +30,7 @@ class PlayerView extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: ColoredBox(
-                color: Colors.black,
+                color: ScOverlayColors.bed,
                 child: Center(
                   child: state.error == null
                       ? controller.buildSurface(context)
@@ -56,7 +61,7 @@ class PlayerView extends StatelessWidget {
   }
 }
 
-class _TransportControls extends StatelessWidget {
+class _TransportControls extends StatefulWidget {
   const _TransportControls({
     required this.state,
     required this.onPlayPause,
@@ -68,23 +73,57 @@ class _TransportControls extends StatelessWidget {
   final ValueChanged<double> onSeek;
 
   @override
+  State<_TransportControls> createState() => _TransportControlsState();
+}
+
+class _TransportControlsState extends State<_TransportControls> {
+  final FocusNode _seekFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _seekFocus.addListener(_onSeekFocus);
+  }
+
+  void _onSeekFocus() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _seekFocus.removeListener(_onSeekFocus);
+    _seekFocus.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final tokens = SportcutTokens.of(context);
+    final palette = SportcutPalette.of(context);
+    final PlaybackState state = widget.state;
+    final VoidCallback onPlayPause = widget.onPlayPause;
+    final ValueChanged<double> onSeek = widget.onSeek;
+    final typography = SportcutTypography.of(context);
     final ready = state.isReady && state.error == null;
-    final baseTimecode = theme.textTheme.labelSmall?.copyWith(
-      fontSize: 11,
-      fontFeatures: tabularFigures,
-    );
+    final baseTimecode = SportcutTypography.withTabular(
+      typography.timecode11,
+    ).copyWith(color: scheme.onSurface);
     final timecodeStyle = ready
         ? baseTimecode
-        : baseTimecode?.copyWith(color: scheme.onSurfaceVariant);
+        : baseTimecode.copyWith(color: scheme.onSurfaceVariant);
     return Container(
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border(top: BorderSide(color: scheme.outlineVariant)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.space3,
+        vertical: tokens.space1 + tokens.space1 / 2,
+      ),
       child: Row(
         children: <Widget>[
           IconButton.filled(
@@ -95,12 +134,23 @@ class _TransportControls extends StatelessWidget {
             ),
             tooltip: state.isPlaying ? 'Pause' : 'Play',
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: tokens.space2),
           Text(formatPosition(state.position), style: timecodeStyle),
           Expanded(
-            child: Slider(
-              value: state.progress,
-              onChanged: ready ? onSeek : null,
+            child: Semantics(
+              label: 'Seek through the recording',
+              value: formatPosition(state.position),
+              child: ScFocusRing.overlay(
+                palette: palette,
+                focused: _seekFocus.hasFocus,
+                child: Slider(
+                  focusNode: _seekFocus,
+                  value: state.progress,
+                  onChanged: ready ? onSeek : null,
+                  semanticFormatterCallback: (double value) =>
+                      '${(value * 100).round()} percent',
+                ),
+              ),
             ),
           ),
           Text(formatPosition(state.duration), style: timecodeStyle),
@@ -117,20 +167,22 @@ class _PlaybackProblem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = SportcutTokens.of(context);
+    final typography = SportcutTypography.of(context);
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(tokens.space6),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const Icon(
+          Icon(
             Icons.videocam_off_outlined,
-            color: Colors.white70,
-            size: 40,
+            color: ScOverlayColors.ink.withValues(alpha: 0.72),
+            size: ScMetrics.iconButtonVisual,
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.space3),
           Text(
             message,
-            style: const TextStyle(color: Colors.white),
+            style: typography.sm14.copyWith(color: ScOverlayColors.ink),
             textAlign: TextAlign.center,
           ),
         ],

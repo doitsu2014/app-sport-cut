@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../sc_elevation.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 
@@ -90,14 +91,30 @@ class ScProgressJob extends StatelessWidget {
             value: value == null ? null : '$percent%',
             child: ClipRRect(
               borderRadius: BorderRadius.circular(tokens.radiusPill),
-              child: LinearProgressIndicator(
-                value: clamped,
-                minHeight: _barHeight,
-                backgroundColor: palette.surfaceWarm,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  value == null ? palette.border : palette.accent,
-                ),
-              ),
+              // The indicator animates between values; with reduced motion the
+              // bar is drawn at its current value instead (FR-SHL-36).
+              child: ScMotion.reduced(context)
+                  ? Container(
+                      height: _barHeight,
+                      color: palette.surfaceWarm,
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: clamped,
+                        child: ColoredBox(
+                          color: value == null
+                              ? palette.controlBorder
+                              : palette.accent,
+                        ),
+                      ),
+                    )
+                  : LinearProgressIndicator(
+                      value: clamped,
+                      minHeight: _barHeight,
+                      backgroundColor: palette.surfaceWarm,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        value == null ? palette.controlBorder : palette.accent,
+                      ),
+                    ),
             ),
           ),
           if (detailText != null || cancel != null) ...<Widget>[
@@ -164,7 +181,10 @@ class _CancelActionState extends State<_CancelAction> {
               setState(() => _focused = focused);
             },
             borderRadius: BorderRadius.circular(tokens.radiusSm),
-            hoverColor: palette.surfaceWarm,
+            hoverColor: ScMotion.reduced(context)
+                ? palette.surface.withValues(alpha: 0)
+                : palette.surfaceWarm,
+            focusColor: palette.surface.withValues(alpha: 0),
             child: Container(
               constraints: const BoxConstraints(
                 minHeight: ScMetrics.buttonCompact,

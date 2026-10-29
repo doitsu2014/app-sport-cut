@@ -76,8 +76,8 @@ class ScPipelineRow extends StatelessWidget {
         ),
     };
 
-    final body = SizedBox(
-      height: ScMetrics.rowCompact,
+    final body = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: ScMetrics.rowCompact),
       child: Row(
         children: <Widget>[
           SizedBox(
@@ -91,10 +91,12 @@ class ScPipelineRow extends StatelessWidget {
           ),
           SizedBox(width: tokens.space3),
           if (isBlocked) ...<Widget>[
-            Icon(
-              status.icon,
-              size: tokens.space4,
-              color: style.color,
+            ExcludeSemantics(
+              child: Icon(
+                status.icon,
+                size: tokens.space4,
+                color: style.color,
+              ),
             ),
             SizedBox(width: tokens.space2),
           ],
@@ -138,7 +140,7 @@ class ScPipelineRow extends StatelessWidget {
         ),
         foregroundDecoration: BoxDecoration(
           borderRadius: radius,
-          border: Border.all(color: palette.border),
+          border: Border.all(color: palette.controlBorder),
         ),
         child: body,
       );

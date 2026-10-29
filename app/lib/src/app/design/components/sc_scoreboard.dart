@@ -3,11 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../sc_elevation.dart';
 import '../sc_metrics.dart';
+import '../sc_tints.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
-
-/// The disabled opacity shared by the score controls.
-const double _disabledOpacity = 0.45;
 
 /// A serving indicator that names both sides and marks the server.
 ///
@@ -359,7 +357,7 @@ class ScWinnerButtons extends StatelessWidget {
       return row;
     }
     return Opacity(
-      opacity: _disabledOpacity,
+      opacity: ScTints.disabledOpacity,
       child: IgnorePointer(child: row),
     );
   }
@@ -428,13 +426,16 @@ class _WinnerButtonState extends State<_WinnerButton> {
             palette: palette,
             focused: _focused,
             child: Container(
-              height: ScMetrics.rowCompact,
+              constraints: const BoxConstraints(
+                minHeight: ScMetrics.rowCompact,
+              ),
+              padding: EdgeInsets.symmetric(vertical: tokens.space1),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: hovered ? palette.surfaceWarm : palette.surface,
                 borderRadius: BorderRadius.circular(tokens.radiusSm),
                 border: Border.all(
-                  color: hovered ? palette.muted : palette.border,
+                  color: hovered ? palette.muted : palette.controlBorder,
                 ),
               ),
               child: Text(

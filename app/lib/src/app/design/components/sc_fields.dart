@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 import '../sc_elevation.dart';
 import '../sc_icons.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
+import '../sc_tints.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
-
-/// The disabled treatment from the design's states table.
-const double _disabledOpacity = 0.45;
 
 /// The error icon size, a little smaller than a toolbar icon.
 const double _errorIconSize = ScMetrics.chip * 0.7;
@@ -130,7 +129,7 @@ class _ScTextFieldState extends State<ScTextField> {
     final hasError = error != null;
     final borderColor = hasError
         ? palette.danger
-        : (_focused ? palette.accent : palette.border);
+        : (_focused ? palette.accent : palette.controlBorder);
 
     Widget field = TextField(
       controller: widget.controller,
@@ -266,7 +265,7 @@ class _ScCheckboxRowState extends State<ScCheckboxRow> {
     const double boxSize = ScMetrics.chip * 0.8;
 
     return Opacity(
-      opacity: widget.enabled ? 1 : _disabledOpacity,
+      opacity: widget.enabled ? 1 : ScTints.disabledOpacity,
       child: ScFocusRing.overlay(
         palette: palette,
         focused: _focused,
@@ -284,7 +283,10 @@ class _ScCheckboxRowState extends State<ScCheckboxRow> {
                 setState(() => _focused = focused);
               },
               borderRadius: BorderRadius.circular(tokens.radiusSm),
-              hoverColor: palette.surfaceWarm,
+              hoverColor: ScMotion.reduced(context)
+                  ? palette.surface.withValues(alpha: 0)
+                  : palette.surfaceWarm,
+              focusColor: palette.surface.withValues(alpha: 0),
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: tokens.space1),
                 child: Row(
@@ -300,8 +302,9 @@ class _ScCheckboxRowState extends State<ScCheckboxRow> {
                           color:
                               widget.value ? palette.accent : palette.surface,
                           border: Border.all(
-                            color:
-                                widget.value ? palette.accent : palette.border,
+                            color: widget.value
+                                ? palette.accent
+                                : palette.controlBorder,
                           ),
                           borderRadius: BorderRadius.circular(
                             tokens.radiusSm / 2,
@@ -432,7 +435,7 @@ class _ScSelectState<T> extends State<ScSelect<T>> {
     final typography = SportcutTypography.of(context);
 
     return Opacity(
-      opacity: widget.enabled ? 1 : _disabledOpacity,
+      opacity: widget.enabled ? 1 : ScTints.disabledOpacity,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -451,13 +454,13 @@ class _ScSelectState<T> extends State<ScSelect<T>> {
               palette: palette,
               focused: _focused,
               child: Container(
-                height: ScMetrics.field,
+                constraints: const BoxConstraints(minHeight: ScMetrics.field),
                 alignment: Alignment.centerLeft,
                 padding: EdgeInsets.symmetric(horizontal: tokens.space3),
                 decoration: BoxDecoration(
                   color: palette.surface,
                   border: Border.all(
-                    color: _focused ? palette.accent : palette.border,
+                    color: _focused ? palette.accent : palette.controlBorder,
                   ),
                   borderRadius: BorderRadius.circular(tokens.radiusSm),
                 ),
@@ -469,6 +472,7 @@ class _ScSelectState<T> extends State<ScSelect<T>> {
                     isExpanded: true,
                     padding: EdgeInsets.zero,
                     dropdownColor: palette.surface,
+                    focusColor: palette.surface.withValues(alpha: 0),
                     borderRadius: BorderRadius.circular(tokens.radiusSm),
                     iconEnabledColor: palette.muted,
                     iconDisabledColor: palette.muted,

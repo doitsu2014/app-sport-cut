@@ -32,6 +32,7 @@ class StudioToolbar extends StatelessWidget {
     required this.onDelete,
     required this.onExport,
     this.searchFocusNode,
+    this.exportFocusNode,
   });
 
   /// The workspace named in the breadcrumb.
@@ -45,6 +46,9 @@ class StudioToolbar extends StatelessWidget {
 
   /// The search field's focus node, so `⌘K` can reach it.
   final FocusNode? searchFocusNode;
+
+  /// The Export action's focus node, so the export sheet can return focus.
+  final FocusNode? exportFocusNode;
 
   /// Whether the video rail is showing.
   final bool libraryVisible;
@@ -85,7 +89,7 @@ class StudioToolbar extends StatelessWidget {
     final breadcrumb = typography.micro10.copyWith(color: palette.muted);
 
     return Container(
-      height: ScMetrics.toolbarHeight,
+      constraints: const BoxConstraints(minHeight: ScMetrics.toolbarHeight),
       padding: EdgeInsets.only(
         left: ScMetrics.trafficLightInset,
         right: tokens.space3,
@@ -154,13 +158,11 @@ class StudioToolbar extends StatelessWidget {
             onPressed: onDelete,
           ),
           SizedBox(width: tokens.space2),
-          SizedBox(
-            height: ScMetrics.toolButton,
-            child: ScButton.compact(
-              label: 'Export',
-              icon: ScIcons.download,
-              onPressed: onExport,
-            ),
+          ScButton.compact(
+            label: 'Export',
+            icon: ScIcons.download,
+            focusNode: exportFocusNode,
+            onPressed: onExport,
           ),
         ],
       ),

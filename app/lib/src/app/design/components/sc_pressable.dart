@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../sc_elevation.dart';
+import '../sc_motion.dart';
 import '../sc_tints.dart';
 import '../sportcut_tokens.dart';
 
@@ -99,14 +100,14 @@ class _ScPressableState extends State<ScPressable> {
         Positioned.fill(
           child: IgnorePointer(
             child: AnimatedContainer(
-              duration: tokens.motionFast,
+              duration: ScMotion.duration(context, tokens.motionFast),
               curve: Curves.easeOut,
               decoration: BoxDecoration(
                 color: _background(palette),
                 borderRadius: radius,
                 border: Border.all(
                   color: widget.selected
-                      ? palette.border
+                      ? palette.controlBorder
                       : palette.border.withValues(alpha: 0),
                 ),
               ),
@@ -175,7 +176,7 @@ class _ScPressableState extends State<ScPressable> {
     );
 
     return Opacity(
-      opacity: widget.enabled ? 1 : 0.45,
+      opacity: widget.enabled ? 1 : ScTints.disabledOpacity,
       child: surface,
     );
   }

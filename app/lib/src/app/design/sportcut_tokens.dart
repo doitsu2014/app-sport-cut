@@ -18,6 +18,7 @@ class SportcutPalette extends ThemeExtension<SportcutPalette> {
     required this.meta,
     required this.border,
     required this.borderSoft,
+    required this.controlBorder,
     required this.accent,
     required this.accentOn,
     required this.accentHover,
@@ -54,6 +55,14 @@ class SportcutPalette extends ThemeExtension<SportcutPalette> {
   /// Hairline.
   final Color borderSoft;
 
+  /// Outline of an interactive control.
+  ///
+  /// Unlike [border], which is a decorative hairline, this outline must reach
+  /// the 3:1 non-text contrast floor against every surface it can sit on
+  /// (FR-SHL-32). Use it for inputs, checkboxes, selects, and secondary
+  /// button and selection outlines.
+  final Color controlBorder;
+
   /// The single signal color.
   final Color accent;
 
@@ -86,6 +95,7 @@ class SportcutPalette extends ThemeExtension<SportcutPalette> {
     meta: Color(0xFF4A554E),
     border: Color(0xFFC7D0C8),
     borderSoft: Color(0xFFDFE5DF),
+    controlBorder: Color(0xFF7E8A81),
     accent: Color(0xFF0E6E45),
     accentOn: Color(0xFFFFFFFF),
     accentHover: Color(0xFF0B603B),
@@ -106,6 +116,7 @@ class SportcutPalette extends ThemeExtension<SportcutPalette> {
     meta: Color(0xFFA7B3AA),
     border: Color(0xFF2B342E),
     borderSoft: Color(0xFF1E2721),
+    controlBorder: Color(0xFF606C64),
     accent: Color(0xFF46D08D),
     accentOn: Color(0xFF04140C),
     accentHover: Color(0xFF63DEA4),
@@ -132,6 +143,7 @@ class SportcutPalette extends ThemeExtension<SportcutPalette> {
     Color? meta,
     Color? border,
     Color? borderSoft,
+    Color? controlBorder,
     Color? accent,
     Color? accentOn,
     Color? accentHover,
@@ -150,6 +162,7 @@ class SportcutPalette extends ThemeExtension<SportcutPalette> {
       meta: meta ?? this.meta,
       border: border ?? this.border,
       borderSoft: borderSoft ?? this.borderSoft,
+      controlBorder: controlBorder ?? this.controlBorder,
       accent: accent ?? this.accent,
       accentOn: accentOn ?? this.accentOn,
       accentHover: accentHover ?? this.accentHover,
@@ -175,6 +188,7 @@ class SportcutPalette extends ThemeExtension<SportcutPalette> {
       meta: Color.lerp(meta, other.meta, t)!,
       border: Color.lerp(border, other.border, t)!,
       borderSoft: Color.lerp(borderSoft, other.borderSoft, t)!,
+      controlBorder: Color.lerp(controlBorder, other.controlBorder, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
       accentOn: Color.lerp(accentOn, other.accentOn, t)!,
       accentHover: Color.lerp(accentHover, other.accentHover, t)!,

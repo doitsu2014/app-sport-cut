@@ -110,7 +110,7 @@ class _ScCalibrationOverlayState extends State<ScCalibrationOverlay> {
                   decoration: BoxDecoration(
                     color: palette.surface,
                     border: Border.all(
-                      color: palette.border,
+                      color: palette.controlBorder,
                       width: _hairline,
                     ),
                     borderRadius: BorderRadius.circular(tokens.radiusPill),

@@ -87,11 +87,11 @@ document because Flutter is not installed here.
 
 | Area | Status | Evidence and gap |
 | --- | --- | --- |
-| Geometry and minimum window | Partial | `workspace_studio_screen.dart`, `MainFlutterWindow.swift` (1100×720). Gap: 1 px dividers replace the 12 px gutter; no 980 px collapse or 480 px preview floor. |
-| Toolbar, status bar, pipeline rail | Partial | Toolbar 52 px, status 30 px, local-only text, readiness chip, Play/Analysis/Studio groups. Gap: Import is the toolbar primary action; ready is a bare accent dot; vocabulary differs from USAGE.md. |
-| Focus mode, search, keyboard, settings | Not started | No focus mode, search field, shortcut handling, or settings route in `app/lib/src`; the rail lists every video. |
-| Playback transport | Partial | `player_view.dart`, `playback_controller.dart`; `player_screen_test.dart` covers play, pause, scrub, unplayable. Gap: no ±5 s, no volume. |
-| Themes and accessibility | Partial | `theme.dart` builds light and dark with `ThemeMode.system`; tooltips and play/pause `semanticLabel`. Gap: no 2 px accent ring, 32×32 icon minimum, no scaling or reduced-motion handling, no a11y test. |
+| Geometry and minimum window | Done | `studio_shell.dart` reads the 264/320 px rails, 1 px column borders, the 980 px collapse, and the 480 px preview floor from `ScMetrics`; `workspace_studio_screen.dart` owns the studio route; `MainFlutterWindow.swift` keeps 1100×720. |
+| Toolbar, status bar, pipeline navigation | Done | `studio_toolbar.dart` (52 px min), `stage_strip.dart` (40 px min), `studio_status_bar.dart` (30 px min, sentence-case readiness), the stage-aware inspector, and Import in the video-rail footer. |
+| Focus mode, search, keyboard, settings | Done | `studio_shortcuts.dart` binds Space, ←/→, L/R, F, E, ⌘K, and one Esc order; the toolbar search filters the in-memory rail; settings stay system-only by design (§2.2). |
+| Playback transport | Partial | The shared `ScTransport` provides play/pause, ±5 s, and the scrubber with named semantics. Gap: volume is still absent and deferred (FR-SHL-28, ADR-0003 D12). |
+| Themes and accessibility | Partial | `theme.dart` (`ScFocusRing` in `sc_elevation.dart`), `sc_motion.dart`, and the component set ship both themes, control-contrast borders, focus rings, semantic names, 200% scaling, and reduced motion. Evidence: `flutter analyze` and `flutter build macos --debug`. Gap: no automated accessibility test, so the manual checklist is the only record. |
 | Job model and client surface | Partial | `core/use-cases/jobs/` (7 tests), `core/adapters/api/tests/facade.rs`, `analysis_providers.dart`. Gap: checkpoints are not atomic; outcomes use a transient SnackBar; no widget test. |
 
 ## 3. Functional requirements

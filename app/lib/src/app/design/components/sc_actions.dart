@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../sc_elevation.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
+import '../sc_tints.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 
@@ -37,6 +39,7 @@ class ScButton extends StatelessWidget {
     this.enabled = true,
     this.onPressed,
     this.expanded = false,
+    this.focusNode,
   }) : _height = ScMetrics.button;
 
   /// Build a compact-height button for dense rows and toolbars.
@@ -49,6 +52,7 @@ class ScButton extends StatelessWidget {
     this.enabled = true,
     this.onPressed,
     this.expanded = false,
+    this.focusNode,
   }) : _height = ScMetrics.buttonCompact;
 
   /// The button text. Verb-first, sentence case.
@@ -76,6 +80,11 @@ class ScButton extends StatelessWidget {
   /// Whether the button fills the available width.
   final bool expanded;
 
+  /// An optional focus node, so a caller can restore focus to this action.
+  final FocusNode? focusNode;
+
+  /// The minimum height. The button grows with scaled text instead of
+  /// clipping it (FR-SHL-35).
   final double _height;
 
   @override
@@ -107,7 +116,7 @@ class ScButton extends StatelessWidget {
             palette.surfaceWarm,
           ),
           palette.fg,
-          palette.border,
+          palette.controlBorder,
         ),
       ScButtonVariant.ghost => (
           transparent,
@@ -187,12 +196,14 @@ class ScButton extends StatelessWidget {
       borderColor: border,
       borderRadius: BorderRadius.circular(tokens.radiusMd),
       width: expanded ? double.infinity : null,
-      height: _height,
+      minHeight: _height,
       padding: EdgeInsets.symmetric(
         horizontal:
             _height == ScMetrics.buttonCompact ? tokens.space3 : tokens.space4,
+        vertical: tokens.space1,
       ),
       enabled: canPress,
+      focusNode: focusNode,
       onTap: loading ? null : onPressed,
       child: content,
     );
@@ -351,6 +362,8 @@ class ScToolbarButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(tokens.radiusSm),
       width: ScMetrics.toolButton,
       height: ScMetrics.toolButton,
+      hitWidth: ScMetrics.iconButton,
+      hitHeight: ScMetrics.iconButton,
       enabled: enabled && onPressed != null,
       onTap: onPressed,
       semanticsLabel: label,
@@ -408,8 +421,10 @@ class _Pressable extends StatefulWidget {
     required this.borderRadius,
     this.onTap,
     this.enabled = true,
+    this.focusNode,
     this.width,
     this.height,
+    this.minHeight,
     this.hitWidth,
     this.hitHeight,
     this.padding,
@@ -426,8 +441,10 @@ class _Pressable extends StatefulWidget {
   final BorderRadius borderRadius;
   final VoidCallback? onTap;
   final bool enabled;
+  final FocusNode? focusNode;
   final double? width;
   final double? height;
+  final double? minHeight;
   final double? hitWidth;
   final double? hitHeight;
   final EdgeInsetsGeometry? padding;
@@ -490,6 +507,11 @@ class _PressableState extends State<_Pressable> {
         height: widget.height,
         child: Center(child: content),
       );
+    } else if (widget.minHeight != null) {
+      content = ConstrainedBox(
+        constraints: BoxConstraints(minHeight: widget.minHeight!),
+        child: Center(child: content),
+      );
     }
 
     Widget surface = Stack(
@@ -497,7 +519,7 @@ class _PressableState extends State<_Pressable> {
         Positioned.fill(
           child: IgnorePointer(
             child: AnimatedContainer(
-              duration: tokens.motionFast,
+              duration: ScMotion.duration(context, tokens.motionFast),
               curve: Curves.easeOut,
               decoration: BoxDecoration(
                 color: _background,
@@ -544,6 +566,7 @@ class _PressableState extends State<_Pressable> {
 
     surface = FocusableActionDetector(
       enabled: _interactive,
+      focusNode: widget.focusNode,
       onShowFocusHighlight: (value) {
         if (_focused != value) {
           setState(() => _focused = value);
@@ -574,7 +597,7 @@ class _PressableState extends State<_Pressable> {
     );
 
     surface = Opacity(
-      opacity: widget.enabled ? 1 : 0.45,
+      opacity: widget.enabled ? 1 : ScTints.disabledOpacity,
       child: surface,
     );
 

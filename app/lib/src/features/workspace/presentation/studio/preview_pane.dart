@@ -90,13 +90,15 @@ class PreviewPane extends StatelessWidget {
     if (controller == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    return _featureView(entry, controller);
+    return _featureView(entry, controller, stage!);
   }
 
-  Widget _featureView(MatchListEntry entry, PlaybackController controller) {
+  Widget _featureView(
+    MatchListEntry entry,
+    PlaybackController controller,
+    PipelineStage stage,
+  ) {
     switch (stage) {
-      case null:
-        return VideoPreview(entry: entry, controller: controller);
       case PipelineStage.calibrate:
         // The inspector's CalibrationPanel owns orientation, save, and cancel;
         // the stage only draws the corners inside the footage's aspect box.
@@ -268,8 +270,13 @@ class CenterHeader extends StatelessWidget {
       if (fpsLabel != null) fpsLabel,
     ];
     return Container(
-      height: ScMetrics.previewHeaderHeight,
-      padding: EdgeInsets.symmetric(horizontal: tokens.space3),
+      constraints: const BoxConstraints(
+        minHeight: ScMetrics.previewHeaderHeight,
+      ),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.space3,
+        vertical: tokens.space1,
+      ),
       decoration: BoxDecoration(
         color: palette.surface,
         border: Border(bottom: BorderSide(color: palette.borderSoft)),

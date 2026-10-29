@@ -5,6 +5,15 @@ import 'package:flutter/material.dart';
 /// Every value is a `Color.alphaBlend` over a palette colour, so the design
 /// layer owns no extra hex values and both themes resolve correctly.
 abstract final class ScTints {
+  /// The opacity of a disabled control.
+  ///
+  /// The design states table says 45%, but that drops muted ink under the 3:1
+  /// graphical floor in both themes (1.95:1 light, 2.19:1 dark). 70% keeps the
+  /// control visibly disabled while measuring 3.07:1 light and 3.56:1 dark
+  /// against the surface. Focus traversal skips disabled controls, so this is
+  /// a visual-only distinction.
+  static const double disabledOpacity = 0.7;
+
   /// An unkept rally segment.
   static Color rally(Color accent, Color surface) {
     return Color.alphaBlend(accent.withValues(alpha: 0.22), surface);

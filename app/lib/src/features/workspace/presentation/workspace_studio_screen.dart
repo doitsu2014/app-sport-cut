@@ -14,6 +14,9 @@ import '../../library/presentation/import_controller.dart';
 import '../../library/presentation/library_providers.dart';
 import '../../library/presentation/match_list_entry.dart';
 import '../../library/presentation/playback_controller.dart';
+import '../../../app/design/sc_motion.dart';
+import '../../../app/design/sc_overlay_colors.dart';
+import '../../../app/design/sportcut_tokens.dart';
 import '../../rally/presentation/rally_review_providers.dart';
 import '../../score/presentation/rally_panel.dart';
 import '../domain/pipeline_stage.dart';
@@ -58,6 +61,9 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
   /// Lets `⌘K` reach the toolbar search field.
   final FocusNode _searchFocusNode = FocusNode();
 
+  /// Restores keyboard focus to Export when the sheet closes.
+  final FocusNode _exportFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +76,7 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     _searchController.removeListener(_syncSearchQuery);
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _exportFocusNode.dispose();
     super.dispose();
   }
 
@@ -149,6 +156,7 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
       open: studio.exportSheetOpen,
       match: selectedEntry?.match,
       recordingAvailable: selectedEntry?.recordingAvailable ?? false,
+      exportFocusNode: _exportFocusNode,
       onExported: _refresh,
       onClosed: () {
         if (mounted) {
@@ -184,6 +192,7 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
           importDescription: import.description,
           searchController: _searchController,
           searchFocusNode: _searchFocusNode,
+          exportFocusNode: _exportFocusNode,
           searchQuery: studio.searchQuery,
           onClearSearch: _clearSearch,
           toastMessage: studio.toastMessage,
@@ -622,6 +631,7 @@ class _ExportSheetHost extends StatefulWidget {
     required this.open,
     required this.match,
     required this.recordingAvailable,
+    required this.exportFocusNode,
     required this.onExported,
     required this.onClosed,
     required this.child,
@@ -630,6 +640,7 @@ class _ExportSheetHost extends StatefulWidget {
   final bool open;
   final MatchRecord? match;
   final bool recordingAvailable;
+  final FocusNode? exportFocusNode;
   final VoidCallback onExported;
   final VoidCallback onClosed;
   final Widget child;
@@ -669,17 +680,49 @@ class _ExportSheetHostState extends State<_ExportSheetHost> {
       return;
     }
     _showing = true;
-    await showDialog<void>(
+    final SportcutTokens tokens = SportcutTokens.of(context);
+    await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      builder: (BuildContext context) => ExportSheet(
-        match: match,
-        recordingAvailable: widget.recordingAvailable,
-        onExported: widget.onExported,
+      barrierLabel: 'Close export sheet',
+      // The barrier is the fixed footage bed, dark in both themes.
+      barrierColor: ScOverlayColors.bed.withValues(alpha: 0.62),
+      // The sheet is a destination, not decoration: reduced motion removes its
+      // transition entirely (FR-SHL-36).
+      transitionDuration: ScMotion.duration(context, tokens.motionBase),
+      pageBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+      ) =>
+          Material(
+        type: MaterialType.transparency,
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(tokens.space6),
+              child: FocusTraversalGroup(
+                child: ExportSheet(
+                  match: match,
+                  recordingAvailable: widget.recordingAvailable,
+                  onExported: widget.onExported,
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
+      transitionBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Animation<double> secondaryAnimation,
+        Widget child,
+      ) =>
+          FadeTransition(opacity: animation, child: child),
     );
     _showing = false;
     if (mounted) {
+      widget.exportFocusNode?.requestFocus();
       widget.onClosed();
     }
   }

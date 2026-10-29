@@ -98,9 +98,21 @@ class TimelineDock extends StatelessWidget {
     // A selected recording that is missing outranks loading: the absence of
     // the file is the fact worth stating, not that a session has not opened.
     final missing = !loading && !recordingAvailable;
+    // The dock needs a bounded height because its track area is flexible.
+    // Text scaling grows the three tracks instead of clipping their labels;
+    // the header already grows with its own minimum (FR-SHL-35).
+    final scale =
+        MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0).toDouble();
+    final rulerHeight = ScMetrics.timelineRuler * scale;
+    final rallyHeight = ScMetrics.timelineRally * scale;
+    final scoreHeight = ScMetrics.timelineScore * scale;
+    final dockHeight = math.max(
+      ScMetrics.timelineHeight,
+      ScMetrics.timelineHeaderHeight + rulerHeight + rallyHeight + scoreHeight,
+    );
 
     return SizedBox(
-      height: ScMetrics.timelineHeight,
+      height: dockHeight,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: palette.surface,
@@ -110,6 +122,7 @@ class TimelineDock extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             _header(
+              context: context,
               start: start,
               visibleCount: visible.length,
               missing: missing,
@@ -123,6 +136,11 @@ class TimelineDock extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   _labels(
+                    heights: <double>[
+                      rulerHeight,
+                      rallyHeight,
+                      scoreHeight,
+                    ],
                     palette: palette,
                     tokens: tokens,
                     typography: typography,
@@ -136,6 +154,9 @@ class TimelineDock extends StatelessWidget {
                       events: events,
                       missing: missing,
                       loading: loading,
+                      rulerHeight: rulerHeight,
+                      rallyHeight: rallyHeight,
+                      scoreHeight: scoreHeight,
                       palette: palette,
                       typography: typography,
                     ),
@@ -151,6 +172,7 @@ class TimelineDock extends StatelessWidget {
 
   /// The 34 px title, window range, window length, count, and legend.
   Widget _header({
+    required BuildContext context,
     required Duration start,
     required int visibleCount,
     required bool missing,
@@ -176,8 +198,11 @@ class TimelineDock extends StatelessWidget {
       count = visibleCount == 1 ? '1 rally' : '$visibleCount rallies';
     }
 
+    final shortened = MediaQuery.textScalerOf(context).scale(1) > 1.4;
     return Container(
-      height: ScMetrics.timelineHeaderHeight,
+      constraints: const BoxConstraints(
+        minHeight: ScMetrics.timelineHeaderHeight,
+      ),
       padding: EdgeInsets.symmetric(horizontal: tokens.space3),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: palette.borderSoft)),
@@ -193,11 +218,13 @@ class TimelineDock extends StatelessWidget {
           ),
           const Spacer(),
           Text(range, style: meta),
-          SizedBox(width: tokens.space2),
-          StudioChip(label: '${_window.inMinutes} min view'),
+          if (!shortened) ...<Widget>[
+            SizedBox(width: tokens.space2),
+            StudioChip(label: '${_window.inMinutes} min view'),
+          ],
           SizedBox(width: tokens.space2),
           Text(count, style: meta),
-          if (!missing && !loading) ...<Widget>[
+          if (!missing && !loading && !shortened) ...<Widget>[
             SizedBox(width: tokens.space4),
             const Flexible(
               child: ScTimelineLegend(
@@ -213,15 +240,11 @@ class TimelineDock extends StatelessWidget {
 
   /// The 112 px gutter naming the three tracks.
   Widget _labels({
+    required List<double> heights,
     required SportcutPalette palette,
     required SportcutTokens tokens,
     required SportcutTypography typography,
   }) {
-    const heights = <double>[
-      ScMetrics.timelineRuler,
-      ScMetrics.timelineRally,
-      ScMetrics.timelineScore,
-    ];
     const labels = <String>['Time', 'Rallies', 'Score'];
     final padding = EdgeInsets.symmetric(
       horizontal: tokens.space2 + tokens.space1 / 2,
@@ -246,6 +269,8 @@ class TimelineDock extends StatelessWidget {
               ),
               child: Text(
                 labels[index].toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: typography.chrome9.copyWith(
                   color: index == 0 ? palette.fg2 : palette.muted,
                 ),
@@ -265,6 +290,9 @@ class TimelineDock extends StatelessWidget {
     required List<ScoreEvent> events,
     required bool missing,
     required bool loading,
+    required double rulerHeight,
+    required double rallyHeight,
+    required double scoreHeight,
     required SportcutPalette palette,
     required SportcutTypography typography,
   }) {
@@ -317,7 +345,7 @@ class TimelineDock extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 SizedBox(
-                  height: ScMetrics.timelineRuler,
+                  height: rulerHeight,
                   child: _SeekSurface(
                     onSeekAt: seekAt,
                     child: ColoredBox(
@@ -326,13 +354,14 @@ class TimelineDock extends StatelessWidget {
                         windowStart: start,
                         windowLength: _window,
                         ticks: _rulerTicks,
+                        height: rulerHeight,
                         style: typography.chrome9,
                       ),
                     ),
                   ),
                 ),
                 SizedBox(
-                  height: ScMetrics.timelineRally,
+                  height: rallyHeight,
                   child: Stack(
                     clipBehavior: Clip.hardEdge,
                     children: <Widget>[
@@ -348,7 +377,7 @@ class TimelineDock extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  height: ScMetrics.timelineScore,
+                  height: scoreHeight,
                   child: Stack(
                     clipBehavior: Clip.hardEdge,
                     children: <Widget>[
@@ -359,7 +388,7 @@ class TimelineDock extends StatelessWidget {
                         ),
                       ),
                       for (final event in events)
-                        _scoreChip(event, startSeconds, width),
+                        _scoreChip(event, startSeconds, width, scoreHeight),
                     ],
                   ),
                 ),
@@ -367,7 +396,7 @@ class TimelineDock extends StatelessWidget {
             ),
             if (visible.isEmpty)
               Positioned.fill(
-                top: ScMetrics.timelineRuler,
+                top: rulerHeight,
                 child: IgnorePointer(
                   child: Center(
                     child: Text(
@@ -416,10 +445,15 @@ class TimelineDock extends StatelessWidget {
   }
 
   /// One score event marker, centred on its timestamp.
-  Widget _scoreChip(ScoreEvent event, double startSeconds, double width) {
+  Widget _scoreChip(
+    ScoreEvent event,
+    double startSeconds,
+    double width,
+    double scoreHeight,
+  ) {
     return Positioned(
       left: _xFor(event.timestampSeconds, startSeconds, width),
-      top: (ScMetrics.timelineScore - ScMetrics.chip) / 2,
+      top: (scoreHeight - ScMetrics.chip) / 2,
       child: FractionalTranslation(
         translation: const Offset(-0.5, 0),
         child: ScScoreChip(

@@ -182,7 +182,7 @@ class ScTag extends StatelessWidget {
     final typography = SportcutTypography.of(context);
 
     final tag = Container(
-      height: ScMetrics.chip,
+      constraints: const BoxConstraints(minHeight: ScMetrics.chip),
       alignment: Alignment.center,
       padding: EdgeInsets.symmetric(horizontal: tokens.space2),
       decoration: BoxDecoration(
@@ -199,7 +199,7 @@ class ScTag extends StatelessWidget {
                   palette.accent.withValues(alpha: 0.50),
                   palette.surface,
                 )
-              : palette.border,
+              : palette.controlBorder,
         ),
       ),
       child: Text(

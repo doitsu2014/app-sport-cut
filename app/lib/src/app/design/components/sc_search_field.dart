@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../sc_elevation.dart';
 import '../sc_icons.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 
@@ -127,80 +128,86 @@ class _ScSearchFieldState extends State<ScSearchField> {
 
     return SizedBox(
       width: widget.width,
-      height: ScMetrics.toolButton,
-      child: ScFocusRing.overlay(
-        palette: palette,
-        focused: _focused,
-        child: Container(
-          decoration: BoxDecoration(
-            color: palette.bg,
-            border: Border.all(
-              color: _focused ? palette.accent : palette.border,
-            ),
-            borderRadius: BorderRadius.circular(
-              tokens.radiusSm + tokens.space1 / 2,
-            ),
-          ),
-          padding: EdgeInsets.symmetric(horizontal: tokens.space2),
-          child: Row(
-            children: <Widget>[
-              ExcludeSemantics(
-                child: Icon(
-                  ScIcons.search,
-                  size: _searchIconSize,
-                  color: palette.muted,
-                ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: ScMetrics.toolButton),
+        child: ScFocusRing.overlay(
+          palette: palette,
+          focused: _focused,
+          child: Container(
+            decoration: BoxDecoration(
+              color: palette.bg,
+              border: Border.all(
+                color: _focused ? palette.accent : palette.controlBorder,
               ),
-              SizedBox(width: tokens.space2),
-              Expanded(
-                child: Semantics(
-                  label: widget.hint,
-                  child: TextField(
-                    controller: widget.controller,
-                    focusNode: _node,
-                    style: typography.xs12.copyWith(color: palette.fg),
-                    cursorColor: palette.accent,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      filled: false,
-                      constraints: const BoxConstraints(),
-                      contentPadding: EdgeInsets.zero,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      hintText: widget.hint,
-                      hintStyle: typography.xs12.copyWith(
-                        color: palette.muted,
+              borderRadius: BorderRadius.circular(
+                tokens.radiusSm + tokens.space1 / 2,
+              ),
+            ),
+            padding: EdgeInsets.symmetric(horizontal: tokens.space2),
+            child: Row(
+              children: <Widget>[
+                ExcludeSemantics(
+                  child: Icon(
+                    ScIcons.search,
+                    size: _searchIconSize,
+                    color: palette.muted,
+                  ),
+                ),
+                SizedBox(width: tokens.space2),
+                Expanded(
+                  child: Semantics(
+                    label: widget.hint,
+                    child: TextField(
+                      controller: widget.controller,
+                      focusNode: _node,
+                      style: typography.xs12.copyWith(color: palette.fg),
+                      cursorColor: palette.accent,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: false,
+                        constraints: const BoxConstraints(),
+                        contentPadding: EdgeInsets.zero,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        hintText: widget.hint,
+                        hintStyle: typography.xs12.copyWith(
+                          color: palette.muted,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              if (showKeycap) ...<Widget>[
-                SizedBox(width: tokens.space2),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: tokens.space1,
-                    vertical: tokens.space1 / 2,
+                if (showKeycap) ...<Widget>[
+                  SizedBox(width: tokens.space2),
+                  ExcludeSemantics(
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: tokens.space1,
+                        vertical: tokens.space1 / 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.surface,
+                        border: Border.all(color: palette.controlBorder),
+                        borderRadius:
+                            BorderRadius.circular(tokens.radiusSm / 2),
+                      ),
+                      child: Text(
+                        '⌘K',
+                        style:
+                            typography.chrome9.copyWith(color: palette.muted),
+                      ),
+                    ),
                   ),
-                  decoration: BoxDecoration(
-                    color: palette.surface,
-                    border: Border.all(color: palette.border),
-                    borderRadius: BorderRadius.circular(tokens.radiusSm / 2),
+                ] else if (hasText) ...<Widget>[
+                  SizedBox(width: tokens.space1),
+                  _ClearAction(
+                    label: widget.clearLabel,
+                    onPressed: _clear,
                   ),
-                  child: Text(
-                    '⌘K',
-                    style: typography.chrome9.copyWith(color: palette.muted),
-                  ),
-                ),
-              ] else if (hasText) ...<Widget>[
-                SizedBox(width: tokens.space1),
-                _ClearAction(
-                  label: widget.clearLabel,
-                  onPressed: _clear,
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -246,7 +253,10 @@ class _ClearActionState extends State<_ClearAction> {
                 setState(() => _focused = focused);
               },
               borderRadius: BorderRadius.circular(tokens.radiusSm),
-              hoverColor: palette.surfaceWarm,
+              hoverColor: ScMotion.reduced(context)
+                  ? palette.surface.withValues(alpha: 0)
+                  : palette.surfaceWarm,
+              focusColor: palette.surface.withValues(alpha: 0),
               child: SizedBox.square(
                 dimension: ScMetrics.toolButton,
                 child: Icon(

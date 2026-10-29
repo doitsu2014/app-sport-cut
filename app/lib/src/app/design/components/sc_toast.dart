@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../sc_elevation.dart';
 import '../sc_icons.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 import 'sc_banner.dart';
@@ -99,11 +100,11 @@ class ScToastHostState extends State<ScToastHost> {
           ),
           child: AnimatedSlide(
             offset: _visible ? Offset.zero : const Offset(0, 0.25),
-            duration: tokens.motionFast,
+            duration: ScMotion.duration(context, tokens.motionFast),
             curve: Curves.easeOut,
             child: AnimatedOpacity(
               opacity: _visible ? 1 : 0,
-              duration: tokens.motionFast,
+              duration: ScMotion.duration(context, tokens.motionFast),
               curve: Curves.easeOut,
               child: Semantics(
                 container: true,
@@ -260,9 +261,12 @@ class _ToastDismissState extends State<_ToastDismiss> {
                 setState(() => _focused = focused);
               },
               borderRadius: BorderRadius.circular(tokens.radiusSm),
-              hoverColor: palette.surfaceWarm,
+              hoverColor: ScMotion.reduced(context)
+                  ? palette.surface.withValues(alpha: 0)
+                  : palette.surfaceWarm,
+              focusColor: palette.surface.withValues(alpha: 0),
               child: SizedBox.square(
-                dimension: ScMetrics.iconButtonVisual,
+                dimension: ScMetrics.iconButton,
                 child: Icon(
                   ScIcons.close,
                   size: ScMetrics.chip * 0.8,

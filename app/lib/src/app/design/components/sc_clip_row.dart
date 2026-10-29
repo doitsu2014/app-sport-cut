@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../sc_elevation.dart';
 import '../sc_icons.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 
@@ -102,7 +103,7 @@ class _ScClipRowState extends State<ScClipRow> {
     final bool warm = widget.selected || (pressable && _hovered);
     final Color ring = widget.kept
         ? palette.accent
-        : (widget.selected ? palette.border : palette.borderSoft);
+        : (widget.selected ? palette.controlBorder : palette.borderSoft);
 
     Widget details = Row(
       children: <Widget>[
@@ -195,7 +196,7 @@ class _ScClipRowState extends State<ScClipRow> {
             button: pressable,
             selected: widget.selected,
             child: AnimatedContainer(
-              duration: tokens.motionFast,
+              duration: ScMotion.duration(context, tokens.motionFast),
               constraints: const BoxConstraints(
                 minHeight: ScMetrics.rowCompact,
               ),

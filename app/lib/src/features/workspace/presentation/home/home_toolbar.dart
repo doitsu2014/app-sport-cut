@@ -43,7 +43,7 @@ class HomeToolbar extends StatelessWidget {
     final breadcrumb = typography.micro10.copyWith(color: palette.muted);
 
     return Container(
-      height: ScMetrics.toolbarHeight,
+      constraints: const BoxConstraints(minHeight: ScMetrics.toolbarHeight),
       padding: EdgeInsets.only(
         left: ScMetrics.trafficLightInset,
         right: tokens.space3,
@@ -71,24 +71,18 @@ class HomeToolbar extends StatelessWidget {
             ),
           ),
           SizedBox(width: tokens.space3),
-          SizedBox(
-            height: ScMetrics.toolButton,
-            child: ScButton.compact(
-              label: 'Import video',
-              icon: ScIcons.upload,
-              variant: ScButtonVariant.secondary,
-              loading: importRunning,
-              onPressed: onImport,
-            ),
+          ScButton.compact(
+            label: 'Import video',
+            icon: ScIcons.upload,
+            variant: ScButtonVariant.secondary,
+            loading: importRunning,
+            onPressed: onImport,
           ),
           SizedBox(width: tokens.space2),
-          SizedBox(
-            height: ScMetrics.toolButton,
-            child: ScButton.compact(
-              label: 'New workspace',
-              icon: ScIcons.add,
-              onPressed: onCreateWorkspace,
-            ),
+          ScButton.compact(
+            label: 'New workspace',
+            icon: ScIcons.add,
+            onPressed: onCreateWorkspace,
           ),
         ],
       ),

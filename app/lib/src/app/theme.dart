@@ -4,9 +4,6 @@ import 'design/sc_metrics.dart';
 import 'design/sc_typography.dart';
 import 'design/sportcut_tokens.dart';
 
-/// Court green. Kept as the brand color for callers that need one value.
-const sportcutSeedColor = Color(0xFF0E6E45);
-
 /// The Sportcut theme for one system appearance.
 ///
 /// The palette is explicit rather than a single seed: the light theme is cool
@@ -62,7 +59,7 @@ ThemeData buildSportcutTheme(Brightness brightness) {
     tertiary: palette.accent,
     onTertiary: palette.accentOn,
     error: palette.danger,
-    onError: brightness == Brightness.light ? Colors.white : palette.bg,
+    onError: brightness == Brightness.light ? palette.surface : palette.bg,
     surface: palette.surface,
     onSurface: palette.fg,
     onSurfaceVariant: palette.fg2,
@@ -87,6 +84,22 @@ ThemeData buildSportcutTheme(Brightness brightness) {
         return BorderSide(color: palette.accent, width: 2);
       }
       return base;
+    });
+  }
+
+  // Keyboard focus is always the ring from `focusSide`; Material's fill tint
+  // would paint a second, weaker focus state (FR-SHL-33).
+  WidgetStateProperty<Color?> focusOverlay(Color hover) {
+    return WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.disabled) ||
+          states.contains(WidgetState.focused)) {
+        return Colors.transparent;
+      }
+      if (states.contains(WidgetState.pressed) ||
+          states.contains(WidgetState.hovered)) {
+        return hover;
+      }
+      return Colors.transparent;
     });
   }
 
@@ -126,14 +139,14 @@ ThemeData buildSportcutTheme(Brightness brightness) {
     foregroundColor: palette.fg,
     minimumSize: const Size(0, ScMetrics.button),
     padding: EdgeInsets.symmetric(horizontal: tokens.space4),
-    side: BorderSide(color: palette.border),
+    side: BorderSide(color: palette.controlBorder),
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(tokens.radiusMd),
     ),
     textStyle: textTheme.labelLarge,
   ).copyWith(
-    overlayColor: WidgetStatePropertyAll<Color>(palette.surfaceWarm),
-    side: focusSide(base: BorderSide(color: palette.border)),
+    overlayColor: focusOverlay(palette.surfaceWarm),
+    side: focusSide(base: BorderSide(color: palette.controlBorder)),
   );
 
   final textStyle = TextButton.styleFrom(
@@ -145,7 +158,7 @@ ThemeData buildSportcutTheme(Brightness brightness) {
     ),
     textStyle: textTheme.labelLarge,
   ).copyWith(
-    overlayColor: WidgetStatePropertyAll<Color>(palette.surfaceWarm),
+    overlayColor: focusOverlay(palette.surfaceWarm),
     side: focusSide(),
   );
 
@@ -210,7 +223,7 @@ ThemeData buildSportcutTheme(Brightness brightness) {
     iconButtonTheme: IconButtonThemeData(
       style: ButtonStyle(
         foregroundColor: WidgetStatePropertyAll<Color>(palette.fg2),
-        overlayColor: WidgetStatePropertyAll<Color>(palette.surfaceWarm),
+        overlayColor: focusOverlay(palette.surfaceWarm),
         // The visual square is 36; `tapTargetSize` keeps the hit area at or
         // above the 44 px floor.
         minimumSize: const WidgetStatePropertyAll<Size>(
@@ -238,11 +251,11 @@ ThemeData buildSportcutTheme(Brightness brightness) {
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(tokens.radiusSm),
-        borderSide: BorderSide(color: palette.border),
+        borderSide: BorderSide(color: palette.controlBorder),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(tokens.radiusSm),
-        borderSide: BorderSide(color: palette.border),
+        borderSide: BorderSide(color: palette.controlBorder),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(tokens.radiusSm),
@@ -308,7 +321,9 @@ ThemeData buildSportcutTheme(Brightness brightness) {
       activeTrackColor: palette.accent,
       inactiveTrackColor: palette.surfaceWarm,
       thumbColor: palette.accent,
-      overlayColor: palette.accent.withValues(alpha: 0.12),
+      // Material's slider paints its focus state as a fill; the studio's
+      // controls draw a ring instead, so this legacy slider keeps no tint.
+      overlayColor: Colors.transparent,
       trackHeight: 3,
       showValueIndicator: ShowValueIndicator.never,
     ),
@@ -331,7 +346,9 @@ ThemeData buildSportcutTheme(Brightness brightness) {
             ? palette.accent
             : palette.surfaceWarm;
       }),
-      trackOutlineColor: WidgetStatePropertyAll<Color>(palette.border),
+      trackOutlineColor: WidgetStatePropertyAll<Color>(
+        palette.controlBorder,
+      ),
       materialTapTargetSize: MaterialTapTargetSize.padded,
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
@@ -352,8 +369,9 @@ ThemeData buildSportcutTheme(Brightness brightness) {
               ? palette.fg
               : palette.fg2;
         }),
+        overlayColor: focusOverlay(palette.surfaceWarm),
         side: WidgetStatePropertyAll<BorderSide>(
-          BorderSide(color: palette.border),
+          BorderSide(color: palette.controlBorder),
         ),
         shape: WidgetStatePropertyAll<OutlinedBorder>(
           RoundedRectangleBorder(
@@ -380,7 +398,8 @@ ThemeData buildSportcutTheme(Brightness brightness) {
             : Colors.transparent;
       }),
       checkColor: WidgetStatePropertyAll<Color>(palette.accentOn),
-      side: BorderSide(color: palette.border),
+      overlayColor: focusOverlay(palette.surfaceWarm),
+      side: BorderSide(color: palette.controlBorder),
       materialTapTargetSize: MaterialTapTargetSize.padded,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
     ),
