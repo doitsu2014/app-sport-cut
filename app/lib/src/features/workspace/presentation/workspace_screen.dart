@@ -1,98 +1,263 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/design/components/sc_empty_state.dart';
+import '../../../app/design/components/sc_panel.dart';
+import '../../../app/design/components/sc_progress_job.dart';
+import '../../../app/design/sc_icons.dart';
+import '../../../app/design/sc_metrics.dart';
+import '../../../app/design/sportcut_tokens.dart';
+import '../../../app/router.dart';
 import '../../library/presentation/import_controller.dart';
 import '../../library/presentation/library_providers.dart';
+import '../domain/workspace.dart';
+import 'home/home_dialogs.dart';
+import 'home/home_status_bar.dart';
+import 'home/home_toolbar.dart';
+import 'home/workspace_row.dart';
+import 'home/workspace_summary.dart';
 import 'workspace_providers.dart';
-import 'workspace_studio_screen.dart';
 
 /// The home screen: the list of workspaces.
 ///
-/// A workspace is a loose folder of recordings. Tapping one opens its videos;
-/// with none yet, the empty state offers to create one or import straight into
-/// a freshly created workspace.
-class WorkspaceScreen extends ConsumerWidget {
+/// A workspace is a loose folder of recordings. Selecting one opens its studio;
+/// with none yet, the empty state offers the next action, create one. The
+/// screen is the studio family's surface — 52 px toolbar, panel sections, and
+/// a 30 px status bar — rather than a Material list.
+class WorkspaceScreen extends ConsumerStatefulWidget {
   /// Build the workspace home screen.
   const WorkspaceScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final workspaces = ref.watch(workspaceListProvider);
+  ConsumerState<WorkspaceScreen> createState() => _WorkspaceScreenState();
+}
+
+class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
+  /// The workspace last opened from this screen, for the row's selected state.
+  ///
+  /// This is ephemeral: it lives only as long as the home widget and is not
+  /// written anywhere.
+  String? _activeWorkspaceId;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = SportcutPalette.of(context);
+    final tokens = SportcutTokens.of(context);
+    final import = ref.watch(importControllerProvider);
+    final summaries = ref.watch(workspaceSummariesProvider);
+    final items = summaries.value ?? const <WorkspaceSummary>[];
+    final videoCount = items.fold<int>(
+      0,
+      (int total, WorkspaceSummary item) => total + item.videoCount,
+    );
+    final missingCount = items.fold<int>(
+      0,
+      (int total, WorkspaceSummary item) => total + item.missingCount,
+    );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sportcut'),
-        actions: <Widget>[
-          IconButton(
-            onPressed: () => _createWorkspace(context, ref),
-            icon: const Icon(Icons.create_new_folder_outlined),
-            tooltip: 'New workspace',
+      backgroundColor: palette.bg,
+      body: Column(
+        children: <Widget>[
+          HomeToolbar(
+            onCreateWorkspace: _createWorkspace,
+            onImport: _import,
+            importRunning: import.isRunning,
+          ),
+          if (import.isRunning)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                tokens.space4,
+                tokens.space3,
+                tokens.space4,
+                0,
+              ),
+              child: ScProgressJob(
+                stageLabel: import.description,
+                fraction: null,
+                detail: 'Sportcut copies the recording into its own store.',
+                onCancel: () =>
+                    ref.read(importControllerProvider.notifier).cancel(),
+              ),
+            ),
+          Expanded(child: _body(summaries)),
+          HomeStatusBar(
+            workspaceCount: items.length,
+            videoCount: videoCount,
+            missingCount: missingCount,
           ),
         ],
-      ),
-      body: workspaces.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _WorkspacesError(
-          message: '$error',
-          onRetry: () => ref.invalidate(workspaceListProvider),
-        ),
-        data: (items) => items.isEmpty
-            ? _EmptyWorkspaces(
-                onNewWorkspace: () => _createWorkspace(context, ref),
-                onImport: () => _import(context, ref),
-              )
-            : ListView.separated(
-                padding: const EdgeInsets.all(12),
-                itemCount: items.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final workspace = items[index];
-                  return Card(
-                    margin: EdgeInsets.zero,
-                    child: ListTile(
-                      leading: const Icon(Icons.folder_outlined),
-                      title: Text(workspace.title),
-                      subtitle: const Text('Workspace'),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (context) => WorkspaceStudioScreen(
-                            workspace: workspace,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
       ),
     );
   }
 
-  Future<void> _createWorkspace(BuildContext context, WidgetRef ref) async {
-    final title = await _askWorkspaceTitle(context);
-    if (title == null) {
+  /// The list, or the loading, empty, and error state that replaces it.
+  Widget _body(AsyncValue<List<WorkspaceSummary>> summaries) {
+    return summaries.when(
+      loading: () => _centred(
+        const ScEmptyState(
+          message: 'Reading workspaces…',
+          icon: ScIcons.running,
+        ),
+      ),
+      error: (Object error, StackTrace stackTrace) => _centred(
+        ScEmptyState(
+          message: 'The workspaces could not be read.',
+          actionLabel: 'Retry',
+          onAction: () {
+            ref.invalidate(workspaceListProvider);
+            ref.invalidate(matchRepositoryProvider);
+          },
+          icon: ScIcons.error,
+        ),
+      ),
+      data: (List<WorkspaceSummary> items) => items.isEmpty
+          ? _centred(
+              ScEmptyState(
+                message: 'No workspaces yet.',
+                actionLabel: 'New workspace',
+                onAction: _createWorkspace,
+              ),
+            )
+          : _list(items),
+    );
+  }
+
+  /// A state card in the middle of the empty content area.
+  Widget _centred(Widget child) {
+    final tokens = SportcutTokens.of(context);
+    return Align(
+      alignment: Alignment.topCenter,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(tokens.space8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: ScMetrics.dialogConfirm),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  /// The workspace list as one panel with a section header and rows.
+  Widget _list(List<WorkspaceSummary> items) {
+    final tokens = SportcutTokens.of(context);
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: ScMetrics.containerMax),
+        child: ListView(
+          padding: EdgeInsets.all(tokens.space8),
+          children: <Widget>[
+            ScPanel(
+              padding: EdgeInsets.symmetric(vertical: tokens.space2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: tokens.space4),
+                    child: ScSectionHeader(
+                      label: 'Workspaces',
+                      count: items.length,
+                    ),
+                  ),
+                  for (int index = 0;
+                      index < items.length;
+                      index++) ...<Widget>[
+                    if (index > 0)
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: tokens.space4,
+                        ),
+                        child: const ScDivider(),
+                      ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: tokens.space2),
+                      child: _row(items[index]),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(WorkspaceSummary summary) {
+    final workspace = summary.workspace;
+    return WorkspaceRow(
+      summary: summary,
+      selected: workspace.id == _activeWorkspaceId,
+      onOpen: () => _openWorkspace(workspace),
+      onDelete: () => _deleteWorkspace(workspace),
+    );
+  }
+
+  /// Open a workspace in the studio through the named route.
+  ///
+  /// The workspace travels as a [StudioRouteArgs], so the screen is reached the
+  /// same way every other route is and the legacy route table stays in charge.
+  void _openWorkspace(Workspace workspace) {
+    setState(() => _activeWorkspaceId = workspace.id);
+    Navigator.of(context).pushNamed(
+      AppRoutes.studio,
+      arguments: StudioRouteArgs(workspace: workspace),
+    );
+  }
+
+  Future<void> _createWorkspace() async {
+    final title = await showNewWorkspaceDialog(context);
+    if (title == null || !mounted) {
       return;
     }
     final repository = await ref.read(matchRepositoryProvider.future);
     final workspace = await repository.createWorkspace(title: title);
-    ref.invalidate(workspaceListProvider);
-    if (context.mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (context) => WorkspaceStudioScreen(workspace: workspace),
-        ),
-      );
+    if (!mounted) {
+      return;
     }
+    ref.invalidate(workspaceListProvider);
+    _openWorkspace(workspace);
   }
 
-  Future<void> _import(BuildContext context, WidgetRef ref) async {
+  Future<void> _deleteWorkspace(Workspace workspace) async {
+    final choice = await showDeleteWorkspaceDialog(
+      context,
+      workspace: workspace,
+    );
+    if (choice == null) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
     final messenger = ScaffoldMessenger.of(context);
-    final outcome =
-        await ref.read(importControllerProvider.notifier).start();
+    final repository = await ref.read(matchRepositoryProvider.future);
+    await repository.deleteWorkspace(
+      workspace,
+      deleteArtifacts: choice.deleteArtifacts,
+      deleteRecording: choice.deleteRecording,
+    );
+    if (!mounted) {
+      return;
+    }
+    ref.invalidate(workspaceListProvider);
+    if (_activeWorkspaceId == workspace.id) {
+      setState(() => _activeWorkspaceId = null);
+    }
+    messenger.showSnackBar(
+      SnackBar(content: Text('Deleted ${workspace.title}')),
+    );
+  }
+
+  Future<void> _import() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final outcome = await ref.read(importControllerProvider.notifier).start();
     switch (outcome) {
       case ImportSucceeded(:final match):
-        ref.invalidate(workspaceListProvider);
+        if (mounted) {
+          ref.invalidate(workspaceListProvider);
+        }
         messenger.showSnackBar(
           SnackBar(content: Text('Imported ${match.title}')),
         );
@@ -101,118 +266,5 @@ class WorkspaceScreen extends ConsumerWidget {
       case ImportDeclined():
         break; // the user cancelled, or an import was already running
     }
-  }
-
-  Future<String?> _askWorkspaceTitle(BuildContext context) async {
-    final controller = TextEditingController();
-    final title = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('New workspace'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Name',
-            hintText: 'e.g. Thursday club night',
-          ),
-          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return title;
-  }
-}
-
-class _EmptyWorkspaces extends StatelessWidget {
-  const _EmptyWorkspaces({
-    required this.onNewWorkspace,
-    required this.onImport,
-  });
-
-  final VoidCallback onNewWorkspace;
-  final VoidCallback onImport;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(
-              Icons.folder_outlined,
-              size: 56,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(height: 16),
-            Text('No workspaces yet', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              'Group your recordings into a workspace to review and build '
-              'highlights.',
-              style: theme.textTheme.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: onNewWorkspace,
-              icon: const Icon(Icons.create_new_folder_outlined),
-              label: const Text('New workspace'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: onImport,
-              icon: const Icon(Icons.add),
-              label: const Text('Import a video'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _WorkspacesError extends StatelessWidget {
-  const _WorkspacesError({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Icon(Icons.error_outline, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              'The workspaces could not be read',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 24),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
   }
 }

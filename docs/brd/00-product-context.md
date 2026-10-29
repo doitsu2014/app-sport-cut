@@ -355,7 +355,8 @@ feature BRD may add a stricter local rule but may not weaken these.
 | Local IPC (Unix domain socket; XPC fallback) | Client–service transport | OS-provided; no additional dependency |
 | `rand` 0.8 (Rust service) | Per-launch token and instance-id generation (`security.rs`) | MIT/Apache-2.0; shippable; pinned through `[workspace.dependencies]` |
 | `nix` 0.31 (Rust service) | Safe wrappers for `getpeereid`, `flock`, `kill`, and `statvfs` (`os_glue.rs`, health) | MIT; shippable; pinned through `[workspace.dependencies]`. Transitive crates are covered by the same workspace lockfile review |
-| Fonts (Archivo, IBM Plex Sans, IBM Plex Mono) | Offline typography | OFL-1.1; bundled, client-only |
+| Fonts (Archivo, IBM Plex Sans, IBM Plex Mono) | Offline typography | OFL-1.1; bundled, client-only. IBM Plex Mono ships 400/500 only; no 600 asset is added (ADR-0003 D18) |
+| Material Icons (Flutter SDK built-in icon font) | Studio, toolbar, and transport icons via `Icons.*_rounded` (ADR-0003 D7) | Apache-2.0; ships with the Flutter SDK, no new asset. The design system's Material Symbols Rounded is **not** used: that export loads it from Google Fonts, which the offline guardrail forbids |
 
 **History.** `flutter_rust_bridge` 2.13.0 and `libsportcut_api.dylib` were the
 FFI transport through baseline `1541c64`. ADR-0001 retires them; the Rust

@@ -12,7 +12,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show InternetAddress, InternetAddressType, Socket;
+import 'dart:io' show InternetAddress, InternetAddressType, Socket, SocketOption;
 import 'dart:typed_data';
 
 /// A failure reported by the service, or by the connection to it.

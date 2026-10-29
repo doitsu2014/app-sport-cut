@@ -355,7 +355,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PROJECT_DIR}/../../tools/fetch-inference-assets.sh\"\n\"${PROJECT_DIR}/../../tools/embed-inference-assets.sh\" \"${BUILT_PRODUCTS_DIR}/${FULL_PRODUCT_NAME}\"\n\"${PROJECT_DIR}/../../tools/embed-engine-lib.sh\" \"${BUILT_PRODUCTS_DIR}/${FULL_PRODUCT_NAME}\"\n";
+			shellScript = "\"${PROJECT_DIR}/../../tools/fetch-inference-assets.sh\"\n\"${PROJECT_DIR}/../../tools/embed-inference-assets.sh\" \"${BUILT_PRODUCTS_DIR}/${FULL_PRODUCT_NAME}\"\n# ADR-0001: the engine ships as the signed helper SportcutService, not as a\n# linked library. Embed it when it has been built; a clean checkout can still\n# build the app before the service exists.\nif [ -x \"${PROJECT_DIR}/../../core/target/release/sportcut-service\" ]; then\n  \"${PROJECT_DIR}/../../tools/embed-service.sh\" \"${BUILT_PRODUCTS_DIR}/${FULL_PRODUCT_NAME}\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

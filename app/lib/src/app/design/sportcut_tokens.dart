@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 /// chalk ground, a graphite studio ground, and explicit borders — none of
 /// which a Material 3 seed derives on its own.
 @immutable
-class SportcutPalette {
+class SportcutPalette extends ThemeExtension<SportcutPalette> {
   /// Build one palette.
   const SportcutPalette({
     required this.bg,
@@ -18,6 +18,7 @@ class SportcutPalette {
     required this.meta,
     required this.border,
     required this.borderSoft,
+    required this.controlBorder,
     required this.accent,
     required this.accentOn,
     required this.accentHover,
@@ -54,6 +55,14 @@ class SportcutPalette {
   /// Hairline.
   final Color borderSoft;
 
+  /// Outline of an interactive control.
+  ///
+  /// Unlike [border], which is a decorative hairline, this outline must reach
+  /// the 3:1 non-text contrast floor against every surface it can sit on
+  /// (FR-SHL-32). Use it for inputs, checkboxes, selects, and secondary
+  /// button and selection outlines.
+  final Color controlBorder;
+
   /// The single signal color.
   final Color accent;
 
@@ -86,6 +95,7 @@ class SportcutPalette {
     meta: Color(0xFF4A554E),
     border: Color(0xFFC7D0C8),
     borderSoft: Color(0xFFDFE5DF),
+    controlBorder: Color(0xFF7E8A81),
     accent: Color(0xFF0E6E45),
     accentOn: Color(0xFFFFFFFF),
     accentHover: Color(0xFF0B603B),
@@ -106,6 +116,7 @@ class SportcutPalette {
     meta: Color(0xFFA7B3AA),
     border: Color(0xFF2B342E),
     borderSoft: Color(0xFF1E2721),
+    controlBorder: Color(0xFF606C64),
     accent: Color(0xFF46D08D),
     accentOn: Color(0xFF04140C),
     accentHover: Color(0xFF63DEA4),
@@ -114,16 +125,87 @@ class SportcutPalette {
     warn: Color(0xFFE3B24E),
     danger: Color(0xFFF27B70),
   );
+
+  /// The palette for the current theme.
+  static SportcutPalette of(BuildContext context) {
+    return Theme.of(context).extension<SportcutPalette>() ??
+        (Theme.of(context).brightness == Brightness.dark ? dark : light);
+  }
+
+  @override
+  SportcutPalette copyWith({
+    Color? bg,
+    Color? surface,
+    Color? surfaceWarm,
+    Color? fg,
+    Color? fg2,
+    Color? muted,
+    Color? meta,
+    Color? border,
+    Color? borderSoft,
+    Color? controlBorder,
+    Color? accent,
+    Color? accentOn,
+    Color? accentHover,
+    Color? accentActive,
+    Color? success,
+    Color? warn,
+    Color? danger,
+  }) {
+    return SportcutPalette(
+      bg: bg ?? this.bg,
+      surface: surface ?? this.surface,
+      surfaceWarm: surfaceWarm ?? this.surfaceWarm,
+      fg: fg ?? this.fg,
+      fg2: fg2 ?? this.fg2,
+      muted: muted ?? this.muted,
+      meta: meta ?? this.meta,
+      border: border ?? this.border,
+      borderSoft: borderSoft ?? this.borderSoft,
+      controlBorder: controlBorder ?? this.controlBorder,
+      accent: accent ?? this.accent,
+      accentOn: accentOn ?? this.accentOn,
+      accentHover: accentHover ?? this.accentHover,
+      accentActive: accentActive ?? this.accentActive,
+      success: success ?? this.success,
+      warn: warn ?? this.warn,
+      danger: danger ?? this.danger,
+    );
+  }
+
+  @override
+  SportcutPalette lerp(ThemeExtension<SportcutPalette>? other, double t) {
+    if (other is! SportcutPalette) {
+      return this;
+    }
+    return SportcutPalette(
+      bg: Color.lerp(bg, other.bg, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      surfaceWarm: Color.lerp(surfaceWarm, other.surfaceWarm, t)!,
+      fg: Color.lerp(fg, other.fg, t)!,
+      fg2: Color.lerp(fg2, other.fg2, t)!,
+      muted: Color.lerp(muted, other.muted, t)!,
+      meta: Color.lerp(meta, other.meta, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      borderSoft: Color.lerp(borderSoft, other.borderSoft, t)!,
+      controlBorder: Color.lerp(controlBorder, other.controlBorder, t)!,
+      accent: Color.lerp(accent, other.accent, t)!,
+      accentOn: Color.lerp(accentOn, other.accentOn, t)!,
+      accentHover: Color.lerp(accentHover, other.accentHover, t)!,
+      accentActive: Color.lerp(accentActive, other.accentActive, t)!,
+      success: Color.lerp(success, other.success, t)!,
+      warn: Color.lerp(warn, other.warn, t)!,
+      danger: Color.lerp(danger, other.danger, t)!,
+    );
+  }
 }
 
-/// Fixed values the color scheme cannot carry: semantic state, spacing,
-/// shape, motion, and the studio shell's measurements.
+/// Fixed values the color scheme cannot carry: spacing, shape, motion, and
+/// the footage overlay colours.
 @immutable
 class SportcutTokens extends ThemeExtension<SportcutTokens> {
   /// Build the token set.
   const SportcutTokens({
-    required this.success,
-    required this.warn,
     required this.overlayBed,
     required this.overlayInk,
     required this.overlaySignal,
@@ -141,17 +223,7 @@ class SportcutTokens extends ThemeExtension<SportcutTokens> {
     required this.radiusPill,
     required this.motionFast,
     required this.motionBase,
-    required this.videoRailWidth,
-    required this.featureRailWidth,
-    required this.chromeHeight,
-    required this.statusHeight,
   });
-
-  /// Success state.
-  final Color success;
-
-  /// Warning state.
-  final Color warn;
 
   /// Footage bed for overlays.
   final Color overlayBed;
@@ -204,23 +276,9 @@ class SportcutTokens extends ThemeExtension<SportcutTokens> {
   /// 180ms.
   final Duration motionBase;
 
-  /// Library rail width.
-  final double videoRailWidth;
-
-  /// Pipeline rail width.
-  final double featureRailWidth;
-
-  /// Studio toolbar height.
-  final double chromeHeight;
-
-  /// Studio status height.
-  final double statusHeight;
-
   /// Tokens for the light theme.
   static const SportcutTokens light = SportcutTokens(
-    success: Color(0xFF157347),
-    warn: Color(0xFF8A5A00),
-    overlayBed: Color(0xFF0A0F0C),
+    overlayBed: Color(0xFF050806),
     overlayInk: Color(0xFFF2F5F0),
     overlaySignal: Color(0xFF46D08D),
     space1: 4,
@@ -237,38 +295,13 @@ class SportcutTokens extends ThemeExtension<SportcutTokens> {
     radiusPill: 9999,
     motionFast: Duration(milliseconds: 120),
     motionBase: Duration(milliseconds: 180),
-    videoRailWidth: 264,
-    featureRailWidth: 320,
-    chromeHeight: 52,
-    statusHeight: 30,
   );
 
   /// Tokens for the dark theme.
-  static const SportcutTokens dark = SportcutTokens(
-    success: Color(0xFF57C98F),
-    warn: Color(0xFFE3B24E),
-    overlayBed: Color(0xFF0A0F0C),
-    overlayInk: Color(0xFFF2F5F0),
-    overlaySignal: Color(0xFF46D08D),
-    space1: 4,
-    space2: 8,
-    space3: 12,
-    space4: 16,
-    space5: 20,
-    space6: 24,
-    space8: 32,
-    space12: 48,
-    radiusSm: 6,
-    radiusMd: 10,
-    radiusLg: 14,
-    radiusPill: 9999,
-    motionFast: Duration(milliseconds: 120),
-    motionBase: Duration(milliseconds: 180),
-    videoRailWidth: 264,
-    featureRailWidth: 320,
-    chromeHeight: 52,
-    statusHeight: 30,
-  );
+  ///
+  /// Spacing, shape, motion, and the footage overlay are fixed, so the two
+  /// token sets are identical today.
+  static const SportcutTokens dark = light;
 
   /// The tokens for the current theme.
   static SportcutTokens of(BuildContext context) {
@@ -278,8 +311,6 @@ class SportcutTokens extends ThemeExtension<SportcutTokens> {
 
   @override
   SportcutTokens copyWith({
-    Color? success,
-    Color? warn,
     Color? overlayBed,
     Color? overlayInk,
     Color? overlaySignal,
@@ -297,14 +328,8 @@ class SportcutTokens extends ThemeExtension<SportcutTokens> {
     double? radiusPill,
     Duration? motionFast,
     Duration? motionBase,
-    double? videoRailWidth,
-    double? featureRailWidth,
-    double? chromeHeight,
-    double? statusHeight,
   }) {
     return SportcutTokens(
-      success: success ?? this.success,
-      warn: warn ?? this.warn,
       overlayBed: overlayBed ?? this.overlayBed,
       overlayInk: overlayInk ?? this.overlayInk,
       overlaySignal: overlaySignal ?? this.overlaySignal,
@@ -322,10 +347,6 @@ class SportcutTokens extends ThemeExtension<SportcutTokens> {
       radiusPill: radiusPill ?? this.radiusPill,
       motionFast: motionFast ?? this.motionFast,
       motionBase: motionBase ?? this.motionBase,
-      videoRailWidth: videoRailWidth ?? this.videoRailWidth,
-      featureRailWidth: featureRailWidth ?? this.featureRailWidth,
-      chromeHeight: chromeHeight ?? this.chromeHeight,
-      statusHeight: statusHeight ?? this.statusHeight,
     );
   }
 
@@ -335,8 +356,6 @@ class SportcutTokens extends ThemeExtension<SportcutTokens> {
       return this;
     }
     return SportcutTokens(
-      success: Color.lerp(success, other.success, t)!,
-      warn: Color.lerp(warn, other.warn, t)!,
       overlayBed: Color.lerp(overlayBed, other.overlayBed, t)!,
       overlayInk: Color.lerp(overlayInk, other.overlayInk, t)!,
       overlaySignal: Color.lerp(overlaySignal, other.overlaySignal, t)!,
@@ -354,10 +373,6 @@ class SportcutTokens extends ThemeExtension<SportcutTokens> {
       radiusPill: _lerp(radiusPill, other.radiusPill, t),
       motionFast: t < 0.5 ? motionFast : other.motionFast,
       motionBase: t < 0.5 ? motionBase : other.motionBase,
-      videoRailWidth: _lerp(videoRailWidth, other.videoRailWidth, t),
-      featureRailWidth: _lerp(featureRailWidth, other.featureRailWidth, t),
-      chromeHeight: _lerp(chromeHeight, other.chromeHeight, t),
-      statusHeight: _lerp(statusHeight, other.statusHeight, t),
     );
   }
 

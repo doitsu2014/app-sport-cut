@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../bridge/sportcut_engine.dart';
+import '../../editing/domain/export_settings.dart';
 import '../../editing/domain/match_edit.dart';
 import '../../library/data/media_engine.dart';
 import '../../library/domain/match_record.dart';
@@ -11,6 +12,34 @@ import '../../library/presentation/library_providers.dart';
 import '../data/audio_file_picker.dart';
 import '../data/overlay_renderer.dart';
 import '../domain/export_exception.dart';
+
+/// Fixed duration of the title card the engine prepends, in seconds.
+const double titleCardSeconds = 2.5;
+
+/// The runtime the produced file will carry, in seconds.
+///
+/// Matches the engine's edit-list rule: the title card when one is set, plus
+/// each kept clip padded by the lead-in and lead-out and clamped to the
+/// recording. The value is the same one the success state reports, so the
+/// summary and the finished reel cannot disagree (FR-EXP-09, FR-EXP-13).
+double producedRuntimeSeconds(MatchEdit edit, MatchRecord match) {
+  final ExportSettings settings = edit.exportSettings;
+  final String? title = settings.title?.trim();
+  var total = title != null && title.isNotEmpty ? titleCardSeconds : 0.0;
+  for (final clip in edit.clips) {
+    final double clampedStart =
+        clip.effectiveStartSeconds - settings.leadInSeconds;
+    final double clampedEnd =
+        clip.effectiveEndSeconds + settings.leadOutSeconds;
+    final double start = clampedStart < 0 ? 0 : clampedStart;
+    final double end =
+        clampedEnd > match.durationSeconds ? match.durationSeconds : clampedEnd;
+    if (end > start) {
+      total += end - start;
+    }
+  }
+  return total;
+}
 
 /// Picks the music a reel is mixed with.
 final audioFilePickerProvider = Provider<AudioFilePicker>(
@@ -103,9 +132,14 @@ class ExportController extends Notifier<ExportState> {
   ExportState build() => const ExportState();
 
   /// Render [edit] into a reel for [match].
+  ///
+  /// [includeScoreOverlays] is the export sheet's ephemeral choice. It defaults
+  /// to the behaviour every existing call had: burn the scoreboard onto each
+  /// clip. When false the clips are written with no overlay path.
   Future<void> render({
     required MatchRecord match,
     required MatchEdit edit,
+    bool includeScoreOverlays = true,
   }) async {
     if (state.running) {
       return;
@@ -114,7 +148,7 @@ class ExportController extends Notifier<ExportState> {
 
     try {
       final engine = ref.read(mediaEngineProvider);
-      final request = await _request(match, edit);
+      final request = await _request(match, edit, includeScoreOverlays);
       final handle = await engine.startExport(request);
       state = state.copyWith(jobId: handle.jobId);
 
@@ -166,7 +200,11 @@ class ExportController extends Notifier<ExportState> {
   ///
   /// The scoreboard is drawn here rather than by the engine: burning text needs
   /// a font-capable media toolchain, and compositing an image does not.
-  Future<ExportRequestDto> _request(MatchRecord match, MatchEdit edit) async {
+  Future<ExportRequestDto> _request(
+    MatchRecord match,
+    MatchEdit edit,
+    bool includeScoreOverlays,
+  ) async {
     if (edit.clips.isEmpty) {
       throw ExportException(
         'Add at least one clip to the reel before exporting.',
@@ -181,19 +219,23 @@ class ExportController extends Notifier<ExportState> {
     final clips = <EditClipDto>[];
     for (var index = 0; index < edit.clips.length; index += 1) {
       final clip = edit.clips[index];
-      final score = edit.score.atSeconds(clip.effectiveStartSeconds);
-      final overlay = await renderer.writeScoreboard(
-        path: p.join(overlayDir, 'score-$index.png'),
-        width: width,
-        height: height,
-        leftScore: score.left,
-        rightScore: score.right,
-      );
+      String? overlayPath;
+      if (includeScoreOverlays) {
+        final score = edit.score.atSeconds(clip.effectiveStartSeconds);
+        final overlay = await renderer.writeScoreboard(
+          path: p.join(overlayDir, 'score-$index.png'),
+          width: width,
+          height: height,
+          leftScore: score.left,
+          rightScore: score.right,
+        );
+        overlayPath = overlay.path;
+      }
       clips.add(
         EditClipDto(
           startSeconds: clip.effectiveStartSeconds,
           endSeconds: clip.effectiveEndSeconds,
-          overlayPath: overlay.path,
+          overlayPath: overlayPath,
         ),
       );
     }
@@ -208,7 +250,10 @@ class ExportController extends Notifier<ExportState> {
         height: height,
         title: title,
       );
-      titleCard = EditTitleDto(imagePath: image.path, seconds: 2.5);
+      titleCard = EditTitleDto(
+        imagePath: image.path,
+        seconds: titleCardSeconds,
+      );
     }
 
     final music = settings.musicPath;
@@ -262,7 +307,7 @@ class ExportController extends Notifier<ExportState> {
       if (artifact.kind == 'export') {
         return ExportedReel(
           path: p.join(match.matchDir, artifact.relativePath),
-          durationSeconds: edit.reelSeconds,
+          durationSeconds: producedRuntimeSeconds(edit, match),
           clipCount: edit.clips.length,
         );
       }

@@ -19,6 +19,29 @@ String formatDuration(double seconds) {
   return '$minutes:$paddedSeconds';
 }
 
+/// Formats a duration as `HH:MM:SS`, zero-padded.
+///
+/// The studio's score bug and timeline use a fixed-width clock so numeric
+/// labels do not jump as time advances.
+String formatClock(Duration duration) {
+  final seconds = duration.inSeconds < 0 ? 0 : duration.inSeconds;
+  final hours = seconds ~/ 3600;
+  final minutes = (seconds % 3600) ~/ 60;
+  final remainder = seconds % 60;
+  return '${hours.toString().padLeft(2, '0')}:'
+      '${minutes.toString().padLeft(2, '0')}:'
+      '${remainder.toString().padLeft(2, '0')}';
+}
+
+/// Formats a rally position as `mm:ss`, zero-padded.
+String formatRallyTime(Duration duration) {
+  final seconds = duration.inSeconds < 0 ? 0 : duration.inSeconds;
+  final minutes = seconds ~/ 60;
+  final remainder = seconds % 60;
+  return '${minutes.toString().padLeft(2, '0')}:'
+      '${remainder.toString().padLeft(2, '0')}';
+}
+
 /// Formats a creation date as `yyyy-mm-dd`.
 String formatMatchDate(DateTime createdAt) {
   final year = createdAt.year.toString().padLeft(4, '0');

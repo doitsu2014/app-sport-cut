@@ -74,6 +74,18 @@ class EditingController extends Notifier<EditingState> {
     await _reload();
   }
 
+  /// Open [match] only when it is not the session's current match.
+  ///
+  /// The studio calls this once per selected video so the shell owns one
+  /// editing session across every stage (FR-SHL-45). Re-selecting the open
+  /// match reloads nothing.
+  Future<void> ensureOpen(MatchRecord match) async {
+    if (state.match?.id == match.id) {
+      return;
+    }
+    await open(match);
+  }
+
   /// Mark a span of the recording as a rally.
   Future<void> markRally({
     required double startSeconds,

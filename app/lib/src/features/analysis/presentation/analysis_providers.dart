@@ -214,6 +214,16 @@ class AnalysisController extends Notifier<AnalysisState> {
         (engine) => engine.startRegenerate(match.matchDir, samplingRate: 1),
       );
 
+  /// Clear the reported failure once the panel has shown it.
+  ///
+  /// The outcome listener still announces the failure app-wide; this only
+  /// removes the in-place banner so a later read starts clean.
+  void clearProblem() {
+    if (state.problem != null) {
+      state = state.copyWith(clearProblem: true);
+    }
+  }
+
   /// Ask the engine to stop the running job.
   Future<void> cancel() async {
     final jobId = state.jobId;
