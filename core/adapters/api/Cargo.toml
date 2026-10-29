@@ -1,0 +1,38 @@
+[package]
+name = "sportcut-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# An ordinary library: the background service links it in-process, and the
+# Flutter client reaches the engine over the protocol instead of linking Rust.
+[lib]
+crate-type = ["rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1.0"
+sportcut-common = { workspace = true }
+sportcut-court = { workspace = true }
+sportcut-export = { workspace = true }
+sportcut-highlight = { workspace = true }
+sportcut-media = { workspace = true }
+sportcut-rally = { workspace = true }
+sportcut-score = { workspace = true }
+sportcut-storage = { workspace = true }
+sportcut-jobs = { workspace = true }
+sportcut-vision = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+default = []
+# Selects the local macOS TFLite person detector for the service build.
+macos-tflite-eval = ["sportcut-vision/macos-tflite-eval"]
+
+[dev-dependencies]
+tempfile = { workspace = true }

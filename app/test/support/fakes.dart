@@ -81,7 +81,7 @@ class FakeMediaEngine implements MediaEngine {
       rotationDegrees: 0,
       orientation: OrientationDto.landscape,
       hasAudio: true,
-      sizeBytes: BigInt.from(1024),
+      sizeBytes: 1024,
     );
   }
 
@@ -120,7 +120,7 @@ class FakeMediaEngine implements MediaEngine {
               kind: 'proxy',
               relativePath: 'proxy/proxy.mp4',
               state: ArtifactStateDto.final_,
-              sizeBytes: BigInt.from(2048),
+              sizeBytes: 2048,
             ),
           ],
       missingKinds: const <String>[],

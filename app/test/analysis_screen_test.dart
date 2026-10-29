@@ -32,7 +32,7 @@ void main() {
         kind: kind,
         relativePath: '$kind/$kind',
         state: state,
-        sizeBytes: BigInt.from(1024),
+        sizeBytes: 1024,
       );
 
   setUp(() {

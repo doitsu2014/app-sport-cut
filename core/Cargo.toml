@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "cli", "service"]
+# One directory per Clean Architecture layer, outermost last. The directory a
+# crate lives in is the layer it belongs to; `tools/check-layering.sh` enforces
+# that the dependencies agree. See docs/architecture/layering.md.
+members = ["entities/*", "use-cases/*", "gateways/*", "adapters/*", "drivers/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,19 +15,26 @@ authors = ["Sportcut"]
 description = "Offline badminton match analysis engine"
 
 [workspace.dependencies]
-sportcut-common = { path = "crates/common" }
-sportcut-media = { path = "crates/media" }
-sportcut-storage = { path = "crates/storage" }
-sportcut-jobs = { path = "crates/jobs" }
-sportcut-api = { path = "crates/api" }
-sportcut-protocol = { path = "crates/protocol" }
-sportcut-court = { path = "crates/court" }
-sportcut-vision = { path = "crates/vision" }
-sportcut-rally = { path = "crates/rally" }
-sportcut-score = { path = "crates/score" }
-sportcut-highlight = { path = "crates/highlight" }
-sportcut-export = { path = "crates/export" }
-sportcut-eval = { path = "crates/eval" }
+# --- entities ---------------------------------------------------------------
+sportcut-common = { path = "entities/common" }
+sportcut-court = { path = "entities/court" }
+sportcut-rally = { path = "entities/rally" }
+sportcut-score = { path = "entities/score" }
+sportcut-highlight = { path = "entities/highlight" }
+
+# --- use cases --------------------------------------------------------------
+sportcut-media = { path = "use-cases/media" }
+sportcut-vision = { path = "use-cases/vision" }
+sportcut-export = { path = "use-cases/export" }
+sportcut-jobs = { path = "use-cases/jobs" }
+sportcut-eval = { path = "use-cases/eval" }
+
+# --- gateways and contracts -------------------------------------------------
+sportcut-storage = { path = "gateways/storage" }
+sportcut-protocol = { path = "gateways/protocol" }
+
+# --- adapters ---------------------------------------------------------------
+sportcut-api = { path = "adapters/api" }
 
 clap = { version = "4.5", features = ["derive"] }
 image = { version = "=0.24.9", default-features = false, features = ["jpeg"] }

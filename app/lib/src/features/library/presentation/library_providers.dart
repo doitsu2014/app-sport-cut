@@ -29,7 +29,7 @@ final playbackControllerFactoryProvider = Provider<PlaybackController Function()
 /// Feature code talks to the engine through [MediaEngine] rather than the bridge
 /// directly, so a screen can be tested without the native library.
 final mediaEngineProvider = Provider<MediaEngine>(
-  (ref) => BridgeMediaEngine(ref.watch(sportcutEngineProvider)),
+  (ref) => EngineMediaEngine(ref.watch(sportcutEngineProvider)),
 );
 
 /// The application's catalog database.

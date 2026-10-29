@@ -23,6 +23,9 @@ if [ ! -f "${CORE_DIR}/Cargo.toml" ]; then
   exit 1
 fi
 
+echo "==> tools/check-layering.sh"
+"${SCRIPT_DIR}/check-layering.sh"
+
 cd "${CORE_DIR}"
 
 echo "==> cargo fmt --all -- --check"

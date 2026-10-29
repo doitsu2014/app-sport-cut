@@ -6,10 +6,8 @@
 # generated bridge bindings, and `libsportcut_api`. It also accepts app bundle
 # paths and inspects those for a shipped dylib or FFI residue.
 #
-# Phase 0-1 runs in warning mode: the known FFI debt is recorded in
-# tools/no-rust-in-app.allowlist, reported, and does not fail the build. Pass
-# --strict to fail on any finding; Phase 5 deletes the allowlist and makes this
-# check blocking.
+# The check is blocking: any finding fails. There is no allowlist. The FFI path
+# is gone, so a reappearance is a regression, not known debt.
 #
 # Usage:
 #   tools/check-no-rust-in-app.sh [--strict] [--app <path>] [<app-bundle> ...]
@@ -18,9 +16,9 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
-ALLOWLIST="${SCRIPT_DIR}/no-rust-in-app.allowlist"
 
-STRICT=0
+# Blocking. `--strict` is still accepted so existing callers keep working.
+STRICT=1
 APP_DIR="${REPO_ROOT}/app"
 BUNDLES=()
 
@@ -28,7 +26,7 @@ usage() {
   cat <<'EOF'
 usage: check-no-rust-in-app.sh [--strict] [--app <path>] [<app-bundle> ...]
 
-  --strict       Fail when any finding is present (default: always exit 0).
+  --strict       Accepted for compatibility; the check is always strict.
   --app <path>   Client tree to scan (default: <repo>/app).
   <app-bundle>   Built .app bundle(s) to inspect for a shipped dylib/FFI strings.
   -h, --help     Print this help.
@@ -88,35 +86,6 @@ PATTERNS=(
   "libsportcut_api"
 )
 
-ALLOWLIST_ENTRIES=()
-if [ -f "${ALLOWLIST}" ]; then
-  while IFS= read -r line || [ -n "${line}" ]; do
-    line="${line%%#*}"
-    line="${line#"${line%%[![:space:]]*}"}"
-    line="${line%"${line##*[![:space:]]}"}"
-    [ -z "${line}" ] && continue
-    ALLOWLIST_ENTRIES+=("${line}")
-  done < "${ALLOWLIST}"
-fi
-
-is_allowlisted() {
-  local path="$1"
-  local entry
-  for entry in ${ALLOWLIST_ENTRIES[@]+"${ALLOWLIST_ENTRIES[@]}"}; do
-    case "${entry}" in
-      */)
-        case "${path}" in
-          "${entry}"*) return 0 ;;
-        esac
-        ;;
-      *)
-        [ "${path}" = "${entry}" ] && return 0
-        ;;
-    esac
-  done
-  return 1
-}
-
 FINDINGS=()
 MISSING_BUNDLES=()
 
@@ -169,18 +138,18 @@ fi
 if grep -Rq "flutter_rust_bridge" "${REPO_ROOT}/core/Cargo.toml" 2>/dev/null; then
   record_finding "core/Cargo.toml" "flutter_rust_bridge"
 fi
-if grep -q "flutter_rust_bridge" "${REPO_ROOT}/core/crates/api/Cargo.toml" 2>/dev/null; then
-  record_finding "core/crates/api/Cargo.toml" "flutter_rust_bridge"
+if grep -q "flutter_rust_bridge" "${REPO_ROOT}/core/adapters/api/Cargo.toml" 2>/dev/null; then
+  record_finding "core/adapters/api/Cargo.toml" "flutter_rust_bridge"
 fi
 if grep -Eq 'crate-type[[:space:]]*=[[:space:]]*\[[^]]*"(cdylib|staticlib)"' \
-  "${REPO_ROOT}/core/crates/api/Cargo.toml" 2>/dev/null; then
-  record_finding "core/crates/api/Cargo.toml" "crate-type cdylib/staticlib"
+  "${REPO_ROOT}/core/adapters/api/Cargo.toml" 2>/dev/null; then
+  record_finding "core/adapters/api/Cargo.toml" "crate-type cdylib/staticlib"
 fi
-if grep -q '^bridge[[:space:]]*=' "${REPO_ROOT}/core/crates/api/Cargo.toml" 2>/dev/null; then
-  record_finding "core/crates/api/Cargo.toml" "bridge feature"
+if grep -q '^bridge[[:space:]]*=' "${REPO_ROOT}/core/adapters/api/Cargo.toml" 2>/dev/null; then
+  record_finding "core/adapters/api/Cargo.toml" "bridge feature"
 fi
 record_finding "flutter_rust_bridge.yaml" "flutter_rust_bridge config"
-record_finding "core/crates/api/src/frb_generated.rs" "frb_generated"
+record_finding "core/adapters/api/src/frb_generated.rs" "frb_generated"
 
 # The Flutter app target must not consume a Rust archive.
 while IFS= read -r -d '' archive; do
@@ -229,67 +198,26 @@ for bundle in ${BUNDLES[@]+"${BUNDLES[@]}"}; do
   done < <(grep -a -r -l -E "${FFI_STRING_REGEX}" "${BUNDLE_PATH}" 2>/dev/null || true)
 done
 
-KNOWN=()
-NEW=()
-KNOWN_COUNT=0
-NEW_COUNT=0
-
-for finding in ${FINDINGS[@]+"${FINDINGS[@]}"}; do
-  path="${finding%%|*}"
-  if is_allowlisted "${path}"; then
-    KNOWN+=("${finding}")
-    KNOWN_COUNT=$((KNOWN_COUNT + 1))
-  else
-    NEW+=("${finding}")
-    NEW_COUNT=$((NEW_COUNT + 1))
-  fi
-done
-
-TOTAL_COUNT=$((KNOWN_COUNT + NEW_COUNT))
+TOTAL_COUNT=${#FINDINGS[@]}
 
 echo "==> app tree: ${APP_DIR}"
-if [ -f "${ALLOWLIST}" ]; then
-  echo "==> allowlist: ${ALLOWLIST}"
-else
-  echo "==> allowlist: none"
-fi
 
-if [ "${KNOWN_COUNT}" -gt 0 ]; then
-  echo "==> known FFI debt (allowlisted, ${KNOWN_COUNT}):"
-  for finding in ${KNOWN[@]+"${KNOWN[@]}"}; do
+if [ "${TOTAL_COUNT}" -gt 0 ]; then
+  echo "==> FFI violations (${TOTAL_COUNT}):"
+  for finding in ${FINDINGS[@]+"${FINDINGS[@]}"}; do
     echo "  ${finding%%|*}: ${finding##*|}"
   done
 fi
 
-if [ "${NEW_COUNT}" -gt 0 ]; then
-  echo "==> new FFI violations (${NEW_COUNT}):"
-  for finding in ${NEW[@]+"${NEW[@]}"}; do
-    echo "  ${finding%%|*}: ${finding##*|}"
-  done
-fi
-
-if [ "${NEW_COUNT}" -gt 0 ] && [ "${STRICT}" = 0 ]; then
-  echo "check-no-rust-in-app: warning: ${NEW_COUNT} new finding(s); rerun with --strict to fail" >&2
-fi
-
-if [ "${STRICT}" = 1 ] && [ "${#MISSING_BUNDLES[@]}" -gt 0 ]; then
-  echo "check-no-rust-in-app: FAILED (requested bundle missing; strict mode cannot pass vacuously)" >&2
+if [ "${#MISSING_BUNDLES[@]}" -gt 0 ]; then
+  echo "check-no-rust-in-app: FAILED (requested bundle missing; the check cannot pass vacuously)" >&2
   exit 1
 fi
 
-if [ "${STRICT}" = 1 ] && [ "${TOTAL_COUNT}" -gt 0 ]; then
-  echo "check-no-rust-in-app: FAILED (${TOTAL_COUNT} finding(s), strict mode)" >&2
+if [ "${TOTAL_COUNT}" -gt 0 ]; then
+  echo "check-no-rust-in-app: FAILED (${TOTAL_COUNT} finding(s))" >&2
   exit 1
 fi
 
-DEBT_NOTE=""
-if [ "${KNOWN_COUNT}" -gt 0 ]; then
-  DEBT_NOTE="; known FFI debt remains until Phase 5"
-fi
-
-if [ "${NEW_COUNT}" -gt 0 ]; then
-  echo "check-no-rust-in-app: PASS WITH WARNINGS (${KNOWN_COUNT} known, ${NEW_COUNT} new${DEBT_NOTE})"
-else
-  echo "check-no-rust-in-app: OK (${KNOWN_COUNT} known, 0 new${DEBT_NOTE}; warning mode)"
-fi
+echo "check-no-rust-in-app: OK (no Rust, FFI, or generated bindings in the client)"
 exit 0

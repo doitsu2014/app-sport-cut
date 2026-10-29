@@ -5,12 +5,9 @@
 	<!--
 	  Development only.
 
-	  The macOS runner is unsandboxed while developing because the engine is
-	  loaded from core/crates/api/target/release and the analysis pipeline runs
-	  the local ffmpeg on the user's own recording. Both are outside the app
-	  container, so a sandbox blocks them:
-
-	    dlopen(.../libsportcut_api.dylib) (file system sandbox blocked open())
+	  The macOS runner is unsandboxed while developing because it connects to
+	  the Sportcut service over a Unix socket outside the app container and
+	  reads playback files the service owns. A sandbox blocks both.
 
 	  Release.entitlements keeps the sandbox on. macOS is not a shipping target
 	  for this project (see the design's non-goals); this runner exists so the

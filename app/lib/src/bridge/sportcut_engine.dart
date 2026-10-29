@@ -1,9 +1,13 @@
-/// The application's typed entry point to the Rust engine.
+/// The application's typed entry point to the engine.
 ///
-/// The files under `generated/` are produced by `tools/generate-bridge.sh` and
-/// are not committed, so everything else in the app talks to the engine through
-/// this file: one small surface, with engine errors converted into a single
-/// exception type.
+/// The engine is a separate process. This file is the one place the app knows
+/// that: it opens a [ServiceConnection] to the Sportcut service, sends the
+/// protocol methods, and decodes the results into the model types in
+/// `models.dart`. Everything above it — features, repositories, providers —
+/// talks to this API and never to a socket.
+///
+/// There is no FFI here. The engine is not a shared library linked into the
+/// app; see `docs/adr/0001-rust-background-service.md`.
 ///
 /// Typical use:
 ///
@@ -22,61 +26,12 @@ library;
 
 import 'dart:io' show File, Platform;
 
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
-    show AnyhowException, FrbException, PanicException;
-import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
-    show ExternalLibrary;
 import 'package:path/path.dart' as p;
 
-import 'generated/dto.dart';
-import 'generated/facade.dart' as rust;
-import 'generated/frb_generated.dart';
+import 'models.dart';
+import 'protocol_client.dart';
 
-export 'generated/dto.dart'
-    show
-        ArtifactDto,
-        ArtifactManifestDto,
-        ArtifactStateDto,
-        CalibrationSaveDto,
-        CalibrationSaveRequestDto,
-        CalibrationSegmentDto,
-        CourtCalibrationDto,
-        CourtCornerDto,
-        CourtGeometryDto,
-        CourtOrientationDto,
-        EditClipDto,
-        EditTitleDto,
-        ExportRequestDto,
-        HighlightRankDto,
-        HighlightRallyDto,
-        HighlightRankingRequestDto,
-        JobHandleDto,
-        JobProgressDto,
-        JobStateDto,
-        JobStatusDto,
-        MediaImportRequestDto,
-        MediaMetadataDto,
-        ObservedPlayerCountDto,
-        OrientationDto,
-        PersonSelectionDto,
-        PlayerCourtSideDto,
-        PlayerGapDto,
-        PlayerObservationDto,
-        PlayerTrackFrameDto,
-        PlayerTrackWindowRequestDto,
-        PlayerTrackingConfigDto,
-        PlayerTrackingRequestDto,
-        PlayerTracksDto,
-        RallyActivitySpanDto,
-        RallyOutcomeDto,
-        RallySegmentationConfigDto,
-        RallySegmentationRequestDto,
-        RallySideDto,
-        RallySuggestionDto,
-        RallySuggestionsDto,
-        ServingSideDto,
-        ServingSideRequestDto,
-        TrackIntervalDto;
+export 'models.dart';
 
 /// Raised when the engine rejects a request or fails while working on one.
 ///
@@ -95,14 +50,16 @@ class SportcutEngineException implements Exception {
 
 /// The engine, as the rest of the application sees it.
 class SportcutEngine {
-  SportcutEngine._();
+  SportcutEngine._(this._connection);
 
   static SportcutEngine? _instance;
+
+  final ServiceConnection _connection;
 
   /// The initialized engine.
   ///
   /// Throws [StateError] when [initialize] has not completed, so a missing
-  /// initialization surfaces at the call site instead of as a native crash.
+  /// initialization surfaces at the call site instead of as a socket error.
   static SportcutEngine get instance {
     final engine = _instance;
     if (engine == null) {
@@ -116,59 +73,114 @@ class SportcutEngine {
   /// Whether [initialize] has completed.
   static bool get isInitialized => _instance != null;
 
-  /// Load the native engine and its bindings.
+  /// Connect to the engine service.
   ///
   /// Call once during startup, after `WidgetsFlutterBinding.ensureInitialized()`.
-  /// The shared library is located by the generated loader configuration, so
-  /// macOS and host-side tests all use the same call.
+  /// The endpoint and token come from the environment; a packaged build will
+  /// supply them by launching the service helper, which is ADR-0001 Phase 6.
+  /// For development, start the service with `tools/run-service.sh` and export
+  /// the endpoint and token it prints.
   static Future<SportcutEngine> initialize() async {
     final existing = _instance;
     if (existing != null) {
       return existing;
     }
-    await RustLib.init(externalLibrary: _bundledEngineLibrary());
-    final engine = SportcutEngine._();
+    final target = await _resolveTarget();
+    final connection = await ServiceConnection.open(
+      endpoint: target.endpoint,
+      token: target.token,
+    );
+    final engine = SportcutEngine._(connection);
     _instance = engine;
     return engine;
   }
 
-  /// The engine library when it is embedded in the macOS app bundle.
+  /// Where and how to reach the service.
   ///
-  /// A packaged build carries `libsportcut_api.dylib` in `Contents/Frameworks`
-  /// and the loader opens it directly. During development the file is absent,
-  /// so this returns `null` and the generated loader uses its configured dev
-  /// directory plus the `FRB_DART_LOAD_EXTERNAL_LIBRARY_NATIVE_LIB_DIR`
-  /// override that `tools/run-macos.sh` sets.
-  static ExternalLibrary? _bundledEngineLibrary() {
-    final contents = p.dirname(p.dirname(Platform.resolvedExecutable));
-    final candidate = p.join(contents, 'Frameworks', 'libsportcut_api.dylib');
-    return File(candidate).existsSync() ? ExternalLibrary.open(candidate) : null;
+  /// Resolution order: `--dart-define` values, then `SPORTCUT_ENDPOINT` with
+  /// `SPORTCUT_TOKEN` or `SPORTCUT_TOKEN_FILE`, then a state root in
+  /// `SPORTCUT_STATE_ROOT` using the layout `tools/run-service.sh` creates.
+  static Future<({String endpoint, String token})> _resolveTarget() async {
+    const defineEndpoint = String.fromEnvironment('SPORTCUT_ENDPOINT');
+    const defineToken = String.fromEnvironment('SPORTCUT_TOKEN');
+    if (defineEndpoint.isNotEmpty && defineToken.isNotEmpty) {
+      return (endpoint: defineEndpoint, token: defineToken);
+    }
+
+    final environment = Platform.environment;
+    final endpoint = environment['SPORTCUT_ENDPOINT'];
+    final token = environment['SPORTCUT_TOKEN'];
+    if (endpoint != null && endpoint.isNotEmpty && token != null && token.isNotEmpty) {
+      return (endpoint: endpoint, token: token);
+    }
+
+    final tokenFile = environment['SPORTCUT_TOKEN_FILE'];
+    if (endpoint != null && endpoint.isNotEmpty && tokenFile != null) {
+      return (endpoint: endpoint, token: _readToken(tokenFile));
+    }
+
+    final stateRoot = environment['SPORTCUT_STATE_ROOT'];
+    if (stateRoot != null && stateRoot.isNotEmpty) {
+      return (
+        endpoint: p.join(stateRoot, 'run', 's.sock'),
+        token: _readToken(p.join(stateRoot, 'run', 'token')),
+      );
+    }
+
+    throw SportcutEngineException(
+      'No Sportcut service is configured. Start the service with '
+      'tools/run-service.sh, then pass its endpoint and token with '
+      '--dart-define=SPORTCUT_ENDPOINT=... --dart-define=SPORTCUT_TOKEN=..., '
+      'or export SPORTCUT_ENDPOINT and SPORTCUT_STATE_ROOT.',
+    );
   }
 
-  /// Release the native engine. Mainly useful in tests.
+  static String _readToken(String path) {
+    final file = File(path);
+    if (!file.existsSync()) {
+      throw SportcutEngineException(
+        'The service token file is missing at $path. Start the service with '
+        'tools/run-service.sh and use the token it prints.',
+      );
+    }
+    return file.readAsStringSync().trim();
+  }
+
+  /// Close the connection and release the engine. Mainly useful in tests.
   static Future<void> dispose() async {
-    if (_instance == null) {
+    final engine = _instance;
+    if (engine == null) {
       return;
     }
     _instance = null;
-    RustLib.dispose();
+    await engine._connection.close();
   }
 
+  /// Notifications pushed by the service, such as `job.progress`.
+  Stream<ServiceNotification> get notifications => _connection.notifications;
+
   /// The ordered stages of a media import, for progress display.
-  Future<List<String>> importStages() =>
-      _guard(() async => rust.mediaImportStages());
+  Future<List<String>> importStages() => _guard(() async {
+        final result = await _connection.call('engine.importStages');
+        final stages = result?['stages'];
+        return stages is List ? stages.map((e) => e.toString()).toList() : const <String>[];
+      });
 
   /// Read metadata from a local recording.
-  Future<MediaMetadataDto> probe(String path) =>
-      _guard(() async => rust.probeMedia(path: path));
+  Future<MediaMetadataDto> probe(String path) => _guard(() async {
+        final result = await _connection.call('engine.probe', <String, dynamic>{
+          'source': <String, dynamic>{'kind': 'path', 'value': path},
+        });
+        return MediaMetadataDto.fromJson(_requireObject(result, 'engine.probe'));
+      });
 
   /// Start importing a recording into [matchDir].
   ///
-  /// The recording is referenced in place; nothing is copied. The call returns
-  /// as soon as the job is admitted: follow it with [jobStatus] and read the
-  /// match manifest once it reaches a terminal state. Re-importing a match whose
-  /// stages are already checkpointed completes without redoing work, and an
-  /// interrupted import resumes from its last completed stage.
+  /// The service owns recording custody: it copies the selected file into its
+  /// own store and the original is never modified. The call returns as soon as
+  /// the job is admitted; follow it with [jobStatus] and read the match manifest
+  /// once it reaches a terminal state. An interrupted import resumes from its
+  /// last completed stage.
   Future<JobHandleDto> startImport({
     required String matchId,
     required String originalPath,
@@ -176,64 +188,95 @@ class SportcutEngine {
     double samplingRate = 1,
   }) =>
       _guard(() async {
-        final request = MediaImportRequestDto(
-          matchId: matchId,
-          originalPath: originalPath,
-          matchDir: matchDir,
-          samplingRate: samplingRate,
+        final result = await _connection.call(
+          'engine.import.start',
+          <String, dynamic>{
+            'matchId': matchId,
+            'matchDir': matchDir,
+            'originalPath': originalPath,
+            'samplingRate': samplingRate,
+          },
         );
-        return rust.startImport(request: request);
+        return JobHandleDto.fromJson(_requireObject(result, 'engine.import.start'));
       });
 
   /// Read a match's manifest, including which artifacts are missing.
-  Future<ArtifactManifestDto> matchManifest(String matchDir) =>
-      _guard(() async => rust.matchManifest(matchDir: matchDir));
+  Future<ArtifactManifestDto> matchManifest(String matchDir) => _guard(() async {
+        final result = await _connection.call(
+          'engine.manifest',
+          _matchParams(matchDir),
+        );
+        return ArtifactManifestDto.fromJson(_requireObject(result, 'engine.manifest'));
+      });
 
   /// Derive the court geometry a marked segment defines.
   ///
   /// Nothing is stored. Call this while the user is still moving corners around
   /// to draw the projected court over the recording, and again to redisplay a
-  /// calibration the application already holds. Returns the mapping in both
-  /// directions as row-major nine-value matrices, together with the court outline
-  /// and net in normalized image coordinates.
+  /// calibration the application already holds.
   ///
   /// Throws [SportcutEngineException] when the corners cannot define a court.
   Future<CourtGeometryDto> courtGeometry(CalibrationSegmentDto segment) =>
-      _guard(() async => rust.courtGeometry(segment: segment));
+      _guard(() async {
+        final result = await _connection.call(
+          'engine.court.geometry',
+          <String, dynamic>{'segment': segment.toJson()},
+        );
+        return CourtGeometryDto.fromJson(
+          _requireObject(result, 'engine.court.geometry'),
+        );
+      });
 
   /// Store a match's court calibration in its artifact directory.
   ///
   /// A calibration that differs from the one it replaces invalidates the
-  /// artifacts derived from the previous court; the result names which. Write
-  /// the application's own catalog copy only after this call succeeds, so a
-  /// calibration the catalog holds always has a matching artifact behind it.
+  /// artifacts derived from the previous court; the result names which.
   Future<CalibrationSaveDto> saveCalibration({
     required String matchDir,
     required CourtCalibrationDto calibration,
   }) =>
       _guard(() async {
-        final request = CalibrationSaveRequestDto(
-          matchDir: matchDir,
-          calibration: calibration,
+        final result = await _connection.call(
+          'engine.calibration.save',
+          <String, dynamic>{
+            ..._matchParams(matchDir),
+            'calibration': calibration.toJson(),
+          },
         );
-        return rust.saveMatchCalibration(request: request);
+        return CalibrationSaveDto.fromJson(
+          _requireObject(result, 'engine.calibration.save'),
+        );
       });
 
   /// Read the court calibration stored for a match.
   ///
   /// `null` when the match has never been calibrated.
   Future<CourtCalibrationDto?> matchCalibration(String matchDir) =>
-      _guard(() async => rust.matchCalibration(matchDir: matchDir));
+      _guard(() async {
+        final result = await _connection.call(
+          'engine.calibration.get',
+          _matchParams(matchDir),
+        );
+        return result == null ? null : CourtCalibrationDto.fromJson(result);
+      });
 
   /// Start rebuilding the derived artifacts a match records but no longer has.
   Future<JobHandleDto> startRegenerate(
     String matchDir, {
     double samplingRate = 1,
   }) =>
-      _guard(() async => rust.startRegenerateMatchMedia(
-            matchDir: matchDir,
-            samplingRate: samplingRate,
-          ));
+      _guard(() async {
+        final result = await _connection.call(
+          'engine.regenerate.start',
+          <String, dynamic>{
+            ..._matchParams(matchDir),
+            'samplingRate': samplingRate,
+          },
+        );
+        return JobHandleDto.fromJson(
+          _requireObject(result, 'engine.regenerate.start'),
+        );
+      });
 
   /// Start rally-boundary analysis from a completed local track artifact.
   ///
@@ -244,24 +287,32 @@ class SportcutEngine {
     required String matchDir,
     required RallySegmentationConfigDto config,
   }) =>
-      _guard(() async => rust.startRallySegmentation(
-            request: RallySegmentationRequestDto(
-              matchDir: matchDir,
-              config: config,
-            ),
-          ));
+      _guard(() async {
+        final result = await _connection.call(
+          'engine.rally.start',
+          <String, dynamic>{
+            ..._matchParams(matchDir),
+            'config': config.toJson(),
+          },
+        );
+        return JobHandleDto.fromJson(_requireObject(result, 'engine.rally.start'));
+      });
 
   /// Read suggestions only when their tracks and thresholds are still current.
   Future<RallySuggestionsDto?> matchRallySuggestions({
     required String matchDir,
     required RallySegmentationConfigDto config,
   }) =>
-      _guard(() async => rust.matchRallySuggestions(
-            request: RallySegmentationRequestDto(
-              matchDir: matchDir,
-              config: config,
-            ),
-          ));
+      _guard(() async {
+        final result = await _connection.call(
+          'engine.rally.suggestions',
+          <String, dynamic>{
+            ..._matchParams(matchDir),
+            'config': config.toJson(),
+          },
+        );
+        return result == null ? null : RallySuggestionsDto.fromJson(result);
+      });
 
   /// Read player observations in one playback window from final, current tracks.
   /// Returns `null` when the match has no track artifact yet.
@@ -270,51 +321,77 @@ class SportcutEngine {
     required double startSeconds,
     required double endSeconds,
   }) =>
-      _guard(() async => rust.matchPlayerTracks(
-            request: PlayerTrackWindowRequestDto(
-              matchDir: matchDir,
-              startSeconds: startSeconds,
-              endSeconds: endSeconds,
-            ),
-          ));
+      _guard(() async {
+        final result = await _connection.call(
+          'engine.tracks.window',
+          <String, dynamic>{
+            ..._matchParams(matchDir),
+            'startSeconds': startSeconds,
+            'endSeconds': endSeconds,
+          },
+        );
+        return result == null ? null : PlayerTracksDto.fromJson(result);
+      });
 
-  /// Start local player analysis using the macOS trial runtime configured for
-  /// this development build. Parameters remain explicit until footage tuning.
+  /// Start local player analysis.
+  ///
+  /// The inference runtime and model are service-owned: the service resolves
+  /// them, and a request that names its own paths is rejected. [runtimePath] and
+  /// [modelPath] are therefore ignored, and kept only so existing call sites
+  /// compile while the tracking screen is simplified.
   Future<JobHandleDto> startPlayerTracking({
     required String matchDir,
     required PlayerTrackingConfigDto config,
     String? runtimePath,
     String? modelPath,
   }) =>
-      _guard(() async => rust.startPlayerTracking(
-            request: PlayerTrackingRequestDto(
-              matchDir: matchDir,
-              config: config,
-              runtimePath: runtimePath,
-              modelPath: modelPath,
-            ),
-          ));
+      _guard(() async {
+        final result = await _connection.call(
+          'engine.tracking.start',
+          <String, dynamic>{
+            ..._matchParams(matchDir),
+            'config': config.toJson(),
+          },
+        );
+        return JobHandleDto.fromJson(
+          _requireObject(result, 'engine.tracking.start'),
+        );
+      });
 
   /// Read the current state of a job that was started earlier.
-  Future<JobStatusDto> jobStatus(String jobId) =>
-      _guard(() async => rust.jobStatus(jobId: jobId));
+  Future<JobStatusDto> jobStatus(String jobId) => _guard(() async {
+        final result = await _connection.call(
+          'engine.job.status',
+          <String, dynamic>{'jobId': jobId},
+        );
+        return JobStatusDto.fromJson(_requireObject(result, 'engine.job.status'));
+      });
 
   /// Ask a started job to stop.
   ///
   /// Cancellation is cooperative, so the returned status may still be running.
-  Future<JobStatusDto> jobCancel(String jobId) =>
-      _guard(() async => rust.jobCancel(jobId: jobId));
+  Future<JobStatusDto> jobCancel(String jobId) => _guard(() async {
+        final result = await _connection.call(
+          'engine.job.cancel',
+          <String, dynamic>{'jobId': jobId},
+        );
+        return JobStatusDto.fromJson(_requireObject(result, 'engine.job.cancel'));
+      });
 
   /// Derive who served each rally from the confirmed winners.
   ///
   /// The result is used to propose the server as a tentative winner on
   /// unscored rallies and to show who serves next on the scoreboard.
-  Future<List<ServingSideDto>> servingSides(
-    List<RallyOutcomeDto> rallies,
-  ) =>
-      _guard(() async => rust.servingSides(
-            request: ServingSideRequestDto(rallies: rallies),
-          ));
+  Future<List<ServingSideDto>> servingSides(List<RallyOutcomeDto> rallies) =>
+      _guard(() async {
+        final result = await _connection.call(
+          'engine.servingSides',
+          <String, dynamic>{
+            'rallies': rallies.map((rally) => rally.toJson()).toList(),
+          },
+        );
+        return _decodeList(result, 'rallies', ServingSideDto.fromJson);
+      });
 
   /// Rank rallies into a suggested highlight order.
   ///
@@ -323,28 +400,68 @@ class SportcutEngine {
   Future<List<HighlightRankDto>> rankHighlights(
     List<HighlightRallyDto> rallies,
   ) =>
-      _guard(() async => rust.rankHighlights(
-            request: HighlightRankingRequestDto(rallies: rallies),
-          ));
+      _guard(() async {
+        final result = await _connection.call(
+          'engine.highlight.rank',
+          <String, dynamic>{
+            'rallies': rallies.map((rally) => rally.toJson()).toList(),
+          },
+        );
+        return _decodeList(result, 'rallies', HighlightRankDto.fromJson);
+      });
 
   /// Start rendering a match's highlight video from an edit decision list.
   ///
   /// The list is built from the match's catalog records, so the engine never
   /// reads the application's database. Follow the returned job with [jobStatus]
   /// and read the match manifest once it reaches a terminal state.
-  Future<JobHandleDto> startExport(ExportRequestDto request) =>
-      _guard(() async => rust.exportHighlight(request: request));
+  Future<JobHandleDto> startExport(ExportRequestDto request) => _guard(() async {
+        final result = await _connection.call(
+          'engine.export.start',
+          request.toJson(),
+        );
+        return JobHandleDto.fromJson(_requireObject(result, 'engine.export.start'));
+      });
 
-  /// Run an engine call, converting engine errors into one exception type.
+  /// The service resolves a match from its identifier; the directory is a
+  /// development affordance, so it is sent alongside the identifier.
+  static Map<String, dynamic> _matchParams(String matchDir) => <String, dynamic>{
+        'matchId': p.basename(matchDir),
+        'matchDir': matchDir,
+      };
+
+  static Map<String, dynamic> _requireObject(
+    Map<String, dynamic>? result,
+    String method,
+  ) {
+    if (result == null) {
+      throw SportcutEngineException('$method returned no result');
+    }
+    return result;
+  }
+
+  static List<T> _decodeList<T>(
+    Map<String, dynamic>? result,
+    String key,
+    T Function(Map<String, dynamic>) decode,
+  ) {
+    final items = result?[key];
+    if (items is! List) {
+      return <T>[];
+    }
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(decode)
+        .toList(growable: false);
+  }
+
+  /// Run an engine call, converting transport and protocol errors into one
+  /// exception type.
   Future<T> _guard<T>(Future<T> Function() body) async {
     try {
       return await body();
-    } on AnyhowException catch (error) {
+    } on ProtocolFailure catch (error) {
       throw SportcutEngineException(error.message);
-    } on PanicException catch (error) {
-      throw SportcutEngineException('the engine panicked: ${error.message}');
-    } on FrbException catch (error) {
-      throw SportcutEngineException(error.toString());
     }
   }
 }
