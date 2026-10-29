@@ -96,8 +96,8 @@ are MoSCoW. "Refuse" means: write nothing and show the named message.
 | ID | Requirement | Priority | Acceptance criterion |
 | --- | --- | --- | --- |
 | FR-RAL-01 | Start rally analysis as a background job from a match with final tracks and a named calibration. | Must | Selecting Analyze from Review & score returns a job handle; `job_status` reaches `completed`; no network call occurs (BR-1, NFR-1). |
-| FR-RAL-02 | Refuse analysis when player tracks are missing, naming the missing prerequisite. | Must | On a match with no tracks artifact, the start call returns an error containing "player tracks are unavailable; run player tracking before rally analysis", and no job starts (`core/crates/api/tests/unanalysed_match.rs`). |
-| FR-RAL-03 | Refuse analysis when the calibration artifact is missing or not final. | Must | A match with non-final or absent calibration returns "court calibration is unavailable; mark the court before rally analysis" (`core/crates/api/src/facade.rs`). |
+| FR-RAL-02 | Refuse analysis when player tracks are missing, naming the missing prerequisite. | Must | On a match with no tracks artifact, the start call returns an error containing "player tracks are unavailable; run player tracking before rally analysis", and no job starts (`core/adapters/api/tests/unanalysed_match.rs`). |
+| FR-RAL-03 | Refuse analysis when the calibration artifact is missing or not final. | Must | A match with non-final or absent calibration returns "court calibration is unavailable; mark the court before rally analysis" (`core/adapters/api/src/facade.rs`). |
 | FR-RAL-04 | Record the exact analysis inputs and derive a deterministic generation identifier. | Must | The stored inputs carry duration, tracks fingerprint, calibration id, audio fingerprint, and config; identical inputs produce the same `generation_id`, and a changed tracks fingerprint or config produces a different one. |
 | FR-RAL-05 | Publish the suggestion set atomically and only when final. | Must | The file is written to a temporary path and renamed, and the manifest entry becomes `Final` only after the rename; a cancelled or failed run leaves no final suggestion artifact. |
 | FR-RAL-06 | Treat a suggestion set whose inputs no longer match as absent, not as a result. | Must | Loading with mismatched inputs returns `None`; the UI offers analysis rather than showing stale candidates. |
@@ -211,7 +211,7 @@ commitment and any local requirement.
 
 | Requirement group | Evidence in the tree | Prior record |
 | --- | --- | --- |
-| Generation, freshness, atomic publish | `core/crates/rally/src/lib.rs`, `core/crates/storage/src/rally_suggestions.rs`, `core/crates/api/src/facade.rs`, `core/crates/api/tests/unanalysed_match.rs` | Baseline `docs/verification/rally-rest-segmentation.md` (one clip, 35 rallies, thresholds recorded) |
+| Generation, freshness, atomic publish | `core/entities/rally/src/lib.rs`, `core/gateways/storage/src/rally_suggestions.rs`, `core/adapters/api/src/facade.rs`, `core/adapters/api/tests/unanalysed_match.rs` | Baseline `docs/verification/rally-rest-segmentation.md` (one clip, 35 rallies, thresholds recorded) |
 | Manual marking, validation | `app/test/score_screen_test.dart` (5 widget tests), `app/test/editing_repository_test.dart` (13 tests) | Baseline `docs/verification/manual-editing-and-export.md` |
 | Decision persistence | `app/lib/src/features/editing/data/editing_store.dart`, `match_catalog.dart` migration v4 | **No test.** No case in `editing_repository_test.dart` calls accept or dismiss. |
 | Timeline and clip interactions | `editing_repository_test.dart`: keep, trim, reorder, detach on delete | Baseline `docs/verification/client-track.md` (test inventory) |
@@ -265,7 +265,7 @@ accuracy has never been measured against labels.
 
 | Requirement | Shared requirement | Design contract | Owning code | Verification |
 | --- | --- | --- | --- | --- |
-| FR-RAL-01..14 | BR-3, BR-11, NFR-2, NFR-3 | — | `core/crates/rally/src/lib.rs`, `core/crates/storage/src/rally_suggestions.rs`, `core/crates/api/src/facade.rs` | `core/crates/api/tests/unanalysed_match.rs`; baseline `docs/verification/rally-rest-segmentation.md` |
+| FR-RAL-01..14 | BR-3, BR-11, NFR-2, NFR-3 | — | `core/entities/rally/src/lib.rs`, `core/gateways/storage/src/rally_suggestions.rs`, `core/adapters/api/src/facade.rs` | `core/adapters/api/tests/unanalysed_match.rs`; baseline `docs/verification/rally-rest-segmentation.md` |
 | FR-RAL-15..24 | BR-3 | §5, §6 Clip row | `app/lib/src/features/rally/presentation/rally_review_providers.dart`, `app/lib/src/features/editing/data/editing_store.dart` | Gap: no test |
 | FR-RAL-25..28 | BR-3, BR-4 | §6 Actions, §8 Voice | `app/lib/src/features/score/presentation/score_view.dart`, `app/lib/src/features/editing/data/editing_repository.dart` | `app/test/score_screen_test.dart` |
 | FR-RAL-29..31 | BR-5 | §6 Timeline, Clip row | `app/lib/src/features/editing/data/editing_store.dart`, `editing_repository.dart` | `app/test/editing_repository_test.dart` |

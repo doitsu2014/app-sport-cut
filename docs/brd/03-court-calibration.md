@@ -28,8 +28,8 @@ the marks and sends them over the
 validates, writes the calibration artifact, and writes the catalog copy. This
 note supersedes "the client stores" and "SQLite in the client" wording below.
 The marking workflow, validation rules, and acceptance outcomes are unchanged.
-See [protocol.md §6.3](../architecture/protocol.md#63-calibration-composite)
-and [background-service.md §6.2](../architecture/background-service.md#62-catalog).
+See [protocol.md §6.3](../architecture/protocol.md#83-calibration-composite)
+and [background-service.md §6.2](../architecture/background-service.md#72-catalog).
 
 ## 1. Purpose and users
 
@@ -183,14 +183,14 @@ noted.
 | Save failure is reported | Controller file, `a save that fails is reported rather than silently dropped` | Pass at baseline |
 | Stored court reloads | Controller file, `opening a calibrated match loads the court the user marked` | Pass at baseline |
 | Engine rejection is shown | Controller file, `a court the engine rejects is reported and nothing is drawn`; screen file, `a court the engine rejects is reported to the user` | Pass at baseline |
-| Geometry properties, not fixtures | [court/src/lib.rs](../../core/crates/court/src/lib.rs) and [homography.rs](../../core/crates/court/src/homography.rs): `cargo test -p sportcut-court` returns 20 passed, 0 failed; re-run 2026-10-29 | Pass |
+| Geometry properties, not fixtures | [court/src/lib.rs](../../core/entities/court/src/lib.rs) and [homography.rs](../../core/entities/court/src/homography.rs): `cargo test -p sportcut-court` returns 20 passed, 0 failed; re-run 2026-10-29 | Pass |
 | Mapping round-trips and centre invariant | `mapping_a_projected_court_round_trips`; `the_court_centre_is_where_the_marked_quadrilaterals_diagonals_cross` | Pass |
 | Invalid geometry rejected by name | Five rejection tests in `court/src/lib.rs`: repeated corner, straight line, outside frame, wrong winding, near-zero area | Pass |
 | Net and side follow orientation | `the_net_falls_on_the_courts_long_axis`; `a_position_is_assigned_the_half_of_the_net_it_falls_in` | Pass |
-| Artifact written and read back | [facade.rs](../../core/crates/api/tests/facade.rs), `saving_a_calibration_writes_the_artifact_and_reads_back`; `saving_the_same_calibration_again_discards_nothing` | Pass at baseline |
+| Artifact written and read back | [facade.rs](../../core/adapters/api/tests/facade.rs), `saving_a_calibration_writes_the_artifact_and_reads_back`; `saving_the_same_calibration_again_discards_nothing` | Pass at baseline |
 | Missing calibration is not invented | Same file, `a_match_reports_no_calibration_until_one_is_saved`; `a_missing_calibration_is_reported_as_needing_the_user` | Pass at baseline |
 | Catalog persistence | [match_catalog_test.dart](../../app/test/match_catalog_test.dart), `a court calibration is stored on the match and read back` | Pass at baseline |
-| Bridge round trip (baseline; retired by ADR-0001) | [bridge_test.dart](../../app/test/bridge_test.dart), `a calibration crosses the bridge, is stored, and reads back` | Pass at baseline; the equivalent evidence is protocol conformance for `library.calibration.save` |
+| Transport round trip (FFI baseline; retired) | The FFI bridge test that exercised `a calibration crosses the bridge, is stored, and reads back` was deleted with the FFI path | Superseded: the equivalent evidence is protocol conformance for `engine.calibration.save` and `engine.calibration.get` |
 | Rotation-normalized space | Rotation-tagged fixture check in `docs/verification/court-calibration.md` at `1541c64`: proxy and frames carry rotation; stored pixels do not | Recorded manual check |
 | Design conformance (dashed net, handle 24/44, accent-on-drag) | No automated design or visual test exists | Gap |
 | Real-footage calibration accuracy | Every fixture is synthetic; no labeled real recording has been marked and checked | Gap |
@@ -203,9 +203,9 @@ camera reads as near/far while the score screen says left/right.
 
 | Type | Dependency or constraint | What this feature needs |
 | --- | --- | --- |
-| Internal | [sportcut-court](../../core/crates/court/src/lib.rs) | Validation, homography, net derivation, side assignment |
+| Internal | [sportcut-court](../../core/entities/court/src/lib.rs) | Validation, homography, net derivation, side assignment |
 | Internal | `sportcut-storage` | Match directory, manifest, calibration artifact persistence |
-| Internal | [sportcut-api facade](../../core/crates/api/src/facade.rs) | `court_geometry`, `save_match_calibration`, `match_calibration` |
+| Internal | [sportcut-api facade](../../core/adapters/api/src/facade.rs) | `court_geometry`, `save_match_calibration`, `match_calibration` |
 | Internal | Flutter playback controller | Frame surface and aspect ratio for the handle box |
 | Internal | Catalog v1 column `court_calibration` | Source of truth across restarts |
 | Internal | [workspace studio](../../app/lib/src/features/workspace/presentation/workspace_studio_screen.dart) | Hosts the view and refreshes the pipeline stage |
@@ -245,9 +245,9 @@ documentation references. Shared objectives that gate this feature: BO-5 and BO-
 | BR-3 Semi-automatic, user-confirmed | FR-CAL-01–18, FR-CAL-21 | §6 Overlays | [calibration_view.dart](../../app/lib/src/features/calibration/presentation/calibration_view.dart), [calibration_controller.dart](../../app/lib/src/features/calibration/presentation/calibration_controller.dart) | `calibration_*_test.dart` |
 | BR-8 Design fidelity | FR-CAL-07–09 | DESIGN §6, §7; DS-1, DS-3, DS-9, DS-11 | Same view | Gap; see §5 |
 | BR-9 Accessibility | FR-CAL-02, FR-CAL-04 | DS-15; DESIGN §6 | Handle hit area | Gap at 40 px |
-| BR-11 Recoverable jobs | FR-CAL-15, FR-CAL-20 | — | [facade.rs](../../core/crates/api/tests/facade.rs) | Facade tests |
+| BR-11 Recoverable jobs | FR-CAL-15, FR-CAL-20 | — | [facade.rs](../../core/adapters/api/tests/facade.rs) | Facade tests |
 | NFR-4 Data integrity | FR-CAL-14, FR-CAL-18, FR-CAL-22 | — | [court_calibration.dart](../../app/lib/src/features/calibration/domain/court_calibration.dart), storage | `match_catalog_test.dart`, facade tests |
-| Mapping correctness (BO-5 input) | FR-CAL-06, FR-CAL-23 | — | [court/src/lib.rs](../../core/crates/court/src/lib.rs), [homography.rs](../../core/crates/court/src/homography.rs) | 20 court tests |
+| Mapping correctness (BO-5 input) | FR-CAL-06, FR-CAL-23 | — | [court/src/lib.rs](../../core/entities/court/src/lib.rs), [homography.rs](../../core/entities/court/src/homography.rs) | 20 court tests |
 | Pipeline placement | FR-CAL-01, FR-CAL-16 | DESIGN §6 Pipeline row | [pipeline_stage.dart](../../app/lib/src/features/workspace/domain/pipeline_stage.dart) | Indirect screen tests |
 
 Prior verification record: `docs/verification/court-calibration.md` at baseline

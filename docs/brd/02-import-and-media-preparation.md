@@ -23,10 +23,10 @@
   [tokens.css](../../design-system/tokens.css).
 - Code: [`app/lib/src/features/library/`](../../app/lib/src/features/library/),
   [`app/lib/src/features/analysis/`](../../app/lib/src/features/analysis/),
-  [`core/crates/media/`](../../core/crates/media/),
-  [`core/crates/jobs/`](../../core/crates/jobs/),
-  [`core/crates/storage/`](../../core/crates/storage/),
-  [`core/crates/api/src/facade.rs`](../../core/crates/api/src/facade.rs).
+  [`core/use-cases/media/`](../../core/use-cases/media/),
+  [`core/use-cases/jobs/`](../../core/use-cases/jobs/),
+  [`core/gateways/storage/`](../../core/gateways/storage/),
+  [`core/adapters/api/src/facade.rs`](../../core/adapters/api/src/facade.rs).
 - Prior verification at baseline `1541c64`, cited for provenance (not part of
   the working tree): `docs/verification/media-pipeline.md`,
   `docs/verification/video-import.md`,
@@ -50,10 +50,10 @@ outcomes are unchanged.
 The file handoff is one of two proofs: a security-scoped bookmark resolved by
 the helper, or a one-file inbox handoff (`<uuid>.part` → `.ready`, SHA-256
 verified by the service, deleted after custody). Exactly one ships; see
-[background-service.md §7.3](../architecture/background-service.md#73-sandbox-file-handoff).
+[background-service.md §7.3](../architecture/background-service.md#83-sandbox-file-handoff).
 The service rules are in
-[background-service.md §6.3](../architecture/background-service.md#63-recording-store)
-and [protocol.md §6.1](../architecture/protocol.md#61-workspaces-and-matches).
+[background-service.md §6.3](../architecture/background-service.md#73-recording-store)
+and [protocol.md §6.1](../architecture/protocol.md#81-workspaces-and-matches).
 
 ## 1. Purpose, users, and relationship to the product BRD
 
@@ -118,11 +118,11 @@ Status uses Done / Partial / Not started. Partial work is not rounded up.
 | Capability | Status | Evidence and remaining gap |
 | --- | --- | --- |
 | File picking, cancel, picker failure | Done | [`video_file_picker.dart`](../../app/lib/src/features/library/data/video_file_picker.dart), [`import_controller.dart`](../../app/lib/src/features/library/presentation/import_controller.dart) |
-| Probe and input rejection | Done | [`probe.rs`](../../core/crates/media/src/probe.rs), `core/crates/media/tests/media_pipeline.rs` |
+| Probe and input rejection | Done | [`probe.rs`](../../core/use-cases/media/src/probe.rs), `core/use-cases/media/tests/media_pipeline.rs` |
 | App-owned copy, atomic write, cancel cleanup | Done | [`recording_store.dart`](../../app/lib/src/features/library/data/recording_store.dart), `app/test/match_repository_test.dart` |
-| Proxy, analysis audio, frames, manifest | Done | [`pipeline.rs`](../../core/crates/media/src/pipeline.rs), `core/crates/media/tests/media_pipeline.rs` |
-| Job admission, checkpoints, resume, cancel | Done | [`registry.rs`](../../core/crates/jobs/src/registry.rs), [`checkpoint.rs`](../../core/crates/jobs/src/checkpoint.rs), `core/crates/jobs/tests/job_lifecycle.rs` |
-| Regeneration of missing artifacts | Done | `pipeline.rs::regenerate_missing`, `core/crates/api/tests/facade.rs` |
+| Proxy, analysis audio, frames, manifest | Done | [`pipeline.rs`](../../core/use-cases/media/src/pipeline.rs), `core/use-cases/media/tests/media_pipeline.rs` |
+| Job admission, checkpoints, resume, cancel | Done | [`registry.rs`](../../core/use-cases/jobs/src/registry.rs), [`checkpoint.rs`](../../core/use-cases/jobs/src/checkpoint.rs), `core/use-cases/jobs/tests/job_lifecycle.rs` |
+| Regeneration of missing artifacts | Done | `pipeline.rs::regenerate_missing`, `core/adapters/api/tests/facade.rs` |
 | Import progress percentage | Not started | The bar is indeterminate and the copy reports no fraction ([`workspace_studio_screen.dart`](../../app/lib/src/features/workspace/presentation/workspace_studio_screen.dart)) |
 | Rebuild count excludes artifacts the engine cannot rebuild | Not started | The view counts every missing artifact; the facade exposes `not_rebuildable_kinds` but the client never reads it |
 | Analysis view against the design components | Partial | The view uses Material cards, a data table, and an ad-hoc chip rather than the design's pipeline row and progress job |
@@ -220,7 +220,7 @@ requirements are DS-1 to DS-15 ([00 §7](00-product-context.md#7-shared-design-s
 | Data integrity | NFR-4 | Manifest schema 3 and checkpoint schema 1 are versioned; a manifest from a newer engine is refused with an explicit message rather than misread |
 | Least privilege | NFR-5 | The macOS build requests read-only access to user-selected files; the picked file is read and never written |
 | Testability | NFR-7 | Media stages are tested without Flutter, and the client view is tested against a fake engine; new behavior ships with a test |
-| Engine independence | NFR-8 | `core/crates/media` and `core/crates/jobs` build and test with default features and no client toolchain |
+| Engine independence | NFR-8 | `core/use-cases/media` and `core/use-cases/jobs` build and test with default features and no client toolchain |
 | Actionable diagnostics | NFR-13 | Every failure names the file or match and the reason, and no diagnostic leaves the device. Sampling is capped at 30 frames per second so a long recording cannot fill the disk without bound |
 
 ## 7. Acceptance and verification evidence
@@ -230,14 +230,14 @@ Flutter or Dart toolchain and no `ffmpeg` are installed here.
 
 | Requirement group | Evidence | Result recorded |
 | --- | --- | --- |
-| Probe and input rejection | `core/crates/media/tests/media_pipeline.rs`: `probe_returns_metadata_for_a_readable_file`, `probe_reports_missing_truncated_and_non_media_inputs` | Passing at the `media-pipeline` baseline |
+| Probe and input rejection | `core/use-cases/media/tests/media_pipeline.rs`: `probe_returns_metadata_for_a_readable_file`, `probe_reports_missing_truncated_and_non_media_inputs` | Passing at the `media-pipeline` baseline |
 | Proxy and non-destructive custody | Same file: `proxy_is_reduced_in_resolution_and_leaves_the_original_untouched` | Passing |
 | Audio, including a silent source | Same file: `audio_is_extracted_and_a_silent_pipeline_continues_without_it` | Passing |
 | Frames and rate validation | Same file: `frames_are_sampled_at_the_requested_rate_with_original_timestamps`, `unsupported_and_invalid_sampling_rates_are_rejected` | Passing |
 | Manifest, regeneration, cancellation, resume | Same file: `pipeline_writes_artifacts_under_one_directory_and_records_them`, `derived_artifacts_are_regenerable_without_re_importing`, `cancellation_marks_partial_artifacts_non_final`, `a_stage_recorded_as_complete_is_not_re_executed` | Passing |
-| Offline | `core/crates/media/tests/offline.rs`: `pipeline_completes_with_network_access_unavailable`, `media_crate_contains_no_network_dependency_or_call` | Passing |
-| Facade import, repair, cancel, refusal | `core/crates/api/tests/facade.rs`: `importing_through_the_facade_produces_the_contract_the_client_expects`, `a_match_missing_derived_artifacts_can_be_repaired_through_the_facade`, `a_source_without_audio_imports_and_reports_no_analysis_audio`, `an_unreadable_source_surfaces_an_error_instead_of_a_partial_match`, `a_cancelled_import_stops_and_leaves_nothing_final`, `a_conflicting_job_is_refused_by_name_and_the_slot_is_released` | Passing |
-| Job lifecycle | `core/crates/jobs/tests/job_lifecycle.rs`: seven cases covering progress, completion, failure, resume, cancellation, same-match rejection, and heavy-slot release | Passing |
+| Offline | `core/use-cases/media/tests/offline.rs`: `pipeline_completes_with_network_access_unavailable`, `media_crate_contains_no_network_dependency_or_call` | Passing |
+| Facade import, repair, cancel, refusal | `core/adapters/api/tests/facade.rs`: `importing_through_the_facade_produces_the_contract_the_client_expects`, `a_match_missing_derived_artifacts_can_be_repaired_through_the_facade`, `a_source_without_audio_imports_and_reports_no_analysis_audio`, `an_unreadable_source_surfaces_an_error_instead_of_a_partial_match`, `a_cancelled_import_stops_and_leaves_nothing_final`, `a_conflicting_job_is_refused_by_name_and_the_slot_is_released` | Passing |
+| Job lifecycle | `core/use-cases/jobs/tests/job_lifecycle.rs`: seven cases covering progress, completion, failure, resume, cancellation, same-match rejection, and heavy-slot release | Passing |
 | Client import path | `app/test/match_repository_test.dart`: custody, missing file, unreadable codec, denied access, cancelled copy, unwritable copy, full device | Passing at the `video-import` baseline |
 | Client analysis view | `app/test/analysis_screen_test.dart`: eleven cases including cancel, failure reason, unprepared match, and another job running | Passing at the `client-track` baseline |
 | Import progress percentage | No test and no implementation | Not verified |
@@ -294,13 +294,13 @@ feature is called Done again.
 
 | Business requirement | Functional requirements | Design contract | Owning code | Verification |
 | --- | --- | --- | --- | --- |
-| BR-1 Offline and private | FR-IMP-35 | — | [`pipeline.rs`](../../core/crates/media/src/pipeline.rs), [`offline.rs`](../../core/crates/media/tests/offline.rs) | `offline.rs` |
+| BR-1 Offline and private | FR-IMP-35 | — | [`pipeline.rs`](../../core/use-cases/media/src/pipeline.rs), [`offline.rs`](../../core/use-cases/media/tests/offline.rs) | `offline.rs` |
 | BR-2 Recording custody | FR-IMP-04 to FR-IMP-12 | DESIGN.md §6 | [`recording_store.dart`](../../app/lib/src/features/library/data/recording_store.dart), [`match_repository.dart`](../../app/lib/src/features/library/data/match_repository.dart) | `match_repository_test.dart` |
 | BR-8 Design fidelity | FR-IMP-14, FR-IMP-15, FR-IMP-30 | DESIGN.md §6, §8, §10; USAGE.md | [`analysis_view.dart`](../../app/lib/src/features/analysis/presentation/analysis_view.dart) | `analysis_screen_test.dart` covers behavior, not visual contract |
 | BR-9 Accessibility | FR-IMP-14, FR-IMP-30 | USAGE.md checklist | Analysis view and studio progress panel | Gap: no accessibility audit recorded |
-| BR-11 Recoverable jobs | FR-IMP-21 to FR-IMP-27 | DESIGN.md §6 | [`registry.rs`](../../core/crates/jobs/src/registry.rs), [`checkpoint.rs`](../../core/crates/jobs/src/checkpoint.rs), [`analysis_providers.dart`](../../app/lib/src/features/analysis/presentation/analysis_providers.dart) | `job_lifecycle.rs`, `analysis_screen_test.dart` |
-| NFR-1 Offline | FR-IMP-35 | — | [`toolchain.rs`](../../core/crates/media/src/toolchain.rs) | `offline.rs` |
-| NFR-3 Crash safety | FR-IMP-08, FR-IMP-21, FR-IMP-22 | — | [`manifest.rs`](../../core/crates/storage/src/manifest.rs), [`checkpoint.rs`](../../core/crates/jobs/src/checkpoint.rs) | `media_pipeline.rs`, `job_lifecycle.rs` |
+| BR-11 Recoverable jobs | FR-IMP-21 to FR-IMP-27 | DESIGN.md §6 | [`registry.rs`](../../core/use-cases/jobs/src/registry.rs), [`checkpoint.rs`](../../core/use-cases/jobs/src/checkpoint.rs), [`analysis_providers.dart`](../../app/lib/src/features/analysis/presentation/analysis_providers.dart) | `job_lifecycle.rs`, `analysis_screen_test.dart` |
+| NFR-1 Offline | FR-IMP-35 | — | [`toolchain.rs`](../../core/use-cases/media/src/toolchain.rs) | `offline.rs` |
+| NFR-3 Crash safety | FR-IMP-08, FR-IMP-21, FR-IMP-22 | — | [`manifest.rs`](../../core/gateways/storage/src/manifest.rs), [`checkpoint.rs`](../../core/use-cases/jobs/src/checkpoint.rs) | `media_pipeline.rs`, `job_lifecycle.rs` |
 | NFR-4 Data integrity | FR-IMP-23, FR-IMP-26 | — | Manifest and checkpoint schemas | `media_pipeline.rs` |
 
 ## 10. Approval

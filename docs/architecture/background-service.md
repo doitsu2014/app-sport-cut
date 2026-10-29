@@ -5,17 +5,41 @@
 | Status | Proposed target architecture |
 | Date | 2026-10-29 |
 | Decision | [ADR-0001](../adr/0001-rust-background-service.md) — backend-complete Rust service |
+| Engine layering | [Engine layering](layering.md) — Clean Architecture layers and crate rules |
 | Protocol | [Sportcut Service Protocol v1](protocol.md) |
 | Migration | [Migration from FFI](migration-from-ffi.md) |
 | Requirements | [Product context](../brd/00-product-context.md) |
 
-This document describes the target runtime architecture after ADR-0001. It is
-the implementation reference for the service boundary, process lifecycle,
-packaging, and enforcement. It does not change product behavior: the 17 facade
-calls, the one-heavy-job rule, progress, cancellation, checkpoints, artifacts,
-and error semantics are preserved; only their transport and ownership change.
+## 1. Scope and related documents
 
-## 1. Goals and non-goals
+This document describes the target runtime architecture of the Sportcut
+background service after ADR-0001: the process boundary, the wire transport,
+lifecycle and supervision, data ownership, security, packaging, and the
+enforcement that keeps Rust out of the Flutter app. It does not restate the
+engine's internal design or the exact wire shapes.
+
+Three documents hold the detail this one relies on:
+
+- [Engine layering](layering.md) defines the Clean Architecture layers, the
+  allowed crate dependencies, the ports, and the single declared adapter
+  exception. Its layer model is decided by
+  [ADR-0002](../adr/0002-clean-architecture-engine.md). This document names the
+  layer and directory of every engine component it touches but does not restate
+  the dependency rules.
+- [protocol.md](protocol.md) is the normative wire contract: framing, handshake,
+  methods, DTOs, error codes, progress, and limits. §6 summarises it and defers
+  to it for exact shapes.
+- [ADR-0001](../adr/0001-rust-background-service.md) records why the backend is
+  a separate process and why the service owns the catalog, recording custody,
+  jobs, and export.
+
+Where the documents overlap, `protocol.md` wins on wire details and
+`layering.md` wins on crate dependencies. This document does not change product
+behaviour: the 17 facade calls, the one-heavy-job rule, progress, cancellation,
+checkpoints, artifacts, and error semantics are preserved; only their transport
+and ownership change.
+
+## 2. Goals and non-goals
 
 ### Goals
 
@@ -43,7 +67,7 @@ and error semantics are preserved; only their transport and ownership change.
 - Moving UI rendering, the design system, playback, or the share sheet into the
   service.
 
-## 2. Component diagram
+## 3. Component diagram
 
 ```text
 ┌───────────────────────────── Sportcut.app (Flutter, macOS) ─────────────────────────────┐
@@ -64,34 +88,81 @@ and error semantics are preserved; only their transport and ownership change.
         │  (fallback: NSXPCConnection carrying the same messages)
 ┌───────▼──────────────────────── SportcutService (separate Rust process) ────────────────┐
 │                                                                                         │
-│  Transport            RPC dispatcher            Method handlers                         │
-│  UDS listener  ─────► framing, auth,   ───────► service.*   (lifecycle, health)         │
-│  (or XPC shim)        version check,            engine.*    (17 facade methods)          │
-│                       idempotency               library.*   (catalog + custody CRUD)    │
-│                                                 job.*       (status, cancel, list)       │
-│                                                                                         │
-│  ┌───────────────────┐  ┌───────────────────┐  ┌─────────────────────────────────────┐  │
-│  │ Catalog           │  │ RecordingStore    │  │ Engine                              │  │
-│  │ SQLite v6         │  │ recordings/<id>/  │  │ sportcut-api facade                 │  │
-│  │ workspaces        │  │ .part + rename    │  │ media, court, vision, rally, score, │  │
-│  │ matches           │  │ no-space handling │  │ highlight, export, jobs, storage    │  │
-│  │ rallies, scores   │  └───────────────────┘  └──────────────┬──────────────────────┘  │
-│  │ clips, settings   │                                        │                         │
-│  └───────────────────┘                                        ▼                         │
-│                                                    Artifact store                      │
-│                                                    matches/<id>/manifest.json           │
-│                                                    proxy/ audio/ frames/ tracks/        │
-│                                                    calibration/ export/ checkpoints     │
-│                                                                                         │
-│  Media toolchain: ffmpeg / ffprobe as child processes (argument arrays, no shell)        │
+│  LAYER 3 — core/adapters/service          interface adapter                             │
+│  ┌──────────────────┐  ┌───────────────────────┐  ┌──────────────────────────────────┐  │
+│  │ Transport        │─►│ RPC dispatcher        │─►│ Method handlers                  │  │
+│  │ UDS listener     │  │ framing, auth,        │  │ service.*   engine.*             │  │
+│  │ (or XPC shim)    │  │ version, idempotency  │  │ library.*   job.*                │  │
+│  └──────────────────┘  └───────────────────────┘  └──────────────┬───────────────────┘  │
+│                                              service-owned stores │                      │
+│                                              Catalog (SQLite v6)  │                      │
+│                                              RecordingStore       │                      │
+│                                                                   │                      │
+│                               declared exception (§3.1) ─────────┤                      │
+│                                                                   ▼                      │
+│  LAYER 3 — core/adapters/api    sportcut-api: the use cases and their DTOs; an          │
+│                                 ordinary library parked here pending a move inward      │
+│                                     │                                                   │
+│                                     ▼                                                   │
+│  LAYER 1 — core/use-cases/      sportcut-media   sportcut-vision   sportcut-export      │
+│                                 sportcut-jobs    (sportcut-eval is CLI-only)            │
+│                                     │                                                   │
+│  LAYER 0 — core/entities/       sportcut-common  sportcut-court   sportcut-rally        │
+│                                 sportcut-score   sportcut-highlight                     │
+│                                     │  ports: ArtifactStore (media),                    │
+│                                     │         CheckpointStore (jobs)                    │
+│  LAYER 2 — core/gateways/       sportcut-storage  implements both ports over the        │
+│                                 filesystem; sportcut-protocol encodes the wire          │
+│                                 contract as data                                        │
+│                                     │                                                   │
+│  Artifact store  matches/<id>/manifest.json, checkpoints.json,                          │
+│                  proxy/ audio/ frames/ calibration/ tracks/ export/                     │
+│  Media toolchain: ffmpeg / ffprobe as child processes (argument arrays, no shell)       │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
+
+core/drivers/cli (LAYER 4) is a separate composition root for headless work. It is not
+part of the service process and is never shipped inside Sportcut.app.
 ```
 
 The service is a separate Mach-O executable with its own PID and address space.
 The Flutter app never loads it; it launches it and talks to it. `otool -L` on
 the Flutter executable shows no Sportcut Rust library.
 
-## 3. Service boundary
+Source dependencies point inward: adapters → use cases → entities. Calls run
+outward through the ports: a use case asks `ArtifactStore` or `CheckpointStore`
+for data, and `sportcut-storage` answers. `sportcut-protocol` is pure data, so
+both the service adapter and the Flutter client's protocol models can be
+checked against the same contract.
+
+### 3.1 Engine layers and the declared exception
+
+| Layer | Directory | Crates | Role |
+| --- | --- | --- | --- |
+| 0 | `core/entities/` | `sportcut-common`, `sportcut-court`, `sportcut-rally`, `sportcut-score`, `sportcut-highlight` | Rules over data; no filesystem, process, environment, or network access |
+| 1 | `core/use-cases/` | `sportcut-media`, `sportcut-vision`, `sportcut-export`, `sportcut-jobs`, `sportcut-eval` | Application orchestration; each declares the ports it needs. `sportcut-eval` is driven by `sportcut-cli` |
+| 2 | `core/gateways/` | `sportcut-storage`, `sportcut-protocol` | Storage implements the ports over the filesystem; protocol encodes the wire contract as data |
+| 3 | `core/adapters/` | `sportcut-service`, `sportcut-api` | JSON-RPC translation. `sportcut-api` holds the use cases and is parked here pending a move to `core/use-cases/` |
+| 4 | `core/drivers/` | `sportcut-cli` | Headless composition root; not part of the service process |
+
+The two ports the service relies on are declared inward and implemented in the
+storage gateway:
+
+| Port | Declared in | Implemented by |
+| --- | --- | --- |
+| `ArtifactStore` | `sportcut-media` (`core/use-cases/media`), module `pipeline` | `sportcut-storage` (`core/gateways/storage`), `MatchDirectory` |
+| `CheckpointStore` | `sportcut-jobs` (`core/use-cases/jobs`), module `checkpoint` | `sportcut-storage` (`core/gateways/storage`), `CheckpointStore` |
+
+`core/adapters/service` depends on `core/adapters/api`. This is the one
+declared adapter-to-adapter edge in the workspace. The engine's use cases live
+in `sportcut-api`, which is an ordinary library — no FFI, no generated code, no
+client toolchain — but which is parked in `adapters/`, so the check sees two
+adapters. The edge is recorded in `layering.md` and in
+`tools/check-layering.sh` with the same removal condition: moving the crate to
+`core/use-cases/` makes the edge adapter → use case, which the rule allows, and
+deletes the exception. The Flutter client no longer links Rust at all, so no
+client contract depends on where this crate sits.
+
+## 4. Service boundary
 
 The boundary rule is simple: **durable state and product operations belong to
 the service; ephemeral view state belongs to the client.**
@@ -141,9 +212,9 @@ service:
 Presentation code, providers, playback, and the design system stay in the
 client.
 
-## 4. Process, lifecycle, and supervision
+## 5. Process, lifecycle, and supervision
 
-### 4.1 Executable and launch
+### 5.1 Executable and launch
 
 - Primary path: `Sportcut.app/Contents/Helpers/SportcutService`, a universal
   Mach-O signed with the same Team ID as the app.
@@ -156,7 +227,7 @@ client.
     `<state-root>/run/service.sock` only for a non-sandboxed build when it fits.
     `sun_path` is 104 bytes including the terminator; the service refuses a
     path over 103 bytes with an actionable `endpoint_too_long` error and never
-    truncates. See [protocol.md §1.1](protocol.md#11-primary-transport);
+    truncates. See [protocol.md §1.1](protocol.md#31-primary-transport);
   - `--parent-pid <pid>` — the app process to supervise;
   - `--log-level <error|warn|info|debug>`;
   - `--ffmpeg <path>` and `--ffprobe <path>` — explicit media tool binaries.
@@ -173,11 +244,12 @@ client.
   discovery and inference asset resolution. It resolves the inference assets
   once at startup, before any worker thread starts, and publishes every explicit
   tool path and every resolved asset as `SPORTCUT_FFMPEG`, `SPORTCUT_FFPROBE`,
-  `SPORTCUT_TFLITE_LIBRARY`, and `SPORTCUT_PERSON_MODEL`. The media facade and
-  the player-tracking job therefore read the same service-owned paths. A
-  client-supplied `runtimePath` or `modelPath` on `engine.tracking.start` is
-  rejected with `invalid_params`; the service never lets a caller override its
-  configured runtime or model.
+  `SPORTCUT_TFLITE_LIBRARY`, and `SPORTCUT_PERSON_MODEL`. The media use case
+  (`sportcut-media`, `core/use-cases/media`) and the player-tracking job hosted
+  by the `sportcut-api` adapter (`core/adapters/api`) therefore read the same
+  service-owned paths. A client-supplied `runtimePath` or `modelPath` on
+  `engine.tracking.start` is rejected with `invalid_params`; the service never
+  lets a caller override its configured runtime or model.
 - `ffmpeg` and `ffprobe` remain required at runtime for probe, proxy, audio,
   frames, and export. Inference assets are optional: without them the service
   starts and serves everything except player tracking, and `service.health`
@@ -190,7 +262,7 @@ client.
 - The helper never opens the user's original recording except during an import
   it was explicitly asked to perform, and then only read-only.
 
-### 4.2 Single instance and endpoint ownership
+### 5.2 Single instance and endpoint ownership
 
 - The service takes an exclusive `flock` on `<state-root>/run/service.lock`.
 - If the lock is held, the new process prints the existing endpoint and exits
@@ -203,7 +275,7 @@ client.
 - The app never starts more than one helper. A failed launch is retried with
   exponential backoff: 1 s, 2 s, 4 s, then an actionable error in the UI.
 
-### 4.3 Handshake and readiness
+### 5.3 Handshake and readiness
 
 - The client connects, sends `service.hello`, and receives the service
   version, protocol version, catalog schema version, instance ID, state root,
@@ -216,41 +288,44 @@ client.
 - Handshake timeout is 5 s; on failure the client kills and relaunches the
   helper.
 
-### 4.4 Steady state
+### 5.4 Steady state
 
 - The service handles multiple connections, but only from the same UID and with
   a valid token.
 - Only one heavy job runs at a time and only one job per match, enforced by the
-  existing registry semantics.
+  existing registry semantics. The single-heavy-job rule is a use-case rule in
+  `sportcut-jobs` (`core/use-cases/jobs`).
 - Lightweight calls (catalog reads, status, geometry on a small segment) are
   served concurrently with a heavy job.
 - The service sends `job.progress` notifications at most 20 times per second
   per job, coalescing faster engine events. A status poll always returns the
   latest value, so a dropped notification is not a correctness problem.
 
-### 4.5 Idle exit
+### 5.5 Idle exit
 
 - The service exits after 120 s with no open connections and no running jobs.
-  The complete precedence rules are in §4.9.
+  The complete precedence rules are in §5.9.
 - It does not exit while a job is running, even with no client connected.
 - It writes no shutdown marker that could hide an abnormal exit; `service.log`
   records the reason.
 
-### 4.6 App termination
+### 5.6 App termination
 
 - On a normal app quit, the client sends `service.shutdown` with
   `cancelRunningJobs: true`.
 - The service requests cancellation, waits up to 10 s for cooperative stop,
   releases locks and sockets, flushes logs, and exits.
 - A cancelled job leaves checkpoints and non-final artifacts; it never
-  publishes a final artifact.
-- If the app crashes or is force-quit, the parent-gone rule in §4.9 applies:
+  publishes a final artifact. Checkpoints are read and written through
+  `CheckpointStore`, implemented by `sportcut-storage`
+  (`core/gateways/storage`).
+- If the app crashes or is force-quit, the parent-gone rule in §5.9 applies:
   with no job running it exits after 30 s; with a job running it requests
   cancellation immediately and exits after the job reaches a terminal state
   (or after 10 s, whichever is later). Checkpoints make the next run
   resumable.
 
-### 4.7 Crash and restart
+### 5.7 Crash and restart
 
 - A helper crash is contained: the UI stays alive and shows a service-error
   state.
@@ -267,11 +342,13 @@ client.
   removes a `recordings/<matchId>/` directory or `.part` file only when no
   catalog row references the match and no import or relocate job is active. It
   removes unreferenced `render-inputs/<uuid>/` directories and stale
-  `inbox/*.part` files using the rules in §7.3. The sweep is logged and has a
+  `inbox/*.part` files using the rules in §8.3. The sweep is logged and has a
   failure-injection test that kills the service mid-copy and asserts that the
-  next start removes the orphan.
+  next start removes the orphan. The sweep belongs to the service adapter
+  (`core/adapters/service`); artifact files under `matches/` are written by
+  `sportcut-storage` (`core/gateways/storage`).
 
-### 4.8 Supervision boundary
+### 5.8 Supervision boundary
 
 - v1 is app-supervised, not a system daemon. The service does not install
   launchd jobs and does not start at login.
@@ -279,7 +356,7 @@ client.
   running, it exits after the idle grace period. A future ADR may add a
   launchd agent if the product needs work to continue after the app quits.
 
-### 4.9 Lifecycle state machine
+### 5.9 Lifecycle state machine
 
 One state machine owns every timing rule. The timers are:
 
@@ -315,9 +392,12 @@ Consequences that must be stated rather than inferred:
   exit.
 - The service logs which rule fired, its timer value, and the elapsed time.
 
-## 5. Protocol summary
+## 6. Protocol summary
 
-The full wire contract is in [protocol.md](protocol.md). In brief:
+The wire contract is encoded as data by `sportcut-protocol`
+(`core/gateways/protocol`) and served by `sportcut-service`
+(`core/adapters/service`). The full contract is in [protocol.md](protocol.md).
+In brief:
 
 - **Transport:** Unix domain socket primary; XPC fallback.
 - **Framing:** 4-byte big-endian unsigned length, then a UTF-8 JSON object.
@@ -338,9 +418,9 @@ The full wire contract is in [protocol.md](protocol.md). In brief:
   cancellation is cooperative and idempotent; terminal states are `completed`,
   `cancelled`, and `failed`.
 
-## 6. Data ownership
+## 7. Data ownership
 
-### 6.1 State root
+### 7.1 State root
 
 The service resolves one root and reports it in the handshake:
 
@@ -364,7 +444,7 @@ Layout:
     checkpoints.json
     proxy/ audio/ frames/ calibration/ tracks/ export/
   render-inputs/<uuid>/     # app-rendered overlay and title images
-  inbox/                    # sandbox handoff, see 7.3
+  inbox/                    # sandbox handoff, see 8.3
   run/service.lock
   run/token
   logs/service.log
@@ -376,7 +456,7 @@ The Unix socket is **not** under `<state-root>`. In the sandbox it is
 state root because they are ordinary file paths with no 104-byte limit. The
 handshake reports the endpoint so the client never guesses it.
 
-### 6.2 Catalog
+### 7.2 Catalog
 
 The service owns `catalog.sqlite`. The schema is the existing v5 schema plus an
 additive v6 migration:
@@ -401,7 +481,11 @@ The catalog is the source of truth for library data. The client's cache is
 ephemeral and is invalidated by `catalog.changed` notifications and by
 refetching after mutations.
 
-### 6.3 Recording store
+The catalog is service-owned state, not part of the engine layer model. The
+service adapter (`core/adapters/service`) exposes it through the `library.*`
+methods.
+
+### 7.3 Recording store
 
 - The service copies a picked recording into
   `<state-root>/recordings/<matchId>/<sanitized-name>`.
@@ -410,7 +494,7 @@ refetching after mutations.
 - Cancellation or failure removes the whole match recording directory; a
   partial copy can never be mistaken for a recording.
 - A crash mid-copy can leave `recordings/<matchId>/*.part` and a reserved match
-  id with no catalog row. The startup sweep in §4.7 removes such a directory
+  id with no catalog row. The startup sweep in §5.7 removes such a directory
   only after confirming that no catalog row references the match and no import
   or relocate job owns it.
 - The source file is opened read-only and is never written, moved, renamed, or
@@ -420,17 +504,20 @@ refetching after mutations.
 - Deletion removes the recording only when the caller asks for it, and the
   original user file is never touched.
 
-### 6.4 Artifacts
+### 7.4 Artifacts
 
-- The artifact layout is unchanged from `core/crates/storage`: `manifest.json`,
-  `checkpoints.json`, and `proxy/`, `audio/`, `frames/`, `calibration/`,
-  `tracks/`, `export/` inside `matches/<matchId>/`.
+- The artifact layout owned by the storage gateway (`sportcut-storage`,
+  `core/gateways/storage`) is unchanged: `manifest.json`, `checkpoints.json`,
+  and `proxy/`, `audio/`, `frames/`, `calibration/`, `tracks/`, `export/`
+  inside `matches/<matchId>/`.
 - Manifest schema 3, checkpoint schema 1, calibration schema 1, tracks schema 1,
-  and rally-suggestions schema 1 remain readable and writable.
+  and rally-suggestions schema 1 remain readable and writable. The manifest
+  model is an entity in `sportcut-common` (`core/entities/common`); the gateway
+  persists it.
 - Artifact writes stay atomic: temp file plus rename, or a final-state flip
   after the output is complete.
 
-### 6.5 Playback
+### 7.5 Playback
 
 - The service returns `library.recording.path` for a match. The path is inside
   the shared container and readable by the app under both packaging models.
@@ -440,9 +527,9 @@ refetching after mutations.
   service-owned local HTTP stream or an XPC file handle; that requires a new
   ADR and is not part of v1.
 
-## 7. Security
+## 8. Security
 
-### 7.1 Threat model
+### 8.1 Threat model
 
 The service is a local, same-user backend. It is not a privilege boundary
 against a hostile process running as the same user; no local IPC can be. It is
@@ -450,11 +537,12 @@ a boundary against other users, other apps, accidental network exposure, and
 the Flutter process consuming Rust unsafely. The design still applies
 defense-in-depth.
 
-### 7.2 Transport authentication
+### 8.2 Transport authentication
 
 - Same-UID peer verification using `getpeereid` (or `LOCAL_PEERCRED`) on every
   accepted Unix socket connection. A peer with a different UID is disconnected
-  before any request is read.
+  before any request is read. The call lives in the service's OS-glue module
+  (`core/adapters/service/src/os_glue.rs`).
 - Socket directory `0700`, socket `0600`, token file `0600`.
 - Per-launch random token, sent in the `service.hello` params and checked
   before any other method. A wrong token returns `unauthorized` and closes the
@@ -463,7 +551,7 @@ defense-in-depth.
 - No TCP listener. The sandbox entitlement
   `com.apple.security.network.server` is removed from the app.
 
-### 7.3 Sandbox file handoff
+### 8.3 Sandbox file handoff
 
 There are two handoff shapes. At most one is enabled in a shipped build; the
 other is removed, not left as a hidden fallback. Which one ships is decided by
@@ -488,8 +576,8 @@ the sandbox spike below, not by preference.
     (`app-scope` or `document-scope`) so it can resolve and read the bookmark
     the app created. The bookmark entitlement is not implicit in `inherit`.
 - The resolution is implemented as isolated OS glue (objc2/objc2-foundation or
-  the C CoreFoundation calls) behind a safe wrapper; it contains no product
-  logic.
+  the C CoreFoundation calls) behind a safe wrapper in the service's OS-glue
+  module (`core/adapters/service`); it contains no product logic.
 - **Proof gate.** This path is unproven. A sandbox spike on a signed,
   notarizable build must: create the bookmark in the app, pass the bytes to the
   helper over the real transport, resolve the bookmark in the helper, open and
@@ -515,7 +603,7 @@ the sandbox spike below, not by preference.
   moves, renames, or deletes it. The inbox file is a byte copy, not the
   original.
 - **Crash recovery and cleanup.** The service removes the `.ready` file after
-  the recording is committed. On startup the service sweep (§4.7) deletes
+  the recording is committed. On startup the service sweep (§5.7) deletes
   `.part` files older than 24 hours and `.ready` files with no matching active
   adopt job; a `.ready` with a matching retry is adopted idempotently by its
   `clientRequestId`. The app removes its own `.part` file on cancel.
@@ -527,7 +615,7 @@ The service canonicalizes every caller-supplied path and rejects anything
 outside the state root or an allocated directory, except the explicitly
 approved source bookmark and render-input directory.
 
-### 7.4 Path and process safety
+### 8.4 Path and process safety
 
 - No shell invocation. `ffmpeg` and `ffprobe` run with argument arrays and a
   sanitized environment.
@@ -544,7 +632,7 @@ approved source bookmark and render-input directory.
 - No secrets in source or logs. Local file paths may appear in local logs but
   not in any remote channel, because there is none.
 
-### 7.5 Data protection
+### 8.5 Data protection
 
 - The catalog, recordings, and artifacts live in the app container or the
   user's application-support directory, protected by normal macOS file
@@ -553,9 +641,9 @@ approved source bookmark and render-input directory.
   local-only, not encrypted-at-rest. This can be revisited without a protocol
   change.
 
-## 8. Sandbox, packaging, signing, and notarization
+## 9. Sandbox, packaging, signing, and notarization
 
-### 8.1 Primary: Developer ID, sandboxed, Unix-socket helper
+### 9.1 Primary: Developer ID, sandboxed, Unix-socket helper
 
 This is the default shippable shape.
 
@@ -581,7 +669,7 @@ This is the default shippable shape.
   build-specific service version. Version skew inside one bundle is a release
   error.
 
-### 8.2 Fallback: Mac App Store, XPC service
+### 9.2 Fallback: Mac App Store, XPC service
 
 If the product chooses the Mac App Store (Q-1), the transport switches to XPC.
 The process graph and container access must be fixed, not left implicit.
@@ -593,12 +681,12 @@ The process graph and container access must be fixed, not left implicit.
   `SportcutXPCClient.swift`. That client owns one `NSXPCConnection` to
   `Contents/XPCServices/SportcutService.xpc`.
 - The XPC target is a separate signed Mach-O. **The Rust backend is linked into
-  the XPC target as a static library**: a `core/xpc-bridge` crate with
-  `crate-type = ["staticlib"]` depends on the service crates and `sportcut-api`
-  (which stays an `rlib`) and is linked behind the Swift/ObjC shim. It is not a
-  third process and it is not linked into the Flutter executable. The shim
-  contains framing and XPC plumbing only; it contains no engine, catalog, or
-  custody logic.
+  the XPC target as a static library**: a dedicated staticlib crate,
+  `core/adapters/xpc-bridge`, depends on `sportcut-service` and `sportcut-api`
+  (which stays an `rlib`) and is linked behind the Swift/ObjC shim. It is not a third
+  process and it is not linked into the Flutter executable. The shim contains
+  framing and XPC plumbing only; it contains no engine, catalog, or custody
+  logic.
 - The XPC exported interface is one method,
   `send(_ request: Data, reply: @escaping (Data?, Error?) -> Void)`, and one
   notification path, `notificationHandler`. Frames are the same 4-byte
@@ -636,7 +724,7 @@ must launch the notarizable XPC build, complete the handshake, import through
 the chosen handoff, read the playback path, run one export, and survive an XPC
 crash/relaunch. Until then it remains a fallback and Q-1 stays open.
 
-### 8.3 Entitlements summary
+### 9.3 Entitlements summary
 
 | Target | Entitlement | Value | Why |
 | --- | --- | --- | --- |
@@ -655,7 +743,7 @@ crash/relaunch. Until then it remains a fallback and Q-1 stays open.
 | Both | hardened runtime | enabled | Notarization requirement |
 | Both | `com.apple.security.cs.disable-library-validation` | not used | No need to load unsigned libraries |
 
-### 8.4 Media toolchain and inference asset packaging
+### 9.4 Media toolchain and inference asset packaging
 
 - `ffmpeg` and `ffprobe` are separate executables inside the helper's resources
   or the app bundle's `Contents/Resources/MediaTools`, signed and notarized with
@@ -665,7 +753,8 @@ crash/relaunch. Until then it remains a fallback and Q-1 stays open.
   set, then falls back to `PATH` discovery; both are development shapes only. A
   packaged build passes the bundle paths so the service never depends on a
   developer or user environment. The service owns this discovery and publishes
-  an explicitly passed tool path to the media facade.
+  an explicitly passed tool path to the media use case
+  (`sportcut-media`, `core/use-cases/media`).
 - `ffmpeg` and `ffprobe` are required at runtime. The inference assets are
   optional: a bundle without them still imports, analyses, and exports, and
   `service.health` reports `vision.available: false` (with `assetsPresent`
@@ -684,7 +773,7 @@ crash/relaunch. Until then it remains a fallback and Q-1 stays open.
 - A sandboxed child process may need its own inheritance entitlement; sign the
   media tools with the same Team ID and verify them at launch.
 
-### 8.5 Distribution matrix
+### 9.5 Distribution matrix
 
 | Channel | Transport | Sandbox | Helper location | Status |
 | --- | --- | --- | --- | --- |
@@ -692,11 +781,14 @@ crash/relaunch. Until then it remains a fallback and Q-1 stays open.
 | Mac App Store | XPC | App Sandbox on | `Contents/XPCServices` | Fallback |
 | Local development | Unix socket | Sandbox off or on | `core/target/release` via `--service-bin` | Dev only, never shipped |
 
-## 9. Error, health, and observability
+## 10. Error, health, and observability
 
-### 9.1 Error model
+### 10.1 Error model
 
-Every failure maps to a stable protocol code and a structured `data` object:
+The engine error type `SportcutError` lives in `sportcut-common`
+(`core/entities/common`); the service adapter (`core/adapters/service`) maps it
+to the protocol. Every failure maps to a stable protocol code and a structured
+`data` object:
 
 | Source `SportcutError` | Protocol kind | Code | Retryable |
 | --- | --- | --- | --- |
@@ -730,7 +822,7 @@ The client maps all of these to one `ServiceException` type with `kind`,
 `userMessage`, and the protocol code. UI code never parses a diagnostic string
 to decide what to do.
 
-### 9.2 Health
+### 10.2 Health
 
 `service.health` returns:
 
@@ -756,7 +848,7 @@ capability, not a service fault. The client uses the health response for the
 status bar and for an actionable "service not ready" state. It is a local call
 and adds no network surface.
 
-### 9.3 Logging and diagnostics
+### 10.3 Logging and diagnostics
 
 - Structured JSON lines to `<state-root>/logs/service.log`, rotating at 10 MiB
   with five retained files.
@@ -771,7 +863,7 @@ and adds no network surface.
   The client does not read `<state-root>/logs/` directly, and the handshake
   does not grant that access.
 
-## 10. Performance
+## 11. Performance
 
 | Concern | Target and approach |
 | --- | --- |
@@ -790,13 +882,13 @@ Performance is measured with fixtures, not guessed. The migration exit gates
 include a comparison against the FFI baseline for probe, manifest read, job
 start, and a track-window read.
 
-## 11. Testing
+## 12. Testing
 
 | Layer | What is tested |
 | --- | --- |
 | Rust unit | Framing, auth, error mapping, catalog CRUD, recording copy, path validation, migrations |
 | Protocol conformance | Golden request/response fixtures, unknown-field tolerance, version negotiation, oversize frames, malformed JSON, duplicate IDs |
-| Engine integration | The existing `core/crates/api/tests` and crate tests run unchanged behind the service |
+| Engine integration | The existing `core/adapters/api/tests` and crate tests run unchanged behind the service |
 | Catalog migration | A v5 fixture database with workspaces, matches, rallies, scores, clips, and settings migrates to v6 with byte-for-byte row equality |
 | Recording migration | Existing `SportcutRecordings` move or copy with digest checks; cancelled and disk-full paths leave nothing partial |
 | Parity | Recorded FFI DTO corpus replayed over the protocol produces equal results |
@@ -806,9 +898,10 @@ start, and a track-window read.
 | Performance | Cold start, small RPC p95, track-window bound, import copy throughput |
 | Offline | The existing offline test plus a check that the service opens no network socket |
 
-The engine's own suite stays runnable without Flutter, Xcode, or JDK.
+The engine's own suite stays runnable without Flutter, Xcode, or JDK, including
+`tools/check-layering.sh` over the layer directories.
 
-## 12. Versioning
+## 13. Versioning
 
 - The protocol has an independent semantic version: `major.minor`.
 - The service and client are bundled together in v1 and must agree on the
@@ -826,7 +919,7 @@ The engine's own suite stays runnable without Flutter, Xcode, or JDK.
 - A service-only update is not a v1 feature. If it is added later, the same
   major/minor rules apply and the app must handle an older service.
 
-## 13. Deployment
+## 14. Deployment
 
 - Build the service as a universal Rust binary in CI:
   `cargo build --release --target aarch64-apple-darwin` and the `x86_64`
@@ -842,13 +935,13 @@ The engine's own suite stays runnable without Flutter, Xcode, or JDK.
 - The release checklist includes the no-Rust-in-app checks, the protocol
   conformance suite, the catalog migration fixture, and a sandbox smoke test.
 
-## 14. No-Rust-in-app enforcement
+## 15. No-Rust-in-app enforcement
 
 The rule is not a code-review convention; it is a CI gate. The check script
 `tools/check-no-rust-in-app.sh` runs on every pull request and in the release
 job. It fails when any of the following is true.
 
-### 14.1 Source checks
+### 15.1 Source checks
 
 ```bash
 # No FFI package or generated bindings in the client.
@@ -860,22 +953,23 @@ job. It fails when any of the following is true.
 ! grep -R "RustLib" app/lib
 
 # No bridge-only Rust configuration.
-! grep -R "flutter_rust_bridge" core/Cargo.toml core/crates/api/Cargo.toml
+! grep -R "flutter_rust_bridge" core/Cargo.toml core/adapters/api/Cargo.toml
 ! test -f flutter_rust_bridge.yaml
-! test -f core/crates/api/src/frb_generated.rs
-! grep -Eq 'crate-type[[:space:]]*=[[:space:]]*\[[^]]*"(cdylib|staticlib)"' core/crates/api/Cargo.toml
-! grep -q '^bridge = ' core/crates/api/Cargo.toml
+! test -f core/adapters/api/src/frb_generated.rs
+! grep -Eq 'crate-type[[:space:]]*=[[:space:]]*\[[^]]*"(cdylib|staticlib)"' core/adapters/api/Cargo.toml
+! grep -q '^bridge = ' core/adapters/api/Cargo.toml
 
 # The Flutter app target must not consume a Rust archive. In the XPC variant a
-# separate XPC target may build core/xpc-bridge; that archive is linked into the
-# XPC executable and never copied into the app or its frameworks.
+# separate XPC target may build the staticlib crate core/adapters/xpc-bridge;
+# that archive is linked into the XPC executable and never copied into the app
+# or its frameworks.
 ! find app -name '*.a' -path '*sportcut*' -not -path '*/XPCServices/*' -print -quit | grep -q .
 
 # The narrow unsafe allowance is confined to the OS-glue module.
-! grep -RIn --include='*.rs' '\bunsafe\b' core | grep -v '/os_glue/'
+! grep -RIn --include='*.rs' '\bunsafe\b' core | grep -v '/os_glue'
 ```
 
-### 14.2 Build-graph checks
+### 15.2 Build-graph checks
 
 - The service binary is the only Rust artifact shipped:
   `find Sportcut.app \( -name 'libsportcut_api.*' -o -name '*.dylib' -o -name '*.a' \) | grep -i sportcut`
@@ -902,7 +996,7 @@ job. It fails when any of the following is true.
 - The app's `pubspec.lock` has no `flutter_rust_bridge`; the app's dependencies
   are Dart/Flutter packages only.
 
-### 14.3 Runtime checks
+### 15.3 Runtime checks
 
 - Launch the app under the sandbox; the helper appears as a separate PID.
 - Quit the app; the helper exits within the documented grace period or after
@@ -912,7 +1006,7 @@ job. It fails when any of the following is true.
   local files.
 - `lsof -p <app-pid>` shows no `libsportcut_api.dylib`.
 
-### 14.4 Review checks
+### 15.4 Review checks
 
 - `app/README.md`, `CLAUDE.md`, and `docs/` do not instruct anyone to run
   `tools/generate-bridge.sh`, `tools/build-engine-lib.sh`, or

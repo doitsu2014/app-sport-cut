@@ -33,8 +33,8 @@ over the [Sportcut Service Protocol v1](../architecture/protocol.md), and holds
 an in-memory cache. This note supersedes "pinned bridge", "sportcut-api facade",
 and client-owned settings wording below. The shell geometry, job lifecycle,
 progress, cancellation, and settings behavior are unchanged. See
-[background-service.md §4](../architecture/background-service.md#4-process-lifecycle-and-supervision)
-and [protocol.md §4](../architecture/protocol.md#4-method-table-service-lifecycle).
+[background-service.md §4](../architecture/background-service.md#5-process-lifecycle-and-supervision)
+and [protocol.md §4](../architecture/protocol.md#6-method-table-service-lifecycle).
 
 ## 1. Purpose, users, and relationship to the product BRD
 The studio shell is the product surface: every feature in BRDs 01–08 is a view
@@ -88,7 +88,7 @@ document because Flutter is not installed here.
 | Focus mode, search, keyboard, settings | Not started | No focus mode, search field, shortcut handling, or settings route in `app/lib/src`; the rail lists every video. |
 | Playback transport | Partial | `player_view.dart`, `playback_controller.dart`; `player_screen_test.dart` covers play, pause, scrub, unplayable. Gap: no ±5 s, no volume. |
 | Themes and accessibility | Partial | `theme.dart` builds light and dark with `ThemeMode.system`; tooltips and play/pause `semanticLabel`. Gap: no 2 px accent ring, 32×32 icon minimum, no scaling or reduced-motion handling, no a11y test. |
-| Job model and client surface | Partial | `core/crates/jobs/` (7 tests), `core/crates/api/tests/facade.rs`, `analysis_providers.dart`. Gap: checkpoints are not atomic; outcomes use a transient SnackBar; no widget test. |
+| Job model and client surface | Partial | `core/use-cases/jobs/` (7 tests), `core/adapters/api/tests/facade.rs`, `analysis_providers.dart`. Gap: checkpoints are not atomic; outcomes use a transient SnackBar; no widget test. |
 
 ## 3. Functional requirements
 Priorities are Must, Should, Could. Each row is one testable behaviour; baseline
@@ -223,8 +223,8 @@ dylib. It is not a pinned bridge.
 
 | Requirement group | Evidence at `1541c64` | Gap |
 | --- | --- | --- |
-| FR-JOB-01..07, 09, 10, 12..14, 16 | `core/crates/jobs/tests/job_lifecycle.rs` (7 tests) | None for engine semantics. |
-| FR-JOB-02, 04, 09, 10, 16, 17 | `core/crates/api/tests/facade.rs`: conflicting job refused, unknown handle named, cancelled import leaves nothing final | No client test of the same messages. |
+| FR-JOB-01..07, 09, 10, 12..14, 16 | `core/use-cases/jobs/tests/job_lifecycle.rs` (7 tests) | None for engine semantics. |
+| FR-JOB-02, 04, 09, 10, 16, 17 | `core/adapters/api/tests/facade.rs`: conflicting job refused, unknown handle named, cancelled import leaves nothing final | No client test of the same messages. |
 | FR-JOB-08, 18 | `analysis_providers.dart`, `analysis_view.dart`, `export_view.dart` | No widget test of bar type, stage labels, or the single announcement. |
 | FR-JOB-11, 15 | None | Requirements the code does not meet. |
 | FR-SHL-01..03, 07, 08, 10, 11, 12 | `workspace_studio_screen.dart`, `MainFlutterWindow.swift`; `app_shell_test.dart` covers routes and themes | No studio widget test; no rail-order, window, or controller-sharing test. |
@@ -295,7 +295,7 @@ Local identifiers; they do not replace the shared Q-1..Q-10.
 | BR-1 Offline and private | FR-SHL-13, 37 | DESIGN.md §10; USAGE.md | `workspace_studio_screen.dart` | Manual read; no network test |
 | BR-8 Design fidelity | FR-SHL-02..06, 09, 30, 31 | DS-2, 3, 4, 7, 13, 14 | `sportcut_tokens.dart`, `theme.dart` | `app_shell_test.dart` (theme only) |
 | BR-9 Accessibility | FR-SHL-32..36 | DS-9, DS-15; USAGE.md | `theme.dart`, `player_view.dart` | None |
-| BR-11 Recoverable jobs | FR-JOB-01..19 | DESIGN.md §6 | `core/crates/jobs/`, `core/crates/api/src/jobs.rs`, `analysis_providers.dart` | `job_lifecycle.rs`, `facade.rs` |
+| BR-11 Recoverable jobs | FR-JOB-01..19 | DESIGN.md §6 | `core/use-cases/jobs/`, `core/adapters/api/src/jobs.rs`, `analysis_providers.dart` | `job_lifecycle.rs`, `facade.rs` |
 | BR-12 macOS focus | FR-SHL-01, 30 | DESIGN.md §10 | `MainFlutterWindow.swift`, `app.dart` | Code read |
 | NFR-3 Crash safety | FR-JOB-10, 12..15 | — | `checkpoint.rs`, `runner.rs` | `job_lifecycle.rs` (partial) |
 

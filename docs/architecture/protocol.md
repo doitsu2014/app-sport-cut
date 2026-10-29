@@ -7,20 +7,53 @@
 | Version | 1.0 |
 | Transport | Unix domain socket (primary), XPC (fallback) |
 | Encoding | UTF-8 JSON |
+| Wire crate | `core/gateways/protocol` (`sportcut-protocol`) |
 | Decision | [ADR-0001](../adr/0001-rust-background-service.md) |
 | Runtime architecture | [Background service architecture](background-service.md) |
+| Engine layering | [Engine layering](layering.md) |
 | Requirements | [Product context](../brd/00-product-context.md) |
 
-This document is the wire contract between the Flutter macOS studio and the
-Rust background service. It is the only channel between them. The client has no
-database, no recording custody, no FFI, and no direct access to the service's
-files except the paths the protocol returns for playback, render inputs, and a
-service-built diagnostics bundle. The client never reads the service log tree
-directly; it calls `service.diagnostics`.
+This document is the normative wire contract between the Flutter macOS studio
+and the Rust background service. It is the only channel between them. The
+client has no database, no recording custody, no FFI, and no direct access to
+the service's files except the paths the protocol returns for playback, render
+inputs, and a service-built diagnostics bundle. The client never reads the
+service log tree directly; it calls `service.diagnostics`.
 
-## 1. Transport and framing
+## 1. Scope
 
-### 1.1 Primary transport
+The protocol defines the transport, framing, message model, handshake,
+authentication, method surface, error kinds, and the limits both sides enforce.
+It does not define the engine's algorithms or the on-disk artifact formats;
+those are covered by [background-service.md](background-service.md) and the
+relevant crate documentation.
+
+The contract is frozen at major version 1. Method names, field names, error
+codes, framing, and the version rules in this document are authoritative; the
+code mirrors them.
+
+## 2. Contract ownership and layers
+
+The wire contract is deliberately split between a shared data crate and the
+adapter that implements it. Every Rust workspace path below follows the
+directory layout defined in [layering.md](layering.md).
+
+| Layer | Crate / directory | Role in the protocol |
+| --- | --- | --- |
+| 2, gateways | `core/gateways/protocol` (`sportcut-protocol`) | Owns the contract as data and constants: the frame codec, the JSON-RPC subset, handshake payloads, method names, error codes, and version negotiation. It contains no transport, no service logic, and no engine types, and depends only on `serde` and `serde_json`. Both sides can share it without coupling to an implementation. |
+| 3, adapters | `core/adapters/service` (`sportcut-service`) | Implements the protocol. It reads and writes frames, validates the handshake and token, maps wire requests to use-case calls, and emits responses and notifications. It owns its wire DTOs. |
+| 3, adapters | `core/adapters/api` (`sportcut-api`) | The engine surface the service calls: the use cases and their request and response DTOs. It is an ordinary library — no FFI, no generated bindings — parked in `adapters/` pending a move to `core/use-cases/`. It does not produce or consume the wire types in this document; the service adapter maps between them. |
+| 4, drivers | `core/drivers/cli` (`sportcut-cli`) | The headless composition root. It wires layers together and owns no protocol rules. |
+
+The service adapter is the only adapter that speaks this protocol. The Flutter
+client implements the other side in `app/lib/src/bridge/protocol_client.dart`;
+it links no Rust and shares no types with the service. The engine's DTOs are an
+internal contract between the use cases and the service adapter, and a change to
+the wire never requires changing them in lockstep.
+
+## 3. Transport and framing
+
+### 3.1 Primary transport
 
 - `AF_UNIX`, `SOCK_STREAM`.
 - Endpoint: the launcher passes `--endpoint <path>`; the service creates it. The
@@ -53,7 +86,7 @@ directly; it calls `service.diagnostics`.
   `Socket.connect(InternetAddress(path, type: InternetAddressType.unix), 0)`.
   `dart:io` supports `AF_UNIX` on macOS; no package and no `dart:ffi` is used.
 
-### 1.2 Fallback transport
+### 3.2 Fallback transport
 
 - XPC (`NSXPCConnection`) for the Mac App Store packaging variant.
 - The same JSON message is carried as one `NSData` payload. The framing below
@@ -63,7 +96,7 @@ directly; it calls `service.diagnostics`.
 - Method names, params, results, errors, and notifications are identical to the
   Unix-socket transport.
 
-### 1.3 Framing
+### 3.3 Framing
 
 Every message is one frame:
 
@@ -84,7 +117,7 @@ Every message is one frame:
 - The receiver reads the prefix, then exactly `N` bytes. It does not scan for a
   delimiter.
 
-### 1.4 Message model
+### 3.4 Message model
 
 The protocol is a JSON-RPC 2.0 subset.
 
@@ -99,7 +132,7 @@ The protocol is a JSON-RPC 2.0 subset.
 - Extra members on requests and responses are ignored.
 - A response to an unknown or already-completed `id` is ignored by the client.
 
-### 1.5 Connection lifecycle
+### 3.5 Connection lifecycle
 
 1. Connect.
 2. Send `service.hello` as the first frame.
@@ -114,9 +147,9 @@ the same connection returns `invalid_input`.
 The client may pipeline requests. Responses may arrive out of order; the `id`
 correlates them. Notifications may interleave with responses.
 
-## 2. Handshake and version negotiation
+## 4. Handshake and version negotiation
 
-### 2.1 Request
+### 4.1 Request
 
 ```json
 {
@@ -141,7 +174,7 @@ correlates them. Notifications may interleave with responses.
 }
 ```
 
-### 2.2 Response
+### 4.2 Response
 
 ```json
 {
@@ -191,7 +224,7 @@ correlates them. Notifications may interleave with responses.
 }
 ```
 
-### 2.3 Version rules
+### 4.3 Version rules
 
 - The client sends the protocol version it speaks.
 - The service supports one major version at a time. If `major` differs, it
@@ -206,7 +239,7 @@ correlates them. Notifications may interleave with responses.
   the served set. A method whose capability is not in the intersection returns
   `method_not_found`.
 
-### 2.4 Authentication
+### 4.4 Authentication
 
 - `params.token` is compared with the token file in constant time.
 - A missing or wrong token returns `unauthorized` and closes the connection.
@@ -214,9 +247,9 @@ correlates them. Notifications may interleave with responses.
   the catalog, logged, or placed in a user-visible message.
 - The same-UID peer check is independent of the token and runs first.
 
-## 3. Request, response, and notification shapes
+## 5. Request, response, and notification shapes
 
-### 3.1 Request fields
+### 5.1 Request fields
 
 | Field | Type | Required | Meaning |
 | --- | --- | --- | --- |
@@ -248,7 +281,7 @@ result in the service job registry on disk, not only in the in-memory cache:
 - The 1,024-entry / 10-minute cache remains the bound for lightweight
   mutations; it is not the bound for job-starting mutations.
 
-### 3.2 Response fields
+### 5.2 Response fields
 
 A success response has `id` and `result`. An error response has `id` and
 `error`:
@@ -274,7 +307,7 @@ A success response has `id` and `result`. An error response has `id` and
 the only field the UI should show as-is. `data.kind` and the code are the stable
 contract; never parse `message` to decide behavior.
 
-### 3.3 Notification fields
+### 5.3 Notification fields
 
 Notifications have no `id`. They are fire-and-forget, but the authoritative
 state is always available through a status or read method.
@@ -289,7 +322,7 @@ state is always available through a status or read method.
 `seq` is a per-job strictly increasing integer. A client that sees a gap must
 re-read `engine.job.status`; it must not assume a missed update.
 
-## 4. Method table: service lifecycle
+## 6. Method table: service lifecycle
 
 | Method | Params | Result | Notes |
 | --- | --- | --- | --- |
@@ -338,9 +371,11 @@ re-read `engine.job.status`; it must not assume a missed update.
   `macos-tflite-eval` is expected to stay `degraded`; that is an optional
   capability, not a fault.
 
-## 5. Method table: engine facade
+## 7. Method table: engine facade
 
-The 17 calls of `core/crates/api/src/facade.rs` map one-to-one. The wire uses
+The 17 engine calls match the engine surface in
+`core/adapters/api/src/facade.rs` one-to-one in behaviour. The wire types are the
+service adapter's; the engine DTOs are internal to the engine. The wire uses
 `matchId`, not a client-chosen `matchDir`; the service resolves the match
 directory from its state root and the catalog. This is the only parameter-shape
 adaptation, and it removes a path-confusion class. The service accepts an
@@ -392,10 +427,10 @@ Notes:
 - `engine.importStages` is the stage list the UI renders; it is served by the
   service so the two sides cannot drift.
 
-### 5.1 Engine DTOs
+### 7.1 Engine DTOs
 
-The protocol uses the existing DTO fields with camelCase names. Enums use the
-existing lower-snake-case values. Representative shapes:
+Wire objects use camelCase field names. Enums use lower_snake_case values.
+Representative shapes:
 
 ```json
 // MediaMetadata
@@ -447,13 +482,13 @@ existing lower-snake-case values. Representative shapes:
 `JobState` values: `pending`, `running`, `completed`, `cancelled`, `failed`.
 `ArtifactState` values: `final`, `non_final`, `missing`.
 
-## 6. Method table: catalog and recording custody
+## 8. Method table: catalog and recording custody
 
 These methods exist because the service owns the catalog and recording store
 under ADR-0001. They replace the client's direct `sqflite` writes and its
 `RecordingStore`.
 
-### 6.1 Workspaces and matches
+### 8.1 Workspaces and matches
 
 | Method | Params | Result | Notes |
 | --- | --- | --- | --- |
@@ -511,7 +546,7 @@ It is a job because it validates, probes, and copies:
 - The client supplies `source` as a security-scoped bookmark or, when the
   inbox handoff is in use, an inbox path plus `sha256` and `sizeBytes`, which
   the service re-hashes exactly as for `library.match.adopt` (see
-  [background-service.md](background-service.md#73-sandbox-file-handoff)).
+  [background-service.md](background-service.md#83-sandbox-file-handoff)).
 - Job stages: `probe`, `copy`, `catalog`. The existing recording directory is
   not modified until the copy is complete and renamed.
 - The service validates that the source is a readable video, copies it into
@@ -568,7 +603,7 @@ file failure, plus `deletedMatches` for matches fully removed.
 `createdAt` is epoch milliseconds UTC. `courtCalibration` is the catalog copy,
 or `null`.
 
-### 6.2 Editing records
+### 8.2 Editing records
 
 | Method | Params | Result |
 | --- | --- | --- |
@@ -685,7 +720,7 @@ security-scoped handoff as a recording. Null clears the value. The
 `library.exportSettings.put` params take one `settings` object with `matchId`
 required and the remaining fields optional per the update-in-place rule.
 
-### 6.3 Calibration composite
+### 8.3 Calibration composite
 
 | Method | Params | Result |
 | --- | --- | --- |
@@ -698,7 +733,7 @@ previous calibration in place. `engine.calibration.save` is the lower-level
 call used for parity and engine-only operations; in the service product path it
 performs the same two steps.
 
-### 6.4 Legacy adoption
+### 8.4 Legacy adoption
 
 | Method | Params | Result |
 | --- | --- | --- |
@@ -747,7 +782,7 @@ rollback window closes. A failure at any stage restores the backup and reports
 `AdoptionStatus` extends `JobStatus` with
 `{ "matches": 42, "recordings": 42, "artifacts": 42, "backupPath": "...", "adoptionState": "complete" }`.
 
-## 7. DTO rules
+## 9. DTO rules
 
 - **Names:** camelCase JSON fields; lower_snake_case enum values.
 - **IDs:** opaque UTF-8 strings, 1–128 bytes. Clients must not infer structure.
@@ -793,7 +828,7 @@ rollback window closes. A failure at any stage restores the backup and reports
 - **Version namespace:** these DTOs are `v1`. A breaking change is a new major
   protocol, not a field rename.
 
-## 8. Error codes
+## 10. Error codes
 
 | Code | Kind | Meaning | Retryable |
 | --- | --- | --- | --- |
@@ -834,9 +869,9 @@ Error `data` fields:
 | `jobId` | string | No | Job when relevant |
 | `details` | object | No | Structured context; no secrets |
 
-## 9. Progress and cancellation
+## 11. Progress and cancellation
 
-### 9.1 Start, then follow
+### 11.1 Start, then follow
 
 Every heavy operation returns a `JobHandle` immediately:
 
@@ -905,7 +940,7 @@ Rules:
 - `completedStages` comes from `checkpoints.json` for resumable jobs, exactly as
   the facade does today.
 
-### 9.2 Cancellation
+### 11.2 Cancellation
 
 - `engine.job.cancel` flips the shared cancellation token and returns the
   current status immediately. The status may still be `running`.
@@ -920,7 +955,7 @@ Rules:
 - `service.shutdown` with `cancelRunningJobs: true` requests cancellation for
   every running job and waits up to 10 s.
 
-### 9.3 Admission
+### 11.3 Admission
 
 - One heavy job at a time per service process.
 - One job per match.
@@ -928,7 +963,7 @@ Rules:
   `job_rejected` with `details.runningJobId` and a user-safe message.
 - Lightweight calls are not subject to admission.
 
-## 10. Concurrency and limits
+## 12. Concurrency and limits
 
 | Limit | Value | Behavior on exceed |
 | --- | --- | --- |
@@ -942,16 +977,16 @@ Rules:
 | Handshake timeout | 5 s | Connection closed |
 | Request timeout (client) | 30 s for lightweight methods only | Client times out; read methods are safe to retry. Job-starting methods are exempt once they return a handle |
 | Progress notifications | 20/s per job | Coalesced |
-| Idle connection | See the lifecycle state machine in [background-service.md §4.9](background-service.md#49-lifecycle-state-machine) | The idle-exit rule wins where it and the connection idle timeout both apply |
-| Finished jobs retained | 16 | Oldest evicted; status returns `job_not_found`. Job-starting idempotency keys are retained by the rule in §3.1 |
+| Idle connection | See the lifecycle state machine in [background-service.md §4.9](background-service.md#59-lifecycle-state-machine) | The idle-exit rule wins where it and the connection idle timeout both apply |
+| Finished jobs retained | 16 | Oldest evicted; status returns `job_not_found`. Job-starting idempotency keys are retained by the rule in §5.1 |
 
 Mutating methods are retried only with the same `clientRequestId`. Read methods
 are safe to retry at any time. `engine.job.cancel` and `service.shutdown` are
 idempotent without a key.
 
-## 11. Worked examples
+## 13. Worked examples
 
-### 11.1 Probe a recording
+### 13.1 Probe a recording
 
 Request:
 
@@ -986,7 +1021,7 @@ Response:
 }
 ```
 
-### 11.2 Import a recording (custody)
+### 13.2 Import a recording (custody)
 
 Request:
 
@@ -1043,7 +1078,7 @@ After completion, read the match:
 { "jsonrpc": "2.0", "id": 12, "method": "library.match.get", "params": { "matchId": "match-1" } }
 ```
 
-### 11.3 Start artifacts and follow progress
+### 13.3 Start artifacts and follow progress
 
 ```json
 {
@@ -1064,7 +1099,7 @@ Then either wait for `job.state` or poll:
 { "jsonrpc": "2.0", "id": 14, "method": "engine.job.status", "params": { "jobId": "job-2" } }
 ```
 
-### 11.4 Cancel
+### 13.4 Cancel
 
 ```json
 { "jsonrpc": "2.0", "id": 15, "method": "engine.job.cancel", "params": { "jobId": "job-2" } }
@@ -1086,7 +1121,7 @@ Then either wait for `job.state` or poll:
 }
 ```
 
-### 11.5 Catalog mutation and notification
+### 13.5 Catalog mutation and notification
 
 ```json
 {
@@ -1121,7 +1156,7 @@ Then either wait for `job.state` or poll:
 }
 ```
 
-### 11.6 Error
+### 13.6 Error
 
 ```json
 {
@@ -1148,7 +1183,7 @@ Then either wait for `job.state` or poll:
 }
 ```
 
-### 11.7 Shutdown
+### 13.7 Shutdown
 
 ```json
 {
@@ -1171,7 +1206,7 @@ Then either wait for `job.state` or poll:
 }
 ```
 
-## 12. Compatibility rules
+## 14. Compatibility rules
 
 - **Major version** covers breaking changes: removing or renaming a method,
   field, or enum value; changing a type; changing framing. A client and service
@@ -1197,3 +1232,14 @@ Then either wait for `job.state` or poll:
 - **Bundled versioning.** In v1 the app and service ship together. The service
   version must be the app version plus a build identifier. A version mismatch
   inside one bundle is a release error.
+
+## Related documents
+
+- [background-service.md](background-service.md) — the service process,
+  lifecycle, storage, and security model.
+- [layering.md](layering.md) — the layer directory layout, dependency rule, and
+  the adapters' ownership of their representations.
+- [migration-from-ffi.md](migration-from-ffi.md) — what remains of the
+  migration to the service.
+- [ADR-0001](../adr/0001-rust-background-service.md) — the service boundary
+  decision.

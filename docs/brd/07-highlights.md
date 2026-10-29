@@ -76,7 +76,7 @@ Status follows the product BRD §3.3 and is not rounded up.
 
 | Area | Status | Evidence and gap |
 | --- | --- | --- |
-| Ranking engine (`sportcut-highlight`) | Partial | `core/crates/highlight/src/lib.rs` implements the weighted score, clamping, validation, and tie-break. Gap: the crate has no unit tests and no facade or client test calls `rank_highlights`. |
+| Ranking engine (`sportcut-highlight`) | Partial | `core/entities/highlight/src/lib.rs` implements the weighted score, clamping, validation, and tie-break. Gap: the crate has no unit tests and no facade or client test calls `rank_highlights`. |
 | Ranking recomputed on demand | Done | `app/lib/src/features/highlights/presentation/highlight_ranking_providers.dart` rebuilds the call from the loaded edit; `docs/data-storage-models.md` at baseline records that ranks are not persisted. |
 | Ranking failure handling | Not started | `highlights_view.dart` reads `.value ?? {}`, so an engine error or an in-flight call renders the same unranked list with no label. |
 | Keep and remove | Done | `app/lib/src/features/editing/data/editing_repository.dart` (`keepClip`); `app/test/highlights_screen_test.dart`. |
@@ -197,7 +197,7 @@ constraints.
 | Reorder persists | `highlights_screen_test.dart`, `dragging a clip rewrites the reel order`; `editing_repository_test.dart`, `the reel keeps the order the user set` | Passes |
 | Empty reel | `highlights_screen_test.dart`, `a match with no clips shows the empty reel and what is left out` | Passes |
 | Clip detaches from a removed rally | `editing_repository_test.dart`, `removing a rally detaches its clip instead of taking it out` | Passes |
-| Ranking formula | `core/crates/highlight/src/lib.rs` source; baseline `docs/architecture.md` §Analysis pipeline, step 7 | No test |
+| Ranking formula | `core/entities/highlight/src/lib.rs` source; baseline `docs/architecture.md` §Analysis pipeline, step 7 | No test |
 | Ranking determinism and tie-break | Source only (`rank`, `total_cmp`, then `start_ms`) | No test |
 | Keep the best N | Source only (`_keepBest`, literal 10) | No test |
 | Ranking unavailable | None; the provider's value is read with `?? {}` | Gap |
@@ -206,7 +206,7 @@ constraints.
 
 ### 7.2 Gaps in evidence
 
-- `core/crates/highlight/` has no test module or `dev-dependencies`, and no facade test invokes `rank_highlights`; the formula is verified only by reading the source.
+- `core/entities/highlight/` has no test module or `dev-dependencies`, and no facade test invokes `rank_highlights`; the formula is verified only by reading the source.
 - No recorded evaluation compares the suggested order with human-judged best rallies. The accuracy harness scores player count and rally boundaries only, and its Results table is empty at baseline.
 - The widget tests never override `sportcutEngineProvider`, so ranking fails inside them and is swallowed; they prove the reel works with no ranking, not that ranking works.
 
@@ -268,7 +268,7 @@ unverified accuracy claims.
 
 | Business requirement | Functional requirements | Design contract | Owning code | Verification |
 | --- | --- | --- | --- | --- |
-| [BR-5](00-product-context.md) Highlights are useful and editable | FR-HLT-01…FR-HLT-25 | DESIGN.md §5, §6, §8 | `core/crates/highlight/src/lib.rs`; `app/lib/src/features/highlights/`; `app/lib/src/features/editing/data/editing_repository.dart` | `app/test/highlights_screen_test.dart`; `app/test/editing_repository_test.dart` |
+| [BR-5](00-product-context.md) Highlights are useful and editable | FR-HLT-01…FR-HLT-25 | DESIGN.md §5, §6, §8 | `core/entities/highlight/src/lib.rs`; `app/lib/src/features/highlights/`; `app/lib/src/features/editing/data/editing_repository.dart` | `app/test/highlights_screen_test.dart`; `app/test/editing_repository_test.dart` |
 | [BR-3](00-product-context.md) User-confirmed results | FR-HLT-10…FR-HLT-13, FR-HLT-19 | DESIGN.md §6 Clip row | `editing_repository.dart` (`keepClip`) | Same tests; ranking never selects a clip |
 | [BR-8](00-product-context.md) Design fidelity | Section 5 rows; FR-HLT-26 | DESIGN.md §2, §3, §4, §6, §7, §8 | `highlights_view.dart` | Design audit — not recorded |
 | [BR-9](00-product-context.md) Accessibility | Section 5 focus, contrast, and hit-target rows | DESIGN.md §2, §4; USAGE.md checklist | `highlights_view.dart` | Accessibility checklist — not recorded |
@@ -276,7 +276,7 @@ unverified accuracy claims.
 
 Code index: `highlights_view.dart`, `highlight_ranking_providers.dart`,
 `highlights_screen.dart`, `highlight_clip.dart`, `match_edit.dart`,
-`editing_repository.dart`, `core/crates/highlight/src/lib.rs`, and
+`editing_repository.dart`, `core/entities/highlight/src/lib.rs`, and
 `facade.rs` (`rank_highlights`). Prior evidence at baseline:
 `docs/verification/manual-editing-and-export.md`,
 `docs/verification/accuracy-evaluation.md`, `docs/architecture.md` (step 7),

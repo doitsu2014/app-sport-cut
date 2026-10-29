@@ -28,8 +28,8 @@ settings and sends them over the
 the settings row, the render, and the artifact. This note supersedes "settings
 stay in the app catalog" and "crosses the bridge" wording below. The user-facing
 export workflow, progress, cancellation, and success state are unchanged. See
-[protocol.md §5](../architecture/protocol.md#5-method-table-engine-facade) and
-[§6.2](../architecture/protocol.md#62-editing-records).
+[protocol.md §5](../architecture/protocol.md#7-method-table-engine-facade) and
+[§6.2](../architecture/protocol.md#82-editing-records).
 
 ## 1. Purpose, users, and relationship to the product BRD
 
@@ -81,8 +81,8 @@ Status follows the product BRD §3.3, where Export is **Blocked**.
 
 | Area | Status | Evidence and gap |
 | --- | --- | --- |
-| Edit decision list and validation | Done | `core/crates/export/src/edit_list.rs` (13 unit tests). |
-| Renderer (development path) | Done | `core/crates/export/src/render.rs`; `core/crates/export/tests/render.rs` (6 tests). |
+| Edit decision list and validation | Done | `core/use-cases/export/src/edit_list.rs` (13 unit tests). |
+| Renderer (development path) | Done | `core/use-cases/export/src/render.rs`; `core/use-cases/export/tests/render.rs` (6 tests). |
 | Shippable render backend | Blocked | The backend is the workstation `ffmpeg`, configured GPL and `not-shippable`; no platform-native renderer exists (baseline `docs/external-dependencies.md`). |
 | Export settings | Partial | Title, music path, gain, and padding are stored (`export_settings.dart`, `editing_store.dart`). Gap: gain has no control; no test covers lead-in or lead-out through the screen. |
 | Output summary | Partial | Clip count and runtime are shown; a score statement replaces an explicit overlay list and audio line (DESIGN.md §5). |
@@ -208,8 +208,8 @@ Shared requirements are cited, not restated.
 
 | Requirement group | Evidence | Status |
 | --- | --- | --- |
-| Edit-list validation | `core/crates/export/src/edit_list.rs` (13 tests: empty list, span order, non-finite, out of recording, boundary tolerance, negative padding, gain, title duration, unreadable overlay/title/music, padding clamp) | Passes |
-| Render order, padding, title | `core/crates/export/tests/render.rs`, `a_rendered_reel_holds_the_clips_in_order_with_padding_and_a_title` | Passes (fixture, skips without ffmpeg) |
+| Edit-list validation | `core/use-cases/export/src/edit_list.rs` (13 tests: empty list, span order, non-finite, out of recording, boundary tolerance, negative padding, gain, title duration, unreadable overlay/title/music, padding clamp) | Passes |
+| Render order, padding, title | `core/use-cases/export/tests/render.rs`, `a_rendered_reel_holds_the_clips_in_order_with_padding_and_a_title` | Passes (fixture, skips without ffmpeg) |
 | Baseline fixture record | Baseline `docs/verification/manual-editing-and-export.md`: 10.5 s, 2 clips, 618 740 bytes, `mpeg4` video, `aac` audio, 320×240 at 10 fps | Recorded |
 | Overlay and title images | `render.rs`, `the_overlay_is_composited_into_the_encoded_frames`; `export_screen_test.dart`, `a title the user typed becomes a title card`; `app/test/overlay_renderer_test.dart` | Passes |
 | Match audio, silent source, music | `render.rs`, `the_reel_carries_the_match_audio`, `a_recording_without_an_audio_track_renders_video_only`, `music_shorter_than_the_reel_plays_under_it_to_the_end` | Passes |
@@ -282,15 +282,15 @@ Shared requirements are cited, not restated.
 
 | Business requirement | Functional requirements | Design contract | Owning code | Verification |
 | --- | --- | --- | --- | --- |
-| [BR-6](00-product-context.md) One click produces one reel | FR-EXP-01…FR-EXP-28 | DESIGN.md §5, §6, §8, §10 | `app/lib/src/features/export/`; `core/crates/export/`; `facade.rs` (`export_highlight`) | `app/test/export_screen_test.dart`; `core/crates/export/tests/render.rs`; `app/test/bridge_test.dart` |
+| [BR-6](00-product-context.md) One click produces one reel | FR-EXP-01…FR-EXP-28 | DESIGN.md §5, §6, §8, §10 | `app/lib/src/features/export/`; `core/use-cases/export/`; `facade.rs` (`export_highlight`) | `app/test/export_screen_test.dart`; `core/use-cases/export/tests/render.rs`; `app/test/bridge_test.dart` |
 | [BR-1](00-product-context.md) Offline and private | FR-EXP-02, FR-EXP-04, NFR-EXP-3 | DESIGN.md §10 status bar | `audio_file_picker.dart`; render reads local files only | Baseline offline suite; no network in the path |
-| [BR-10](00-product-context.md) / [NFR-10](00-product-context.md) Licensing gate | FR-EXP-31, FR-EXP-32, NFR-EXP-6 | — | `core/crates/export/src/lib.rs` backend seam; `render.rs` codec choice | `tools/preflight.sh --strict-license`; register rows — open |
+| [BR-10](00-product-context.md) / [NFR-10](00-product-context.md) Licensing gate | FR-EXP-31, FR-EXP-32, NFR-EXP-6 | — | `core/use-cases/export/src/lib.rs` backend seam; `render.rs` codec choice | `tools/preflight.sh --strict-license`; register rows — open |
 | [BR-11](00-product-context.md) / [NFR-3](00-product-context.md) Recoverable jobs | FR-EXP-21, FR-EXP-23, FR-EXP-24, NFR-EXP-2 | DESIGN.md §6 Status | `export_providers.dart`; `render.rs` `PartialFile` | `render.rs`, cancelled-export test; `export_screen_test.dart` |
 | [BR-8](00-product-context.md) / [BR-9](00-product-context.md) Design and accessibility | Section 5 rows; FR-EXP-28, FR-EXP-29, FR-EXP-30 | DESIGN.md §2, §3, §5, §6, §7, §10 | `export_view.dart`; `overlay_renderer.dart` | No design or accessibility audit recorded |
 
 Code index: `export_view.dart`, `export_providers.dart`, `export_exception.dart`,
 `audio_file_picker.dart`, `overlay_renderer.dart`, `export_settings.dart`,
-`core/crates/export/src/{edit_list,render,lib}.rs`, `facade.rs`, `dto.rs`. Prior
+`core/use-cases/export/src/{edit_list,render,lib}.rs`, `facade.rs`, `dto.rs`. Prior
 evidence: `docs/verification/manual-editing-and-export.md`, `docs/architecture.md`,
 `docs/data-storage-models.md`, `docs/external-dependencies.md`.
 
