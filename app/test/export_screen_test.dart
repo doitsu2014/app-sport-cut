@@ -171,7 +171,7 @@ void main() {
         kind: 'export',
         relativePath: 'export/highlight.mp4',
         state: ArtifactStateDto.final_,
-        sizeBytes: BigInt.from(4096),
+        sizeBytes: 4096,
       ),
     ];
     await pumpExport(tester, session());

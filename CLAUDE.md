@@ -24,26 +24,25 @@ fully automatic officiating — the reasoning is in
 | Client | Flutter / Dart 3, macOS desktop |
 | Client state | Riverpod (`flutter_riverpod`) |
 | Native engine | Rust workspace, edition 2021, `rust-version = 1.80` |
-| Engine host | `core/service` background service over a Unix socket + JSON-RPC (ADR-0001) |
-| Language boundary | Sportcut Service Protocol v1; legacy `flutter_rust_bridge` 2.13.0 remains only until Phase 5 |
+| Engine host | `core/adapters/service` background service over a Unix socket + JSON-RPC (ADR-0001) |
+| Language boundary | Sportcut Service Protocol v1 over a Unix socket. No FFI, no generated bindings, no Rust in the app |
 | Media processing | `ffmpeg` / `ffprobe` behind the `MediaToolchain` abstraction; service-owned and required at runtime |
-| Client catalog | Target: service-owned SQLite (schema v6 adopting v5). The legacy FFI client still owns v5 until Phase 4 |
+| Client catalog | Target: service-owned SQLite (schema v6 adopting v5). The client still owns its local v5 catalog until Phase 4 |
 
 ## Repository map
 
 | Path | Responsibility |
 | --- | --- |
-| `core/` | Rust engine: media foundation, job model, analysis crates, `core/crates/protocol`, and the `core/service` background process. Builds, lints, and tests with no client toolchain installed. |
-| `app/` | Flutter client: match library, import, playback, and the legacy FFI bridge wrapper until Phase 5. |
+| `core/` | Rust engine: media foundation, job model, analysis crates, `core/gateways/protocol`, and the `core/adapters/service` background process. Layered per [`docs/architecture/layering.md`](docs/architecture/layering.md). Builds, lints, and tests with no client toolchain installed. |
+| `app/` | Flutter client: match library, import, playback, and the protocol client that reaches the engine. |
 | `models/` | Model assets and weights that ship with the app, plus the notes mapping each to its license-register entry. |
-| `tools/` | Supported developer entry points: preflight, engine verification, service build/run/embed, inference assets, bridge generation, and the no-Rust guard. |
-| `docs/` | Requirements (`docs/brd/`), architecture decisions (`docs/adr/`), service architecture and protocol (`docs/architecture/`). |
-| `flutter_rust_bridge.yaml` | Legacy codegen configuration. Generated files are never committed; retired at Phase 5. |
+| `tools/` | Supported developer entry points: preflight, engine verification, layering check, service build/run/embed, inference assets, bridge generation, and the no-Rust guard. |
+| `docs/` | Requirements (`docs/brd/`), architecture decisions (`docs/adr/`), and the architecture set (`docs/architecture/`, indexed by its `README.md`): layering, service, protocol, and migration. |
 
 ## Tracks and service
 
 Work is split into an **engine track** (`core/`), a **client track** (`app/`),
-and the **service host** (`core/service`) that runs the engine in a separate
+and the **service host** (`core/adapters/service`) that runs the engine in a separate
 process. The engine must stay buildable on a machine with no Flutter, Xcode, or
 JDK.
 
@@ -53,21 +52,20 @@ tools/preflight.sh --profile macos    # what the macOS client needs
 tools/preflight.sh                    # everything (default)
 
 tools/verify-engine.sh                # cargo fmt --check, clippy, test
+tools/check-layering.sh               # Clean Architecture dependency rule
+tools/generate-layering-diagram.sh    # regenerate docs/architecture/layering-diagram.html
 cd app && flutter analyze             # client static analysis
 
 # Service host (ADR-0001)
 tools/build-service.sh                # core/target/release/sportcut-service
 tools/run-service.sh                  # dev service on a temporary state root
 tools/embed-service.sh <app>          # copy/sign Contents/Helpers/SportcutService
-tools/check-no-rust-in-app.sh         # FFI guard; warning mode until Phase 5
+tools/check-no-rust-in-app.sh         # blocking: no Rust/FFI in the app
 
 # Inference assets
 tools/fetch-inference-assets.sh       # download and verify TFLite runtime + model
 tools/embed-inference-assets.sh <app> # copy the runtime + model into the bundle
 
-# Legacy FFI path (do not add new usage)
-tools/generate-bridge.sh              # Dart bindings + Rust glue (not committed)
-tools/build-engine-lib.sh             # core/crates/api/target/release/libsportcut_api.*
 tools/run-macos.sh                    # dev run of the legacy client on macOS
 ```
 
@@ -79,9 +77,8 @@ except player tracking. The service accepts `--ffmpeg`, `--ffprobe`,
 resolves the bundle files (`Contents/Frameworks/libtensorflowlite_c.dylib`,
 `Contents/Resources/model.tflite`) and then `SPORTCUT_TFLITE_LIBRARY` /
 `SPORTCUT_PERSON_MODEL`. The service protocol never accepts client-supplied
-inference paths: `engine.tracking.start` rejects `runtimePath` and `modelPath`.
-The legacy Flutter FFI path still passes them until the Phase 2 cutover.
-`ffmpeg`/`ffprobe` remain required at runtime.
+inference paths: `engine.tracking.start` rejects `runtimePath` and `modelPath`,
+and the client never sends them. `ffmpeg`/`ffprobe` remain required at runtime.
 
 If Flutter is not on `PATH`, set `SPORTCUT_FLUTTER_BIN` to the directory
 containing the `flutter` executable before running any client-track command.
@@ -105,6 +102,32 @@ The exception is an explicit request to verify a change or a workflow that
 requires recorded evidence: that workflow requires the suites, so run
 `tools/verify-engine.sh` and/or `flutter test` in `app/` at that point.
 
+## Workflows: load the skill first
+
+When a job calls for multi-agent orchestration — fanning work out across
+subagents, a review or audit sweep, a migration run in parallel, or any task that
+is better structured as a Workflow script than as a sequence of direct tool
+calls — **load the `workflow-authoring` skill before writing or editing the
+script.** Always, not only the first time in a session.
+
+The skill is the reference for the script API and its traps: `meta` must be a
+pure literal, the pipeline-versus-barrier decision, resume semantics, the
+agent/spawn patterns, and the quality patterns worth reaching for. Authoring a
+workflow script from memory produces scripts that fail to parse or silently
+cover less than intended.
+
+Two things the skill does not do:
+
+- **It does not authorise running a workflow.** The `Workflow` tool still
+  requires the user's explicit opt-in — an "ultracode" session, or a request in
+  the user's own words to run a workflow. Loading the skill is not permission.
+- **It is not the AI-DLC orchestrator.** `/aidlc` (the block at the end of this
+  file) drives the Analyze → Ideate → Develop → Launch → Curate lifecycle. That
+  is a different mechanism with its own state; do not conflate the two.
+
+For a job that does not need orchestration, skip this entirely: a handful of
+direct tool calls is cheaper and easier to check than a workflow.
+
 ## Conventions
 
 ### Rust engine (`core/`)
@@ -112,29 +135,40 @@ requires recorded evidence: that workflow requires the suites, so run
 - Workspace lints are enforced from `core/Cargo.toml`: `unsafe_code = "deny"`,
   `clippy::dbg_macro = "deny"`, `clippy::todo = "deny"`, and
   `missing_debug_implementations = "warn"`. Do not add `#[allow]` for these in
-  hand-written code. The only permitted exceptions are the generated FFI module
-  and a narrow, documented OS-glue module in `core/service` when a safe wrapper
-  does not exist.
+  hand-written code. The only permitted exception is a narrow, documented
+  OS-glue module in `core/adapters/service` when a safe wrapper does not exist.
 - Formatting is `rustfmt` with `core/rustfmt.toml` (100-column width, Unix
   newlines). Run `cargo fmt --all` in `core/`.
 - Crate boundaries mirror the pipeline stages (`common`, `media`, `storage`,
   `jobs`, `export`, `court`, `vision`, `rally`, `score`, `highlight`, `api`,
   `protocol`). Put new capability in the crate that owns the stage instead of
   widening an unrelated one.
-- Only `sportcut-api` crosses the legacy FFI boundary. The frozen client
-  contract for new work is `core/crates/protocol`; `core/service` is the engine
-  host.
+- **Dependencies point inward.** The layers are entities (`common`, `court`,
+  `rally`, `score`, `highlight`), use cases (`media`, `vision`, `export`,
+  `jobs`, `eval`), gateways and contracts (`storage`, `protocol`), adapters
+  (`api`, `service`), and drivers (`cli`). A use case may not depend on the
+  gateway that implements its port: declare the port in the use-case crate and
+  implement it in `storage`. The entity layer takes no filesystem, process,
+  environment, or network call. Each delivery adapter owns its own
+  representation and must not borrow another adapter's. Run
+  `tools/check-layering.sh` after changing a manifest; the layer map, the ports,
+  and the one declared adapter exception are in
+  [`docs/architecture/layering.md`](docs/architecture/layering.md), decided by
+  [ADR-0002](docs/adr/0002-clean-architecture-engine.md).
+- The client contract is `core/gateways/protocol`; `core/adapters/service` is
+  the engine host and `sportcut-api` is the library it calls. The app links no
+  Rust at all.
 - Keep everything reachable from the media pipeline free of the Flutter/Xcode
   client toolchain. Do not add a dependency that requires Xcode or the Flutter
   SDK to a shared crate; the engine builds with only Rust and ffmpeg.
 
-### Background service (`core/service`)
+### Background service (`core/adapters/service`)
 
-- Target per ADR-0001: the service is a separate executable, never a dylib or
-  static library linked into the Flutter app. No new Rust, `dart:ffi`,
-  `flutter_rust_bridge` bindings, or `libsportcut_api.dylib` may be added. The
-  legacy FFI path is the only exception and is retired at Phase 5.
-- `core/crates/protocol` is the wire contract. Keep method names, framing,
+- The service is a separate executable, never a dylib or static library linked
+  into the Flutter app. No Rust, `dart:ffi`, generated bindings, or bundled Rust
+  library may be added to the app; `tools/check-no-rust-in-app.sh` fails the
+  build if one appears.
+- `core/gateways/protocol` is the wire contract. Keep method names, framing,
   error codes, and version negotiation stable; a change is a protocol change.
 - The service owns the media toolchain and inference assets. Do not accept
   client-supplied `runtimePath`/`modelPath`.
@@ -154,30 +188,16 @@ requires recorded evidence: that workflow requires the suites, so run
   `app/lib/src/app/router.dart`, Riverpod providers for shared state and
   dependency injection (`app/lib/src/app/di.dart`), and the repository interface
   in `features/library/domain/`.
-- New engine work goes through the service protocol. The legacy FFI wrapper
-  (`app/lib/src/bridge/sportcut_engine.dart`) remains for the rollback window;
-  do not add new FFI calls. Do not import `bridge/generated/` from feature code.
-
-### Legacy FFI bridge
-
-- Generated files are **never** hand-edited and **never** committed:
-  `core/crates/api/src/frb_generated.rs` and
-  `app/lib/src/bridge/generated/`. Regenerate them with
-  `tools/generate-bridge.sh`.
-- The codegen input is `crate::dto,crate::facade`; the committed module
-  declaration is in `core/crates/api/src/lib.rs` behind the `bridge` feature.
-- The bridge version must match in all three places: `core/crates/api/Cargo.toml`,
-  `app/pubspec.yaml`, and `tools/generate-bridge.sh`. Change them together.
-- Hand-written, typed Dart wrappers live in `app/lib/src/bridge/` next to — not
-  inside — the generated directory.
-- The FFI path is retired by ADR-0001 Phase 5. Do not extend it.
+- The app reaches the engine only through `app/lib/src/bridge/sportcut_engine.dart`,
+  which speaks the service protocol over `protocol_client.dart`. Feature code
+  must not open sockets itself or hard-code protocol methods.
 
 ### Data and storage ownership
 
 - **Target per ADR-0001:** the service owns the SQLite catalog (schema v6
   adopting v5), recording custody, jobs, artifacts, and export. The Flutter
   client holds only an in-memory cache and playback.
-- **Current migration state:** until Phase 3-4 land, the legacy FFI client still
+- **Current migration state:** until Phase 3-4 land, the client still
   owns the v5 catalog and the app-owned recording copy. Do not add new durable
   client-owned state; new work belongs in the service.
 - Import takes custody of a recording: the picked file is copied into the
@@ -214,23 +234,24 @@ makes the assets it carries safe to redistribute.
 ## Guardrails
 
 - No network access, telemetry, or online API in product code paths.
-- No `unsafe` in hand-written Rust. The only exceptions are the generated FFI
-  module and a narrow, documented OS-glue module in `core/service`.
+- No `unsafe` in hand-written Rust. The only exception is a narrow, documented
+  OS-glue module in `core/adapters/service`.
 - No GPL-licensed component on a shipping path.
 - No secrets, tokens, or machine-specific absolute paths committed to the repo.
 - Keep `main` working: the engine builds and lints without the Flutter/Xcode
   client toolchain.
-- No new Rust linked into the Flutter app; the legacy FFI path is retired at
-  Phase 5, and the service is the target host.
+- No Rust linked into the Flutter app. The service is the only engine host, and
+  `tools/check-no-rust-in-app.sh` enforces it.
 
 ## Definition of done
 
 - The requested behavior is implemented and matches the relevant spec or plan.
 - Formatting and lint are clean for the track you touched.
-- No generated file was hand-edited or committed.
+- `tools/check-layering.sh` passes for any change to a workspace manifest or a
+  crate's public surface.
 - Any new dependency has a license-register row.
-- The service/app boundary is intact: no new FFI, no new Rust in the app, and no
-  new client ownership of durable service state.
+- The service/app boundary is intact: no FFI, no Rust in the app, and no new
+  client ownership of durable service state.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

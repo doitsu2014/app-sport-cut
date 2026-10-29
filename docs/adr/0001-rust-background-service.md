@@ -245,7 +245,7 @@ This decision satisfies the rule in four independent ways:
 
 1. **Build graph.** `app/pubspec.yaml` has no `flutter_rust_bridge` dependency;
    `app/` has no `dart:ffi` import; no generated binding directory exists.
-   `core/crates/api` is an `rlib` consumed by the service binary; in the XPC
+   `core/adapters/api` is an `rlib` consumed by the service binary; in the XPC
    variant a separate `core/xpc-bridge` `staticlib` depends on it and is linked
    only into the separate XPC executable. Nothing is a `cdylib` loaded by
    Flutter.
@@ -261,7 +261,7 @@ This decision satisfies the rule in four independent ways:
    `tools/check-no-rust-in-app.sh`, which greps the client tree, inspects the
    built bundle, checks linked libraries, and fails on any FFI or dylib
    residue. The exact checks are listed in
-   [background-service.md](../architecture/background-service.md#14-no-rust-in-app-enforcement).
+   [background-service.md](../architecture/background-service.md#15-no-rust-in-app-enforcement).
 
 ## Open questions
 

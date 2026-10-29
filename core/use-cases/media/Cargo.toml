@@ -1,0 +1,21 @@
+[package]
+name = "sportcut-media"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sportcut-common = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# The pipeline declares its own storage port; the tests exercise it against the
+# real adapter rather than a stub, because the manifest layout is the contract.
+sportcut-storage = { workspace = true }
+tempfile = { workspace = true }

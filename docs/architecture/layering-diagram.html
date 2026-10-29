@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sportcut core — Clean Architecture layers</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 40px 32px 72px; background: #fbfaf8; color: #1f2328;
+         font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+         line-height: 1.55; }
+  main { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 26px; letter-spacing: -0.3px; margin: 0 0 6px; }
+  .sub { color: #5a6169; margin: 0 0 28px; font-size: 14.5px; }
+  .card { background: #fff; border: 1px solid #e2ddd4; border-radius: 16px; padding: 20px; margin: 0 0 24px; }
+  h2 { font-size: 15px; letter-spacing: 0.4px; text-transform: uppercase; color: #6b6459; margin: 0 0 14px; }
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 0 0 24px; }
+  .stat { flex: 1 1 150px; background: #fff; border: 1px solid #e2ddd4; border-radius: 14px; padding: 14px 16px; }
+  .stat b { display: block; font-size: 26px; line-height: 1.2; }
+  .stat span { font-size: 12.5px; color: #5a6169; }
+  .stat.bad b { color: #a4341f; }
+  .stat.good b { color: #1f6b45; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; letter-spacing: 0.7px; text-transform: uppercase;
+        color: #8a8175; padding: 0 8px 8px; border-bottom: 1px solid #e2ddd4; }
+  td { padding: 6px 8px; border-bottom: 1px solid #f0ece5; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.3px; }
+  .dim { color: #8a8175; font-size: 11.5px; white-space: nowrap; }
+  .arrow { color: #b3ab9d; width: 18px; }
+  .chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px;
+           font-weight: 600; letter-spacing: 0.3px; }
+  .chip.ok { background: #e6f2ea; color: #1f6b45; }
+  .chip.exc { background: #fbf0d9; color: #8a5a10; }
+  .chip.bad { background: #fbe6e0; color: #a4341f; }
+  .note { border-left: 3px solid #d9a441; background: #fdf8ec; padding: 14px 16px;
+           border-radius: 0 10px 10px 0; font-size: 13.5px; margin: 0; }
+  .note b { color: #8a5a10; }
+  .pipe { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.3px;
+           white-space: pre; overflow-x: auto; color: #2c3036; }
+  footer { color: #8a8175; font-size: 12px; margin-top: 28px; }
+</style>
+<main>
+  <h1>Core — Clean Architecture layers</h1>
+  <p class="sub">Generated from <code>cargo metadata</code> for the 38 normal dependency
+     edges in the Rust workspace. Nothing here is hand-drawn.</p>
+
+  <div class="stats">
+    <div class="stat good"><b>37</b><span>edges point inward</span></div>
+    <div class="stat"><b>1</b><span>declared exception</span></div>
+    <div class="stat good"><b>0</b><span>outward edges</span></div>
+    <div class="stat good"><b>0</b><span>entity-layer I/O calls</span></div>
+  </div>
+
+  <div class="card">
+    <h2>The rule</h2>
+    <p style="margin:0;font-size:14px">Source-code dependencies point inward. An outer layer may
+    depend on an inner one; an inner layer may never depend on an outer one, and a use case never
+    depends on the gateway that implements its port. Runtime calls run the other way, through a
+    port.</p>
+  </div>
+
+  <div class="card">
+    <h2>Layer diagram</h2>
+    <svg viewBox="0 0 1060 700" width="100%" role="img" aria-label="Concentric Clean Architecture layers of the Sportcut Rust workspace">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#1f2328"/></marker></defs>
+<rect x="20" y="20" width="1020" height="660" rx="34" fill="#f4f2ee" stroke="#b9b4a9" stroke-width="1.5"/>
+<text x="42" y="46" font-family="ui-sans-serif,system-ui,-apple-system,sans-serif" font-size="12" letter-spacing="1.6" font-weight="700" fill="#b9b4a9">DRIVERS<tspan font-weight="400" letter-spacing="0" font-size="11" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">    core/drivers/</tspan></text>
+<rect x="95" y="86" width="870" height="528" rx="34" fill="#eceae3" stroke="#b5b0a4" stroke-width="1.5"/>
+<text x="117" y="112" font-family="ui-sans-serif,system-ui,-apple-system,sans-serif" font-size="12" letter-spacing="1.6" font-weight="700" fill="#b5b0a4">ADAPTERS<tspan font-weight="400" letter-spacing="0" font-size="11" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">    core/adapters/</tspan></text>
+<rect x="170" y="152" width="720" height="396" rx="34" fill="#e3ece6" stroke="#a8bdb0" stroke-width="1.5"/>
+<text x="192" y="178" font-family="ui-sans-serif,system-ui,-apple-system,sans-serif" font-size="12" letter-spacing="1.6" font-weight="700" fill="#a8bdb0">GATEWAYS + CONTRACTS<tspan font-weight="400" letter-spacing="0" font-size="11" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">    core/gateways/</tspan></text>
+<rect x="245" y="218" width="570" height="264" rx="34" fill="#dbe7f0" stroke="#9db6c9" stroke-width="1.5"/>
+<text x="267" y="244" font-family="ui-sans-serif,system-ui,-apple-system,sans-serif" font-size="12" letter-spacing="1.6" font-weight="700" fill="#9db6c9">USE CASES<tspan font-weight="400" letter-spacing="0" font-size="11" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">    core/use-cases/</tspan></text>
+<rect x="320" y="284" width="420" height="132" rx="34" fill="#cfdff0" stroke="#7f9fbf" stroke-width="1.5"/>
+<text x="342" y="310" font-family="ui-sans-serif,system-ui,-apple-system,sans-serif" font-size="12" letter-spacing="1.6" font-weight="700" fill="#7f9fbf">ENTITIES<tspan font-weight="400" letter-spacing="0" font-size="11" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">    core/entities/</tspan></text>
+<rect x="482.9" y="60" width="94.2" height="23" rx="11.5" fill="#ffffff" stroke="#b9b4a9" stroke-width="1"/><text x="530.0" y="76" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-cli</text>
+<rect x="419.1" y="126" width="94.2" height="23" rx="11.5" fill="#ffffff" stroke="#b5b0a4" stroke-width="1"/><text x="466.2" y="142" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-api</text>
+<rect x="521.3" y="126" width="119.6" height="23" rx="11.5" fill="#ffffff" stroke="#b5b0a4" stroke-width="1"/><text x="581.1" y="142" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-service</text>
+<rect x="403.2" y="192" width="125.9" height="23" rx="11.5" fill="#ffffff" stroke="#a8bdb0" stroke-width="1"/><text x="466.2" y="208" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-protocol</text>
+<rect x="537.2" y="192" width="119.6" height="23" rx="11.5" fill="#ffffff" stroke="#a8bdb0" stroke-width="1"/><text x="597.0" y="208" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-storage</text>
+<rect x="246.8" y="258" width="100.5" height="23" rx="11.5" fill="#ffffff" stroke="#9db6c9" stroke-width="1"/><text x="297.0" y="274" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-eval</text>
+<rect x="355.3" y="258" width="113.2" height="23" rx="11.5" fill="#ffffff" stroke="#9db6c9" stroke-width="1"/><text x="411.9" y="274" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-export</text>
+<rect x="476.6" y="258" width="100.5" height="23" rx="11.5" fill="#ffffff" stroke="#9db6c9" stroke-width="1"/><text x="526.8" y="274" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-jobs</text>
+<rect x="585.1" y="258" width="106.9" height="23" rx="11.5" fill="#ffffff" stroke="#9db6c9" stroke-width="1"/><text x="638.6" y="274" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-media</text>
+<rect x="700.0" y="258" width="113.2" height="23" rx="11.5" fill="#ffffff" stroke="#9db6c9" stroke-width="1"/><text x="756.6" y="274" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-vision</text>
+<rect x="345.8" y="328" width="113.2" height="23" rx="11.5" fill="#ffffff" stroke="#7f9fbf" stroke-width="1"/><text x="402.4" y="344" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-common</text>
+<rect x="467.0" y="328" width="106.9" height="23" rx="11.5" fill="#ffffff" stroke="#7f9fbf" stroke-width="1"/><text x="520.5" y="344" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-court</text>
+<rect x="581.9" y="328" width="132.3" height="23" rx="11.5" fill="#ffffff" stroke="#7f9fbf" stroke-width="1"/><text x="648.1" y="344" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-highlight</text>
+<rect x="419.1" y="358" width="106.9" height="23" rx="11.5" fill="#ffffff" stroke="#7f9fbf" stroke-width="1"/><text x="472.6" y="374" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-rally</text>
+<rect x="534.0" y="358" width="106.9" height="23" rx="11.5" fill="#ffffff" stroke="#7f9fbf" stroke-width="1"/><text x="587.5" y="374" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5" fill="#1f2328">sportcut-score</text>
+<line x1="62" y1="230" x2="62" y2="560" stroke="#1f2328" stroke-width="1.6" marker-end="url(#arrow)"/><text x="48" y="400" transform="rotate(-90 48 400)" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11.5" fill="#1f2328">source dependencies point inward</text>
+</svg>
+  </div>
+
+  <div class="card">
+    <h2>Edge audit — every edge, classified</h2>
+    <table>
+      <thead><tr><th>From</th><th>Layer</th><th></th><th>To</th><th>Layer</th><th>Verdict</th></tr></thead>
+      <tbody>
+<tr class="ok"><td><code>sportcut-court</code></td><td class="dim">L0</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-highlight</code></td><td class="dim">L0</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-rally</code></td><td class="dim">L0</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-score</code></td><td class="dim">L0</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-eval</code></td><td class="dim">L1</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-eval</code></td><td class="dim">L1</td><td class="arrow">→</td><td><code>sportcut-rally</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-eval</code></td><td class="dim">L1</td><td class="arrow">→</td><td><code>sportcut-vision</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-export</code></td><td class="dim">L1</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-export</code></td><td class="dim">L1</td><td class="arrow">→</td><td><code>sportcut-media</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-jobs</code></td><td class="dim">L1</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-media</code></td><td class="dim">L1</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-vision</code></td><td class="dim">L1</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-vision</code></td><td class="dim">L1</td><td class="arrow">→</td><td><code>sportcut-court</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-storage</code></td><td class="dim">L2</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-storage</code></td><td class="dim">L2</td><td class="arrow">→</td><td><code>sportcut-court</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-storage</code></td><td class="dim">L2</td><td class="arrow">→</td><td><code>sportcut-rally</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-storage</code></td><td class="dim">L2</td><td class="arrow">→</td><td><code>sportcut-jobs</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-storage</code></td><td class="dim">L2</td><td class="arrow">→</td><td><code>sportcut-media</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-api</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-api</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-court</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-api</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-highlight</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-api</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-rally</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-api</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-score</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-api</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-export</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-api</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-jobs</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-api</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-media</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-api</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-vision</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-api</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-storage</code></td><td class="dim">L2</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-service</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-service</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-media</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-service</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-protocol</code></td><td class="dim">L2</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="exc"><td><code>sportcut-service</code></td><td class="dim">L3</td><td class="arrow">→</td><td><code>sportcut-api</code></td><td class="dim">L3</td><td><span class="chip exc">declared</span></td></tr>
+<tr class="ok"><td><code>sportcut-cli</code></td><td class="dim">L4</td><td class="arrow">→</td><td><code>sportcut-common</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-cli</code></td><td class="dim">L4</td><td class="arrow">→</td><td><code>sportcut-rally</code></td><td class="dim">L0</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-cli</code></td><td class="dim">L4</td><td class="arrow">→</td><td><code>sportcut-eval</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-cli</code></td><td class="dim">L4</td><td class="arrow">→</td><td><code>sportcut-export</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-cli</code></td><td class="dim">L4</td><td class="arrow">→</td><td><code>sportcut-media</code></td><td class="dim">L1</td><td><span class="chip ok">inward</span></td></tr>
+<tr class="ok"><td><code>sportcut-cli</code></td><td class="dim">L4</td><td class="arrow">→</td><td><code>sportcut-storage</code></td><td class="dim">L2</td><td><span class="chip ok">inward</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Declared exception</h2>
+    <p class="note"><b>sportcut-service → sportcut-api.</b> The use cases live in
+    <code>sportcut-api</code>, which is an ordinary library — no FFI, no generated bindings — but
+    which is parked in <code>adapters/</code>, so the check sees two adapters. The Flutter client
+    links no Rust, so nothing about the client depends on where this crate sits. Removed by moving
+    it to <code>core/use-cases/</code>; then the edge is adapter → use case and the exception is
+    deleted. Recorded in <code>tools/check-layering.sh</code> with the same condition.</p>
+  </div>
+
+  <div class="card">
+    <h2>Test-only edges (not architectural)</h2>
+    <table>
+      <tbody>
+<tr><td><code>sportcut-media</code></td><td class="arrow">⇢</td><td><code>sportcut-storage</code></td><td class="dim">test only — a use case exercising the adapter that implements its port</td></tr>
+<tr><td><code>sportcut-jobs</code></td><td class="arrow">⇢</td><td><code>sportcut-storage</code></td><td class="dim">test only — a use case exercising the adapter that implements its port</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Ports — the inversion that keeps the arrow inward</h2>
+    <div class="pipe">ArtifactStore    declared in sportcut-media   →  implemented by sportcut-storage
+CheckpointStore  declared in sportcut-jobs    →  implemented by sportcut-storage
+PersonDetector   declared in sportcut-vision  →  implemented by the tflite detector / test doubles
+
+source:  use case  ──── depends on ────►  port (trait it declares)
+call:    use case  ──── dispatches to ─►  adapter (implements the trait)</div>
+  </div>
+
+  <footer>Reproduce with <code>tools/generate-layering-diagram.sh</code>. Check the rule with
+  <code>tools/check-layering.sh</code>. Layer model: <code>docs/architecture/layering.md</code>.
+  Decision: <code>docs/adr/0002-clean-architecture-engine.md</code>.</footer>
+</main>
+</html>

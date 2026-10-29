@@ -2,19 +2,18 @@
 #
 # Run the Flutter client on macOS, for development on a workstation.
 #
-# macOS is the product's shipping target; this script runs the client on the
-# desktop for development and review.
+# The client is a separate process from the engine. It does not link a Rust
+# library and there is no generated binding: it connects to the Sportcut service
+# over a Unix socket (docs/architecture/protocol.md).
 #
 # What it does:
-#   1. checks that the bridge bindings have been generated;
-#   2. builds the engine library into core/crates/api/target/release;
-#   3. fetches the inference assets (TFLite runtime + model);
-#   4. runs the app; the Xcode build embeds the engine library and inference
-#      assets into the .app bundle, so the app finds them without environment
-#      variables.
+#   1. checks that the inference assets are present (the app bundles them);
+#   2. runs the app with `flutter run -d macos`.
 #
-# The fetch is idempotent: it downloads once and then verifies the cached
-# copies, so the first run needs network and later runs do not.
+# It does not start the service. Run tools/run-service.sh in another terminal and
+# export the endpoint and state root it prints; the client reads
+# SPORTCUT_ENDPOINT and SPORTCUT_STATE_ROOT (or the matching --dart-define
+# values) at startup.
 #
 # Usage:
 #   tools/run-macos.sh [extra flutter run arguments...]
@@ -23,22 +22,6 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
-
-ENGINE_LIB_DIR="${REPO_ROOT}/core/crates/api/target/release"
-
-if [ ! -f "${REPO_ROOT}/core/crates/api/src/frb_generated.rs" ]; then
-  echo "run-macos: bindings are missing; run tools/generate-bridge.sh first" >&2
-  exit 1
-fi
-
-"${SCRIPT_DIR}/build-engine-lib.sh"
-
-"${SCRIPT_DIR}/fetch-inference-assets.sh"
-
-if [ ! -f "${ENGINE_LIB_DIR}/libsportcut_api.dylib" ]; then
-  echo "run-macos: ${ENGINE_LIB_DIR}/libsportcut_api.dylib was not produced" >&2
-  exit 1
-fi
 
 if ! command -v flutter >/dev/null 2>&1; then
   if [ -n "${SPORTCUT_FLUTTER_BIN:-}" ] && [ -x "${SPORTCUT_FLUTTER_BIN}/flutter" ]; then
@@ -50,9 +33,15 @@ if ! command -v flutter >/dev/null 2>&1; then
   fi
 fi
 
-echo "==> engine library: ${ENGINE_LIB_DIR}/libsportcut_api.dylib"
+if [ -z "${SPORTCUT_ENDPOINT:-}" ] && [ -z "${SPORTCUT_STATE_ROOT:-}" ]; then
+  echo "run-macos: no service endpoint configured." >&2
+  echo "  start the service in another terminal with tools/run-service.sh," >&2
+  echo "  then export SPORTCUT_ENDPOINT and SPORTCUT_STATE_ROOT (or pass" >&2
+  echo "  --dart-define=SPORTCUT_ENDPOINT=... --dart-define=SPORTCUT_TOKEN=...)." >&2
+  exit 1
+fi
+
 echo "==> flutter run -d macos $*"
 
 cd "${REPO_ROOT}/app"
-FRB_DART_LOAD_EXTERNAL_LIBRARY_NATIVE_LIB_DIR="${ENGINE_LIB_DIR}/" \
-  flutter run -d macos "$@"
+flutter run -d macos "$@"

@@ -52,10 +52,8 @@ app/build/
 lcov.info
 
 # --- Generated bridge bindings ---------------------------------------------------
-# Bindings are regenerated with tools/generate-bridge.sh, never hand-edited or
 # committed. See docs/plans/README.md.
 app/lib/src/bridge/generated/
-core/crates/api/src/frb_generated.rs
 
 # --- Per-match artifact directories ---------------------------------------------
 # Derived media belongs outside the repository. These rules are a backstop for

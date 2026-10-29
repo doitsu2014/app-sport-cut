@@ -54,10 +54,10 @@ abstract interface class MediaEngine {
   Future<JobHandleDto> startExport(ExportRequestDto request);
 }
 
-/// [MediaEngine] backed by the real engine across the bridge.
-class BridgeMediaEngine implements MediaEngine {
+/// [MediaEngine] backed by the engine client over the service protocol.
+class EngineMediaEngine implements MediaEngine {
   /// Wrap an initialized engine.
-  BridgeMediaEngine(this._engine);
+  EngineMediaEngine(this._engine);
 
   final SportcutEngine _engine;
 

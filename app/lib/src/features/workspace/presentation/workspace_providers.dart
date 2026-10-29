@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../bridge/generated/dto.dart';
+import '../../../bridge/models.dart';
 import '../../library/presentation/library_providers.dart';
 import '../../library/presentation/match_list_entry.dart';
 import '../domain/pipeline_stage.dart';

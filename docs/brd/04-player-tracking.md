@@ -34,8 +34,8 @@ requirements (FR-TRK-05, FR-TRK-27, NFR-TRK-08) still hold; only the owner of
 the paths changes. A build without `macos-tflite-eval`, or without the assets,
 reports `vision.available: false` in `service.health` and returns an actionable
 error. See
-[protocol.md §5](../architecture/protocol.md#5-method-table-engine-facade) and
-[background-service.md §8.4](../architecture/background-service.md#84-media-toolchain-and-inference-asset-packaging).
+[protocol.md §5](../architecture/protocol.md#7-method-table-engine-facade) and
+[background-service.md §8.4](../architecture/background-service.md#94-media-toolchain-and-inference-asset-packaging).
 
 ## 1. Purpose and users
 
@@ -193,11 +193,11 @@ noted.
 
 | Scenario | Evidence | Result |
 | --- | --- | --- |
-| Unanalysed match reports no tracks | [unanalysed_match.rs](../../core/crates/api/tests/unanalysed_match.rs), `a_match_without_a_manifest_has_no_suggestions_or_tracks` | Pass at baseline |
+| Unanalysed match reports no tracks | [unanalysed_match.rs](../../core/adapters/api/tests/unanalysed_match.rs), `a_match_without_a_manifest_has_no_suggestions_or_tracks` | Pass at baseline |
 | Starting segmentation without tracks names the gap | Same file, `analysing_a_match_without_tracks_says_what_is_missing` | Pass at baseline |
-| A changed court invalidates tracks | [facade.rs](../../core/crates/api/tests/facade.rs), a calibration change drops `tracks/tracks.json` and names `tracks` in `invalidated_kinds`; an unchanged court keeps them | Pass at baseline |
-| Job lifecycle and admission | `core/crates/jobs/` (7 tests at baseline); [registry.rs](../../core/crates/jobs/src/registry.rs) rejects a second heavy job and a second job per match with a reason | Pass at baseline |
-| Detection, classification, association, gaps, count | [vision crate](../../core/crates/vision/src/lib.rs); `cargo test -p sportcut-vision` returns 0 tests, 0 failed; re-run 2026-10-29 | Gap |
+| A changed court invalidates tracks | [facade.rs](../../core/adapters/api/tests/facade.rs), a calibration change drops `tracks/tracks.json` and names `tracks` in `invalidated_kinds`; an unchanged court keeps them | Pass at baseline |
+| Job lifecycle and admission | `core/use-cases/jobs/` (7 tests at baseline); [registry.rs](../../core/use-cases/jobs/src/registry.rs) rejects a second heavy job and a second job per match with a reason | Pass at baseline |
+| Detection, classification, association, gaps, count | [vision crate](../../core/use-cases/vision/src/lib.rs); `cargo test -p sportcut-vision` returns 0 tests, 0 failed; re-run 2026-10-29 | Gap |
 | End-to-end local run on one clips | `docs/verification/rally-rest-segmentation.md` at `1541c64`: import → calibrate → player analysis on clip `c1` produced `tracks/player_tracks.json` schema 1, 5 fps, 4 track IDs, ~10.5 MB | Recorded manual run |
 | Player-count metric | `docs/verification/accuracy-evaluation.md` at `1541c64` defines the metric and the ≥85 % clean-clip target; the Results table is empty | Unmeasured |
 | Client tracking states | No tracking widget or controller test exists in `app/test/` | Gap |
@@ -212,11 +212,11 @@ Results table is empty.
 
 | Type | Dependency or constraint | What this feature needs |
 | --- | --- | --- |
-| Internal | [sportcut-vision](../../core/crates/vision/src/lib.rs) | Decode, classification, association, gaps, count, detector trait |
-| Internal | [sportcut-court](../../core/crates/court/src/lib.rs) | Homography and side assignment per segment |
+| Internal | [sportcut-vision](../../core/use-cases/vision/src/lib.rs) | Decode, classification, association, gaps, count, detector trait |
+| Internal | [sportcut-court](../../core/entities/court/src/lib.rs) | Homography and side assignment per segment |
 | Internal | `sportcut-media` | Sampled upright JPEG frames and timestamps |
-| Internal | [sportcut-jobs](../../core/crates/jobs/src/registry.rs) | Admission, lease, checkpoints, cancellation |
-| Internal | [sportcut-api](../../core/crates/api/src/player_tracking_job.rs) | Job wiring, artifact adapter, windowed reads |
+| Internal | [sportcut-jobs](../../core/use-cases/jobs/src/registry.rs) | Admission, lease, checkpoints, cancellation |
+| Internal | [sportcut-api](../../core/adapters/api/src/player_tracking_job.rs) | Job wiring, artifact adapter, windowed reads |
 | Internal | [InferenceAssets](../../app/lib/src/features/tracking/data/inference_assets.dart) | Bundle paths for runtime and model |
 | Internal | Eval harness (`sportcut-cli eval`) | Player-count scoring against labels |
 | External | TensorFlow Lite C runtime | Local inference; Apache-2.0 runtime, checksum recorded |
@@ -260,14 +260,14 @@ documentation references. Shared objectives that gate this feature: BO-3 and BO-
 
 | Business requirement | Functional requirements | Design contract | Owning code | Verification |
 | --- | --- | --- | --- | --- |
-| BR-3 Semi-automatic, user-confirmed | FR-TRK-10, FR-TRK-17, FR-TRK-23, FR-TRK-28 | DESIGN §8 | [tracking.rs](../../core/crates/vision/src/tracking.rs) | None yet; gap |
+| BR-3 Semi-automatic, user-confirmed | FR-TRK-10, FR-TRK-17, FR-TRK-23, FR-TRK-28 | DESIGN §8 | [tracking.rs](../../core/use-cases/vision/src/tracking.rs) | None yet; gap |
 | BR-8 Design fidelity | FR-TRK-15–19, FR-TRK-24 | DESIGN §6, §8, §9; DS-1, DS-3, DS-4, DS-5, DS-10 | [player_tracking_view.dart](../../app/lib/src/features/tracking/presentation/player_tracking_view.dart) | Gap; see §5 |
 | BR-9 Accessibility | FR-TRK-15, FR-TRK-19 | DS-15 | Review panel and transport | Unverified |
-| BR-10 Licensing gate | FR-TRK-05, FR-TRK-27 | — | [player_tracking_job.rs](../../core/crates/api/src/player_tracking_job.rs), [fetch-inference-assets.sh](../../tools/fetch-inference-assets.sh) | Register conflict R-TRK-3 |
-| BR-11 Recoverable jobs | FR-TRK-19–21, FR-TRK-25 | DESIGN §6 Progress job | [player_tracking_providers.dart](../../app/lib/src/features/tracking/presentation/player_tracking_providers.dart), [registry.rs](../../core/crates/jobs/src/registry.rs) | Job tests; no client test |
-| NFR-4 Data integrity | FR-TRK-09, FR-TRK-13, FR-TRK-14 | — | [track_artifact.rs](../../core/crates/api/src/track_artifact.rs) | Facade invalidation test |
+| BR-10 Licensing gate | FR-TRK-05, FR-TRK-27 | — | [player_tracking_job.rs](../../core/adapters/api/src/player_tracking_job.rs), [fetch-inference-assets.sh](../../tools/fetch-inference-assets.sh) | Register conflict R-TRK-3 |
+| BR-11 Recoverable jobs | FR-TRK-19–21, FR-TRK-25 | DESIGN §6 Progress job | [player_tracking_providers.dart](../../app/lib/src/features/tracking/presentation/player_tracking_providers.dart), [registry.rs](../../core/use-cases/jobs/src/registry.rs) | Job tests; no client test |
+| NFR-4 Data integrity | FR-TRK-09, FR-TRK-13, FR-TRK-14 | — | [track_artifact.rs](../../core/adapters/api/src/track_artifact.rs) | Facade invalidation test |
 | NFR-8 Engine independence | FR-TRK-05, FR-TRK-26 | — | `macos-tflite-eval` feature gate | Build evidence only |
-| Rally input (BO-3, BO-5) | FR-TRK-06–12 | — | [track_artifact.rs](../../core/crates/api/src/track_artifact.rs), [court_candidates.rs](../../core/crates/vision/src/court_candidates.rs) | Manual c1 run; accuracy unmeasured |
+| Rally input (BO-3, BO-5) | FR-TRK-06–12 | — | [track_artifact.rs](../../core/adapters/api/src/track_artifact.rs), [court_candidates.rs](../../core/use-cases/vision/src/court_candidates.rs) | Manual c1 run; accuracy unmeasured |
 
 Prior verification records at baseline `1541c64` (cited for provenance; not
 part of the working tree): `docs/verification/rally-rest-segmentation.md`,

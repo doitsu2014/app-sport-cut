@@ -2,10 +2,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed plan |
+| Status | Partially executed — see [Where this stands](#where-this-stands) |
 | Date | 2026-10-29 |
 | Decision | [ADR-0001](../adr/0001-rust-background-service.md) |
+| Engine layering | [ADR-0002](../adr/0002-clean-architecture-engine.md) |
 | Target architecture | [Background service architecture](background-service.md) |
+| Layering design | [Engine layering](layering.md) |
 | Wire contract | [Sportcut Service Protocol v1](protocol.md) |
 | Requirements | [Product context](../brd/00-product-context.md) |
 
@@ -16,6 +18,41 @@ product behavior changes: the 17 facade calls, one heavy job at a time, one job
 per match, progress, cancellation, checkpoints, artifacts, and errors keep
 their semantics.
 
+The Rust workspace is organised into the Clean Architecture layer directories
+decided by [ADR-0002](../adr/0002-clean-architecture-engine.md): `core/entities/`,
+`core/use-cases/`, `core/gateways/`, `core/adapters/`, and `core/drivers/`.
+Every path in this plan names the layer directory the crate belongs in.
+`tools/check-layering.sh` enforces the dependency rule, the entity purity rule,
+and the single declared adapter-to-adapter exception.
+
+## Where this stands
+
+Phases 0, 1, 2, and 5 are done. What remains is ownership and packaging, not
+transport.
+
+| Phase | State | Note |
+| --- | --- | --- |
+| 0 — contract and guardrails | **Done** | Protocol crate, conformance corpus, layering gate, no-Rust guard |
+| 1 — service engine parity | **Done** | All 17 engine methods over the protocol, conformance and transport tests |
+| 2 — client cutover | **Done** | `app/lib/src/bridge/protocol_client.dart` speaks the protocol; the client links no Rust |
+| 3 — recording custody | Not started | The client still holds its own copy of a recording |
+| 4 — catalog migration | Not started | The client still owns the v5 SQLite catalog |
+| 5 — FFI removal | **Done** | No `flutter_rust_bridge`, no generated bindings, no `cdylib`/`staticlib`, no bundled Rust; the guard is blocking |
+| 6 — packaging and supervision | Not started | The client does not launch the service; development starts it by hand |
+| 7 — hardening | Not started | |
+
+Two consequences worth stating plainly:
+
+- **The client transport is unverified in this repository.** The Dart client has
+  no toolchain here, so it has not been analysed or run. Treat Phase 2 as
+  implemented and unproven until `flutter analyze` and a live session against
+  `tools/run-service.sh` pass.
+- **Packaged supervision is still Phase 6.** Until it lands, a packaged app has
+  no service to talk to; the endpoint must be supplied by the environment.
+
+The phase bodies below are kept as written: they are the plan that produced the
+current state, and the phases still marked "not started" are still the work.
+
 ## 1. Current state versus target
 
 ### 1.1 Current state at baseline `1541c64`
@@ -23,8 +60,8 @@ their semantics.
 | Area | Current implementation |
 | --- | --- |
 | Transport | `libsportcut_api.dylib` loaded in-process through `flutter_rust_bridge` 2.13.0 |
-| Rust boundary | `core/crates/api` compiles `cdylib`, `staticlib`, and `rlib`; `bridge` feature compiles generated `frb_generated.rs` |
-| Generated code | `core/crates/api/src/frb_generated.rs` and `app/lib/src/bridge/generated/`, never committed |
+| Rust boundary | `core/adapters/api` compiles `cdylib`, `staticlib`, and `rlib`; the `bridge` feature compiles generated `frb_generated.rs` |
+| Generated code | `core/adapters/api/src/frb_generated.rs` and `app/lib/src/bridge/generated/`, never committed |
 | Dart wrapper | `app/lib/src/bridge/sportcut_engine.dart`, `RustLib.init`, `ExternalLibrary.open` |
 | Client catalog | `app/lib/src/features/library/data/match_catalog.dart`, SQLite schema v5, five migrations, seven tables |
 | Catalog access | `editing_store.dart` plus `match_repository.dart` write directly with `sqflite` |
@@ -33,16 +70,22 @@ their semantics.
 | Build scripts | `tools/generate-bridge.sh`, `tools/build-engine-lib.sh`, `tools/embed-engine-lib.sh` |
 | Xcode | Runner shell phase calls `embed-engine-lib.sh` into `Contents/Frameworks` |
 | Entitlements | Debug: sandbox off, network server on; Release: sandbox on, user-selected read-only |
-| Job model | `core/crates/jobs` registry/session/checkpoint plus `core/crates/api/src/jobs.rs` store |
+| Job model | `core/use-cases/jobs` registry/session/checkpoint plus the `core/adapters/api/src/jobs.rs` store |
 | Errors | `SportcutError` variants converted to `anyhow`, wrapped by `SportcutEngineException` |
+
+The transport and client rows are the baseline. The Rust paths are the current
+layout: the workspace has already moved to the layer directories and the
+layering check is green.
 
 ### 1.2 Target state
 
 | Area | Target implementation |
 | --- | --- |
 | Transport | Unix domain socket primary; XPC fallback; JSON frames |
-| Rust boundary | `core/crates/api` is an `rlib` consumed by `core/service`; no FFI |
-| Service | `core/service` binary owns engine, catalog, custody, jobs, export |
+| Rust boundary | `core/adapters/api` is an `rlib`; the service and the FFI adapter map into the application crate `core/use-cases/engine`; no FFI after Phase 5 |
+| Service | `core/adapters/service` binary owns engine, catalog, custody, jobs, export |
+| Engine layering | The engine is organised per ADR-0002 as Clean Architecture layers: `core/entities/`, `core/use-cases/`, `core/gateways/`, `core/adapters/`, `core/drivers/`. Source dependencies point inward; entities stay pure; the only adapter-to-adapter edge is the declared `sportcut-service` → `sportcut-api` exception, retired at Phase 5 |
+| Layering check | `tools/check-layering.sh` runs first in `tools/verify-engine.sh`; it derives each crate's layer from its directory and fails on an outward dependency, an impure entity, or an undeclared adapter edge |
 | Generated code | No FRB; protocol models are versioned and tested |
 | Dart client | `app/lib/src/protocol/` typed client; no `dart:ffi`, no generated bindings |
 | Client catalog | In-memory cache only; no SQLite in the client |
@@ -52,8 +95,32 @@ their semantics.
 | Build scripts | `tools/build-service.sh`, `tools/embed-service.sh`, `tools/check-no-rust-in-app.sh` |
 | Xcode | Runner shell phase embeds the signed helper and media tools |
 | Entitlements | App sandbox on; helper `inherit`; no network server |
-| Job model | Same crates, owned by the service process |
+| Job model | Same use-case crates, hosted by the service process |
 | Errors | Protocol codes plus the same actionable messages |
+
+### 1.3 Engine layering status
+
+The layering work that ADR-0002 requires is already in place:
+
+- **Layer directories.** Crates live under `core/entities/`, `core/use-cases/`,
+  `core/gateways/`, `core/adapters/`, and `core/drivers/`. The layer of a crate
+  is the directory it is in.
+- **Ports are inverted.** `sportcut-media` declares the `ArtifactStore` port and
+  `sportcut-jobs` declares `CheckpointStore`; both are implemented in
+  `sportcut-storage`. Neither use-case crate depends on storage.
+- **Entity move.** `RallySuggestions`, `StoredRallyCandidate`, and
+  `SuggestionInputs` moved from storage to `sportcut-rally`.
+- **One declared exception.** `core/adapters/service` depends on
+  `core/adapters/api` because the use cases still live in `sportcut-api`. It is
+  listed in `tools/check-layering.sh` and is removed when the use cases move to
+  `core/use-cases/engine` and the service maps the protocol to that application
+  crate. Phase 5 is the latest point.
+- **Still open.** The application-crate extraction also waits on the second
+  entity move in [layering.md](layering.md#target-state): the
+  `TrackArtifact`/`TrackProvenance` and `CalibrationSave` formats move to the
+  entity layer, with file I/O staying in `sportcut-storage`.
+- **Unaffected driver.** `core/drivers/cli` remains the headless composition
+  root and is not part of the transport migration.
 
 ## 2. Non-negotiable invariants
 
@@ -73,6 +140,9 @@ These must hold at every phase boundary:
 8. User-authored catalog data survives every migration step.
 9. The product path opens no network connection.
 10. A rollback to the previous phase is possible until the FFI removal gate.
+11. The engine obeys the ADR-0002 dependency rule: no crate depends on a higher
+    layer, no entity performs I/O, and the only declared adapter-to-adapter edge
+    is `sportcut-service` → `sportcut-api` until Phase 5.
 
 ## 3. Phased plan
 
@@ -86,15 +156,22 @@ Work:
 - Record the current facade behavior as a corpus: request/response DTO
   fixtures for all 17 calls, including error cases, progress sequences, and
   cancellation outcomes. Store them under
-  `core/crates/protocol/tests/corpus/`.
-- Add the protocol crate skeleton (`core/crates/protocol`) with the v1
+  `core/gateways/protocol/tests/corpus/`.
+- Add the protocol crate skeleton (`core/gateways/protocol`) with the v1
   message types, JSON schema, and a conformance test harness.
-- Add the service binary skeleton (`core/service`) with `service.hello`,
+- Add the service binary skeleton (`core/adapters/service`) with `service.hello`,
   `service.health`, `service.ping`, and the Unix-socket transport. It serves no
   engine methods yet.
 - Add `tools/check-no-rust-in-app.sh`. In this phase it runs in warning mode
   with a checked-in baseline allowlist, so CI stays green while the old FFI
   path still exists. The allowlist is deleted at Phase 5.
+- Add `tools/check-layering.sh` and wire it as the first step of
+  `tools/verify-engine.sh`. It reads `cargo metadata --no-deps`, derives each
+  crate's layer from its directory (`entities/`, `use-cases/`, `gateways/`,
+  `adapters/`, `drivers/`), and fails on an outward dependency, an impure
+  entity (`std::fs`, `std::process`, `std::env`, `std::net`), or an undeclared
+  adapter-to-adapter edge. The only declared edge is
+  `sportcut-service` → `sportcut-api`; it is removed at Phase 5.
 - Add a protocol client skeleton in `app/lib/src/protocol/` with framing,
   correlation, and a fake-server test.
 - Freeze the v1 method names, frame size, error codes, and DTO naming rules.
@@ -106,20 +183,36 @@ Exit gate:
   socket from a Dart test.
 - The fixture corpus is committed and reproducible.
 - The guardrail script reports the known FFI debt but passes.
+- `tools/check-layering.sh` is green and runs first in
+  `tools/verify-engine.sh`; its declared-exception list names exactly the
+  `sportcut-service` → `sportcut-api` edge and its removal condition.
 
 Rollback:
 
 - None needed; the FFI path is untouched and remains the only product path.
+
+**Phase 0 status note (2026-10-29).** The layering gate is in place and runs
+first in `tools/verify-engine.sh`. The gateway inversions are complete:
+`sportcut-media` declares `ArtifactStore` and `sportcut-jobs` declares
+`CheckpointStore`, both implemented by `sportcut-storage`; neither use-case
+crate depends on storage. `RallySuggestions`, `StoredRallyCandidate`, and
+`SuggestionInputs` now live in `sportcut-rally`. The only declared
+adapter-to-adapter edge is `sportcut-service` → `sportcut-api`.
 
 ### Phase 1 — Service engine parity (about 2–3 weeks)
 
 Work:
 
 - Implement the 17 `engine.*` methods in the service by calling the existing
-  `sportcut-api` facade. Do not reimplement engine logic in the service.
-- Move the `core/crates/api/src/jobs.rs` store semantics into the service
+  `sportcut-api` facade. Do not reimplement engine logic in the service. The
+  service reaches the use cases through `sportcut-api`; that dependency is the
+  one declared adapter-to-adapter exception in ADR-0002 and in
+  `tools/check-layering.sh`, and no other adapter edge is permitted.
+- Move the `core/adapters/api/src/jobs.rs` store semantics into the service
   process unchanged: one heavy job, one per match, retained finished jobs,
-  `job_status` with checkpointed stages.
+  `job_status` with checkpointed stages. The store itself belongs in the
+  application layer; see §7.2 for its final location in
+  `core/use-cases/engine`.
 - Add the Dart `ProtocolMediaEngine` implementing the existing `MediaEngine`
   interface.
 - Add a compile-time transport switch:
@@ -137,6 +230,8 @@ Exit gate:
 - A service crash during a job leaves the same checkpoint and non-final
   artifact state as an FFI panic path.
 - The app still ships the dylib and still defaults to FFI.
+- The layering check remains green with no exception beyond
+  `sportcut-service` → `sportcut-api`.
 
 Rollback:
 
@@ -150,7 +245,9 @@ inference assets, a service-owned-asset rule that rejects client-supplied
 `service.health`. This is the server half of the phase. The Dart
 `ProtocolMediaEngine`, the transport switch, and the parity harness are not in
 place, so the Flutter client still uses the FFI path and the FFI removal
-checklist remains pending.
+checklist remains pending. The workspace already builds in the layer
+directories, and the layering check admits only the declared service → API
+edge.
 
 ### Phase 2 — Engine cutover in the client (about 1–2 weeks)
 
@@ -184,7 +281,7 @@ Rollback:
 
 Work:
 
-- Add `core/service/src/recordings.rs` with the existing custody rules:
+- Add `core/adapters/service/src/recordings.rs` with the existing custody rules:
   streamed copy, `.part` file, fsync, rename, remove-on-cancel, sanitized name,
   no-space classification, source read-only, startup orphan sweep.
 - Add `library.match.import`, `library.match.adopt`,
@@ -202,7 +299,7 @@ Work:
   client; the file handoff uses one proven mechanism: a security-scoped
   bookmark if the Q-2 sandbox spike passes, otherwise the first-class inbox
   handoff from
-  [background-service.md](background-service.md#73-sandbox-file-handoff). Do
+  [background-service.md](background-service.md#83-sandbox-file-handoff). Do
   not ship both.
 - **Interim catalog ownership (explicit).** The catalog does not move until
   Phase 4. In the Phase 3 build the service owns the recording store and
@@ -241,9 +338,10 @@ Rollback:
 
 Work:
 
-- Add `core/service/src/catalog/` with a SQLite connection, WAL mode, busy
-  timeout, `PRAGMA foreign_keys = ON`, and the existing v5 tables and indexes.
-  The pragma is required: the v5 schema depends on cascade and `SET NULL`.
+- Add `core/adapters/service/src/catalog/` with a SQLite connection, WAL mode,
+  busy timeout, `PRAGMA foreign_keys = ON`, and the existing v5 tables and
+  indexes. The pragma is required: the v5 schema depends on cascade and
+  `SET NULL`.
 - Implement fresh v6 creation and the v5 → v6 adoption migration: add
   `catalog_meta`, keep every existing table/column/index and all row values.
 - Adopt the Phase 3 provisional match rows the client wrote, then flip the
@@ -257,7 +355,7 @@ Work:
   - score events: transactional replace, derived summaries;
   - export settings: one row per match;
   - workspaces and matches: list, create, update, delete with cascade.
-- Implement the `library.*` methods in [protocol.md](protocol.md#6-method-table-catalog-and-recording-custody).
+- Implement the `library.*` methods in [protocol.md](protocol.md#8-method-table-catalog-and-recording-custody).
 - Add a one-time legacy adoption path from the client's
   `getDatabasesPath()/sportcut.db` into the service state root. The original
   database is copied to `backups/` and left in place.
@@ -280,7 +378,7 @@ Exit gate:
   production-like database.
 - A rollback copy of the database is restorable within the window.
 - Catalog operations meet the performance targets in
-  [background-service.md](background-service.md#10-performance).
+  [background-service.md](background-service.md#11-performance).
 
 Rollback:
 
@@ -308,7 +406,7 @@ Work:
 - Delete the FFI and FRB path completely. The checklist in §6 is the gate.
 - Delete the `bridge` feature, `frb_generated` module, generated directories,
   and `flutter_rust_bridge.yaml`.
-- Change `core/crates/api` to an `rlib` only. Remove `cdylib` and `staticlib`.
+- Change `core/adapters/api` to an `rlib` only. Remove `cdylib` and `staticlib`.
 - Remove `tools/generate-bridge.sh`, `tools/build-engine-lib.sh`, and
   `tools/embed-engine-lib.sh`.
 - Remove the Xcode embed-engine phase and the development dylib loader.
@@ -317,6 +415,14 @@ Work:
 - Remove the transport feature flag and the old FFI wrapper.
 - Delete the guardrail allowlist and make `tools/check-no-rust-in-app.sh`
   blocking.
+- Retire the declared `sportcut-service` → `sportcut-api` exception. Move the
+  use-case modules out of `sportcut-api` into the application crate
+  `core/use-cases/engine` (`sportcut-engine`) and have the service map protocol
+  types to it. The FFI adapter keeps the DTOs and the DTO ↔ domain conversion.
+  Remove the exception from `tools/check-layering.sh` in the same change.
+- Complete the second entity move from [layering.md](layering.md#target-state):
+  `TrackArtifact`/`TrackProvenance` and `CalibrationSave` formats move to the
+  entity layer, with file I/O staying in `sportcut-storage`.
 
 Exit gate:
 
@@ -325,6 +431,8 @@ Exit gate:
 - `otool -L` on the app and helper matches the expected lists.
 - `flutter analyze` and the client tests pass with no native library.
 - `tools/verify-engine.sh` passes.
+- `tools/check-layering.sh` is green with an empty declared-exception list; no
+  adapter depends on another adapter.
 
 Rollback:
 
@@ -342,7 +450,7 @@ Work:
 - Update the Xcode Runner phase to call `embed-service.sh` and
   `embed-inference-assets.sh`.
 - Set the app and helper entitlements from
-  [background-service.md](background-service.md#8-sandbox-packaging-signing-and-notarization).
+  [background-service.md](background-service.md#9-sandbox-packaging-signing-and-notarization).
 - Sign inside-out; notarize; staple; verify.
 - Build the XPC fallback variant for the Mac App Store path.
 - Package the media tools as signed executables resolved from the bundle.
@@ -385,16 +493,21 @@ Exit gate:
 - All BRD Must requirements still pass, including NFR-9.
 - The no-Rust-in-app check is green in the release job.
 
+Rollback:
+
+- Ship the previous signed build. Data is forward-compatible within the
+  documented catalog version.
+
 ## 4. Phase summary
 
 | Phase | Focus | Exit gate in one line | Rollback |
 | --- | --- | --- | --- |
-| 0 | Contract and guardrails | Service handshake over a real socket; corpus frozen | None needed |
+| 0 | Contract, guardrails, and layering gate | Service handshake over a real socket; corpus frozen; layering check green | None needed |
 | 1 | Engine parity | All 17 calls equal over both transports | Flag to FFI |
 | 2 | Client engine cutover | No `RustLib.init` on default path | Flag to FFI |
 | 3 | Recording custody | Imports and playback through service; source unchanged | Flag to app custody |
 | 4 | Catalog | v5 → v6 parity; no client SQLite writes | Legacy DB copy |
-| 5 | FFI removal | §6 checklist green | Previous app version |
+| 5 | FFI removal | §6 checklist green; layering exception retired | Previous app version |
 | 6 | Packaging | Notarized sandboxed build passes smoke tests | Previous signed build |
 | 7 | Hardening | Release gates pass | Previous signed build |
 
@@ -441,15 +554,15 @@ release checklist covers the rest.
 | # | Item | Check | Phase |
 | --- | --- | --- | --- |
 | 1 | `libsportcut_api.dylib` | `find Sportcut.app -name 'libsportcut_api.*'` returns nothing | 5 |
-| 2 | FRB Rust dependency | No `flutter_rust_bridge` in `core/Cargo.toml`, `core/crates/api/Cargo.toml`, or `Cargo.lock` | 5 |
+| 2 | FRB Rust dependency | No `flutter_rust_bridge` in `core/Cargo.toml`, `core/adapters/api/Cargo.toml`, or `Cargo.lock` | 5 |
 | 3 | FRB Dart dependency | No `flutter_rust_bridge` in `app/pubspec.yaml` or `pubspec.lock` | 5 |
 | 4 | FRB config | `flutter_rust_bridge.yaml` deleted | 5 |
-| 5 | Generated Rust glue | `core/crates/api/src/frb_generated.rs` deleted and not regenerated | 5 |
+| 5 | Generated Rust glue | `core/adapters/api/src/frb_generated.rs` deleted and not regenerated | 5 |
 | 6 | Generated Dart bindings | `app/lib/src/bridge/generated/` deleted | 5 |
 | 7 | Dart bridge wrapper | `app/lib/src/bridge/sportcut_engine.dart` deleted or replaced by the protocol client | 5 |
 | 8 | `dart:ffi` | No `import 'dart:ffi'`, `DynamicLibrary`, `ExternalLibrary`, or `RustLib` in `app/lib` | 5 |
-| 9 | `bridge` feature | No `bridge` feature in `core/crates/api/Cargo.toml`; no `#[cfg(feature = "bridge")]` | 5 |
-| 10 | Crate type | `core/crates/api/Cargo.toml` has `crate-type = ["rlib"]` only, with no `cdylib` or `staticlib`; an optional `core/xpc-bridge` `staticlib` may be linked only into the XPC target | 5 |
+| 9 | `bridge` feature | No `bridge` feature in `core/adapters/api/Cargo.toml`; no `#[cfg(feature = "bridge")]` | 5 |
+| 10 | Crate type | `core/adapters/api/Cargo.toml` has `crate-type = ["rlib"]` only, with no `cdylib` or `staticlib`; an optional `core/adapters/xpc-bridge` `staticlib` may be linked only into the XPC target and must not add a second adapter-to-adapter edge | 5 |
 | 11 | Build script | `tools/build-engine-lib.sh` deleted | 5 |
 | 12 | Embed script | `tools/embed-engine-lib.sh` deleted | 5 |
 | 13 | Codegen script | `tools/generate-bridge.sh` deleted | 5 |
@@ -467,51 +580,74 @@ release checklist covers the rest.
 
 ## 7. File-level changes
 
-### 7.1 New Rust crates and files
+### 7.1 Rust crates and files by layer
+
+Some rows are already present from Phases 0–1; the rest land in the phase in
+§3 that needs them. Every path is under its layer directory.
 
 | Path | Purpose |
 | --- | --- |
-| `core/crates/protocol/Cargo.toml` | Wire types, version constants, error codes |
-| `core/crates/protocol/src/lib.rs` | Protocol v1 message types |
-| `core/crates/protocol/src/version.rs` | Major/minor negotiation and capabilities |
-| `core/crates/protocol/src/error.rs` | Code/kind mapping |
-| `core/crates/protocol/tests/conformance.rs` | Golden message tests |
-| `core/service/Cargo.toml` | Service binary |
-| `core/service/src/main.rs` | Argument parsing, state root, startup, shutdown |
-| `core/service/src/config.rs` | Launcher options and environment |
-| `core/service/src/state_root.rs` | Layout resolution and permissions |
-| `core/service/src/transport/mod.rs` | Transport trait |
-| `core/service/src/transport/unix.rs` | Unix listener, peer check, token |
-| `core/service/src/transport/framing.rs` | Length-prefixed frames |
-| `core/service/src/transport/xpc.rs` | XPC fallback (feature-gated) |
-| `core/service/src/rpc.rs` | Dispatcher, correlation, idempotency |
-| `core/service/src/methods/service.rs` | `service.*` |
-| `core/service/src/methods/engine.rs` | 17 `engine.*` methods |
-| `core/service/src/methods/library.rs` | `library.*` CRUD and custody |
-| `core/service/src/catalog/mod.rs` | SQLite connection and transactions |
-| `core/service/src/catalog/schema.rs` | v6 schema and indexes |
-| `core/service/src/catalog/migrate.rs` | v5 adoption and future migrations |
-| `core/service/src/catalog/workspaces.rs` | Workspace CRUD |
-| `core/service/src/catalog/matches.rs` | Match CRUD |
-| `core/service/src/catalog/editing.rs` | Rallies, decisions, clips, scores, settings |
-| `core/service/src/recordings.rs` | Custody copy and deletion |
-| `core/service/src/artifacts.rs` | Manifest access through the facade |
-| `core/service/src/jobs.rs` | Moved job store and admission |
-| `core/service/src/security.rs` | Token, peer check, path validation |
-| `core/service/src/logging.rs` | Structured local logs |
-| `core/service/src/supervisor.rs` | Parent PID, idle exit, shutdown |
-| `core/service/tests/*` | Transport, auth, lifecycle, catalog migration, custody |
+| `core/gateways/protocol/Cargo.toml` | Wire types, version constants, error codes |
+| `core/gateways/protocol/src/lib.rs` | Protocol v1 message types |
+| `core/gateways/protocol/src/frame.rs` | Length-prefixed frame encoding |
+| `core/gateways/protocol/src/handshake.rs` | Hello, health, ping, and capabilities |
+| `core/gateways/protocol/src/method.rs` | Method names and capability table |
+| `core/gateways/protocol/src/rpc.rs` | JSON-RPC subset: request, response, notification |
+| `core/gateways/protocol/src/version.rs` | Major/minor negotiation and capabilities |
+| `core/gateways/protocol/src/error.rs` | Code/kind mapping |
+| `core/gateways/protocol/tests/conformance.rs` | Golden message tests |
+| `core/gateways/protocol/tests/corpus/` | Phase 0 facade corpus |
+| `core/adapters/service/Cargo.toml` | Service binary |
+| `core/adapters/service/src/main.rs` | Argument parsing, state root, startup, shutdown |
+| `core/adapters/service/src/lib.rs` | Service crate surface |
+| `core/adapters/service/src/config.rs` | Launcher options and environment |
+| `core/adapters/service/src/state_root.rs` | Layout resolution and permissions |
+| `core/adapters/service/src/server.rs` | Unix listener, peer check, framing, connection lifecycle |
+| `core/adapters/service/src/rpc.rs` | Dispatcher, correlation, idempotency |
+| `core/adapters/service/src/methods.rs` | Method routing for `service.*`, `engine.*`, and `library.*` |
+| `core/adapters/service/src/engine.rs` | 17 `engine.*` methods |
+| `core/adapters/service/src/idempotency.rs` | Start-call and mutation idempotency |
+| `core/adapters/service/src/paths.rs` | State-root path resolution |
+| `core/adapters/service/src/error.rs` | Protocol error mapping |
+| `core/adapters/service/src/catalog/mod.rs` | SQLite connection and transactions |
+| `core/adapters/service/src/catalog/schema.rs` | v6 schema and indexes |
+| `core/adapters/service/src/catalog/migrate.rs` | v5 adoption and future migrations |
+| `core/adapters/service/src/catalog/workspaces.rs` | Workspace CRUD |
+| `core/adapters/service/src/catalog/matches.rs` | Match CRUD |
+| `core/adapters/service/src/catalog/editing.rs` | Rallies, decisions, clips, scores, settings |
+| `core/adapters/service/src/recordings.rs` | Custody copy and deletion |
+| `core/adapters/service/src/artifacts.rs` | Manifest access through the application crate |
+| `core/adapters/service/src/jobs.rs` | Job admission wiring over the application crate |
+| `core/adapters/service/src/security.rs` | Token, peer check, path validation |
+| `core/adapters/service/src/logging.rs` | Structured local logs |
+| `core/adapters/service/src/os_glue.rs` | The one documented OS-glue module (`getpeereid`, `flock`, parent PID, bookmark, `libxpc`) |
+| `core/adapters/service/src/supervisor.rs` | Parent PID, idle exit, shutdown |
+| `core/adapters/service/tests/*` | Transport, auth, lifecycle, catalog migration, custody |
+| `core/adapters/xpc-bridge/Cargo.toml` | Optional XPC transport `staticlib` for the App Store fallback; linked only into the XPC executable |
+| `core/adapters/xpc-bridge/src/lib.rs` | XPC shim over the protocol; composes the application crate, not another adapter |
+| `core/use-cases/engine/Cargo.toml` | Application crate: use cases over domain types |
+| `core/use-cases/engine/src/lib.rs` | Use-case entry points the service and FFI adapters map into |
+| `core/use-cases/engine/src/jobs.rs` | Process-wide job store and admission moved out of `sportcut-api` |
+| `core/use-cases/engine/src/` (module set) | Use-case modules moved out of `sportcut-api` (`facade`, `player_tracking_job`, `track_artifact`) |
 
 ### 7.2 Changed Rust files
 
 | Path | Change |
 | --- | --- |
-| `core/Cargo.toml` | Add `crates/protocol` and `service` members; remove bridge-only comments; keep `unsafe_code = "deny"` with one narrow, documented exception for the OS-glue module (`os_glue`), and pin safe wrappers (`nix`, `objc2`, `objc2-foundation`). The FFI exception is not restored |
-| `core/crates/api/Cargo.toml` | Remove FRB dependency, `bridge` feature, and `cdylib`/`staticlib`; keep `rlib` |
-| `core/crates/api/src/lib.rs` | Remove `frb_generated`; keep the facade public for the service |
-| `core/crates/api/src/facade.rs` | No product logic change; path parameters resolved by the service |
-| `core/crates/api/src/jobs.rs` | Move to `core/service/src/jobs.rs`; keep the same retention and admission semantics |
-| `core/crates/api/src/dto.rs` | Keep as the internal DTO source; protocol types map to it |
+| `core/Cargo.toml` | Members are the layer globs (`entities/*`, `use-cases/*`, `gateways/*`, `adapters/*`, `drivers/*`); add `sportcut-engine` under `use-cases/` and the optional `xpc-bridge` under `adapters/`. `sportcut-protocol` already sits under `gateways/` and `sportcut-service` under `adapters/`. Remove bridge-only comments; keep `unsafe_code = "deny"` with one narrow, documented exception for the OS-glue module (`os_glue`), and pin safe wrappers (`nix`, `objc2`, `objc2-foundation`). The FFI exception is not restored |
+| `core/adapters/api/Cargo.toml` | Remove FRB dependency, `bridge` feature, and `cdylib`/`staticlib`; keep `rlib` |
+| `core/adapters/api/src/lib.rs` | Remove `frb_generated`; keep the DTOs and conversions public for the service and XPC adapters |
+| `core/adapters/api/src/facade.rs` | No product logic change; orchestration moves to `core/use-cases/engine` at Phase 5, leaving DTO ↔ domain mapping |
+| `core/adapters/api/src/jobs.rs` | Move to `core/use-cases/engine/src/jobs.rs`; the process-wide store is hosted by the service with the same retention and admission semantics |
+| `core/adapters/api/src/player_tracking_job.rs` | Move to `core/use-cases/engine`; keep the same job plan and admission behavior |
+| `core/adapters/api/src/track_artifact.rs` | Move artifact publication to `core/use-cases/engine`; the artifact formats move to the entity layer at Phase 5, file I/O stays in `sportcut-storage` |
+| `core/adapters/api/src/dto.rs` | Keep as the FFI DTO source; protocol types map to it until Phase 5 |
+| `core/adapters/api/src/convert.rs` | Keep as the adapter's DTO ↔ domain mapping; it maps application and entity types to the frozen DTOs |
+| `core/use-cases/media/Cargo.toml` | Declares the `ArtifactStore` port; no dependency on `sportcut-storage` (the storage crate is a dev-dependency for tests only) |
+| `core/use-cases/jobs/Cargo.toml` | Declares the `CheckpointStore` port; no dependency on `sportcut-storage` (the storage crate is a dev-dependency for tests only) |
+| `core/gateways/storage/Cargo.toml` | Implements both use-case ports; depends inward on `sportcut-media` and `sportcut-jobs` |
+| `core/entities/rally/src/suggestions.rs` | Holds `RallySuggestions`, `StoredRallyCandidate`, and `SuggestionInputs` after the move from storage |
+| `core/gateways/storage/src/rally_suggestions.rs` | Reads and writes the rally types now owned by `sportcut-rally` |
 
 ### 7.3 New Dart files
 
@@ -551,11 +687,12 @@ release checklist covers the rest.
 | `tools/build-service.sh` | New: universal Rust service build |
 | `tools/embed-service.sh` | New: copy, sign, verify helper |
 | `tools/check-no-rust-in-app.sh` | New: blocking guard |
+| `tools/check-layering.sh` | Existing gate: derives each crate's layer from its directory; enforces inward dependencies, entity purity, and the declared exception; runs first in `tools/verify-engine.sh` |
 | `tools/verify-protocol.sh` | New: conformance and parity corpus |
 | `tools/run-macos.sh` | Build the service, launch the app, no FRB env |
 | `tools/preflight.sh` | Check Rust, Flutter, Xcode, signing, notarization; no bridge generation |
-| `tools/verify-engine.sh` | Add the service and protocol crates; keep the no-client-toolchain property |
-| `tools/README.md` | Document the service workflow |
+| `tools/verify-engine.sh` | Runs `tools/check-layering.sh` first, then fmt, clippy, and tests across the layer workspace; keeps the no-client-toolchain property |
+| `tools/README.md` | Document the service workflow and the layering gate |
 
 ### 7.6 macOS packaging
 
@@ -592,6 +729,7 @@ release checklist covers the rest.
 | 4 | `SPORTCUT_CATALOG=dart`; restore the retained v5 backup (preferred), or reset `PRAGMA user_version = 5` after checkpointing and closing WAL. A v6 database with `user_version = 6` does not open in a v5 client | Original v5 database retained in `backups/`; freeze catalog writes before restoring |
 | 5 | Ship the previous app version | Service data remains readable by the Phase 4 build |
 | 6 | Ship the previous signed build | Same catalog version |
+| 7 | Ship the previous signed build | Same catalog version |
 
 Rollback rules:
 
@@ -617,6 +755,8 @@ Rollback rules:
   reorder transaction, score replace, settings upsert.
 - Custody: streamed copy, `.part`, rename, cancel, no space, sanitized names,
   source read-only, deletion semantics.
+- Layering: `tools/check-layering.sh` runs in verification and rejects an
+  outward edge, an impure entity, and an undeclared adapter edge.
 
 ### 9.2 Parity
 
@@ -709,10 +849,11 @@ Rollback rules:
 - Add a separate build configuration or scheme that produces
   `Contents/XPCServices/SportcutService.xpc`.
 - Pick one process graph from
-  [background-service.md §8.2](background-service.md#82-fallback-mac-app-store-xpc-service):
-  the Rust backend statically linked into the XPC target with an App Group, or
-  an XPC relay to the third helper process over the Unix socket. Record the
-  choice and prove it with the sandbox smoke test.
+  [background-service.md §9.2](background-service.md#92-fallback-mac-app-store-xpc-service):
+  the Rust backend statically linked into the XPC target through the
+  `core/adapters/xpc-bridge` staticlib with an App Group, or an XPC relay to
+  the third helper process over the Unix socket. Record the choice and prove it
+  with the sandbox smoke test.
 - Add the App Group (or proven `inherit`) entitlement to the app, XPC target,
   and helper, and set the shared state root. Re-run the endpoint length check
   for the group-container path.
@@ -744,7 +885,7 @@ Rollback rules:
 
 | ID | Risk | Likelihood | Impact | Mitigation | Owner |
 | --- | --- | --- | --- | --- | --- |
-| R-11 | FFI-to-service migration regression: a call, error, progress, cancellation, checkpoint, or artifact behavior changes during the move | Medium | High | Phase 0 corpus; parity harness across both transports; phase exit gates; migration rehearsal; per-phase rollback; no dual writes | Engineering lead |
+| R-11 | FFI-to-service migration regression: a call, error, progress, cancellation, checkpoint, or artifact behavior changes during the move | Medium | High | Phase 0 corpus; parity harness across both transports; phase exit gates; migration rehearsal; per-phase rollback; no dual writes; layering check on every engine verification | Engineering lead |
 | R-12 | Catalog migration loses or rewrites user data | Low | High | Copy-first migration; backup; row-count and value equality tests; idempotency; automatic restore on failure; production-like rehearsal | Engineering lead / QA lead |
 | R-13 | Protocol DTOs drift from the engine DTOs | Medium | Medium | Single protocol crate; golden messages; parity corpus; schema review in CI | Engineering lead |
 | R-14 | Sandboxed file handoff fails for the security-scoped bookmark | Medium | High | Bookmark entitlement on app and helper; signed sandbox spike (create, pass, resolve, read, SHA-256, source unchanged); if it fails, first-class inbox handoff with digest verification, crash cleanup, and no second copy; Q-2; ship exactly one path | Engineering lead |
@@ -772,5 +913,7 @@ The migration is done when:
   cancel, crash, and relaunch smoke tests;
 - the XPC fallback path passes the same functional suite or is explicitly
   deferred by a recorded decision;
+- the engine is organised in the ADR-0002 layer directories and
+  `tools/check-layering.sh` is green with no declared exception;
 - NFR-9, BR-2, NFR-4, and R-11 in the product BRD are updated and traceable to
   evidence.

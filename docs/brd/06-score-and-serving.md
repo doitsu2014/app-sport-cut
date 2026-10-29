@@ -119,7 +119,7 @@ are MoSCoW. "Refuse" means: write nothing and show the named message.
 
 | ID | Requirement | Priority | Acceptance criterion |
 | --- | --- | --- | --- |
-| FR-SCR-15 | Derive each rally's server from the immediately previous rally's confirmed winner. | Must | With rallies L, R, L the serving sides are none, Left, Right (`core/crates/score/src/lib.rs`). |
+| FR-SCR-15 | Derive each rally's server from the immediately previous rally's confirmed winner. | Must | With rallies L, R, L the serving sides are none, Left, Right (`core/entities/score/src/lib.rs`). |
 | FR-SCR-16 | Show no server for the first rally. | Must | The first rally is absent from the serving map and shows no serving marker. |
 | FR-SCR-17 | Show no server for a rally whose immediately previous rally is unscored. | Must | With rallies L, unscored, R the third rally is absent from the serving map and shows no marker. |
 | FR-SCR-18 | Show no "serves next" marker while the most recent rally is unscored. | Must | With rallies [Left won, unscored] the scoreboard shows no serving marker, because the next server is unknown. Current code uses the last scored winner (gap). |
@@ -207,7 +207,7 @@ commitment and any local requirement.
 | Derivation, correction, clearance, at-a-position | `app/lib/src/features/editing/domain/score_timeline.dart`; `app/test/score_timeline_test.dart` (7 tests) | Baseline `docs/verification/manual-editing-and-export.md` |
 | Stored events, atomic replace, reel independence | `app/lib/src/features/editing/data/editing_store.dart`, `editing_repository.dart`; `app/test/editing_repository_test.dart` (13 tests) | Baseline `docs/verification/client-track.md` (test inventory) |
 | One-tap winner, refusal, unscored row | `app/lib/src/features/score/presentation/score_view.dart`; `app/test/score_screen_test.dart` (5 widget tests) | Same |
-| Serving rule | `core/crates/score/src/lib.rs`, `core/crates/api/src/facade.rs` (`serving_sides`) | **No engine test**, no facade test; verified by reading the code only |
+| Serving rule | `core/entities/score/src/lib.rs`, `core/adapters/api/src/facade.rs` (`serving_sides`) | **No engine test**, no facade test; verified by reading the code only |
 | Export score context | `app/lib/src/features/export/presentation/export_providers.dart` (`score.atSeconds`) | `app/test/export_screen_test.dart` covers the scoreboard image |
 | Design conformance | [DESIGN.md §6](../../design-system/DESIGN.md), [tokens.css](../../design-system/tokens.css) | Not audited; §3.3 records the gaps |
 
@@ -262,7 +262,7 @@ requirements, not done work.
 | FR-SCR-01..07 | BR-4, BO-2 | §2 Color rules, §6 Scoreboard | `app/lib/src/features/editing/domain/score_timeline.dart`, `score_event.dart`, `rally.dart` | `app/test/score_timeline_test.dart`, `app/test/editing_repository_test.dart` |
 | FR-SCR-08 | DS-8, NFR-2 | §6 States | `app/lib/src/features/score/presentation/score_view.dart` | Gap |
 | FR-SCR-09..14 | BR-3, BR-4, DS-4, DS-12 | §2, §6, §8 Voice | `score_view.dart`, `editing_providers.dart` | `app/test/score_screen_test.dart` |
-| FR-SCR-15..22 | BR-3, BR-4 | §6 Scoreboard | `core/crates/score/src/lib.rs`, `core/crates/api/src/facade.rs`, `app/lib/src/features/score/presentation/serving_sides_providers.dart` | Gap: no engine or widget test |
+| FR-SCR-15..22 | BR-3, BR-4 | §6 Scoreboard | `core/entities/score/src/lib.rs`, `core/adapters/api/src/facade.rs`, `app/lib/src/features/score/presentation/serving_sides_providers.dart` | Gap: no engine or widget test |
 | FR-SCR-23..28 | BR-5, BR-8, DS-9, DS-15 | §5 Review, §6 Timeline, §10 Keyboard | `score_timeline.dart` (`atSeconds`), `app/lib/src/features/export/presentation/export_providers.dart` | `app/test/export_screen_test.dart`; keyboard and dock: gap |
 | FR-SCR-29..31 | NFR-3, NFR-4 | — | `app/lib/src/features/editing/data/editing_store.dart`, `editing_repository.dart`, `match_catalog.dart` | `app/test/editing_repository_test.dart` |
 

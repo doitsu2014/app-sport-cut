@@ -23,7 +23,7 @@
 - Code: [`app/lib/src/features/workspace/`](../../app/lib/src/features/workspace/),
   [`app/lib/src/features/library/`](../../app/lib/src/features/library/),
   [`app/lib/src/app/router.dart`](../../app/lib/src/app/router.dart),
-  [`core/crates/storage/`](../../core/crates/storage/).
+  [`core/gateways/storage/`](../../core/gateways/storage/).
 - Prior verification at baseline `1541c64`, cited for provenance (not part of
   the working tree): `docs/verification/video-import.md`,
   `docs/verification/client-track.md`, `docs/architecture.md`,
@@ -44,8 +44,8 @@ Specifically superseded: FR-LIB-09 (now `library.workspace.update`), FR-LIB-12,
 FR-LIB-15 (now `library.recording.relocate`), FR-LIB-23, FR-LIB-25, FR-LIB-30
 to FR-LIB-37, the §6 catalog/availability NFR rows, the §8.2 constraint that
 "the catalog is the app's", and Q-LIB-1. The service rules are in
-[background-service.md §6](../architecture/background-service.md#6-data-ownership)
-and [protocol.md §6](../architecture/protocol.md#6-method-table-catalog-and-recording-custody).
+[background-service.md §6](../architecture/background-service.md#7-data-ownership)
+and [protocol.md §6](../architecture/protocol.md#8-method-table-catalog-and-recording-custody).
 
 ## 1. Purpose, users, and relationship to the product BRD
 
