@@ -1,0 +1,396 @@
+import 'package:flutter/material.dart';
+
+import '../../../../app/design/components/sc_empty_state.dart';
+import '../../../../app/design/sc_icons.dart';
+import '../../../../app/design/sc_metrics.dart';
+import '../../../../app/design/sc_typography.dart';
+import '../../../../app/design/sportcut_tokens.dart';
+import '../../../library/domain/match_record.dart';
+import '../../../library/presentation/match_list_entry.dart';
+import '../../../library/presentation/playback_controller.dart';
+import '../../domain/pipeline_stage.dart';
+import '../../domain/workspace.dart';
+import 'inspector_pane.dart';
+import 'preview_pane.dart';
+import 'stage_strip.dart';
+import 'studio_status_bar.dart';
+import 'studio_toolbar.dart';
+import 'video_rail.dart';
+
+/// The studio frame: toolbar, stage strip, three-column workspace, timeline
+/// placeholder, and status bar.
+///
+/// The shell takes already-resolved data and callbacks; it reads no provider.
+/// Rail widths narrow at the 1200 px and 1040 px breakpoints, and below the
+/// 980 px collapse the panes stack preview, videos, then inspector (ADR-0003
+/// D15; FR-SHL-02, FR-SHL-06).
+class StudioShell extends StatelessWidget {
+  /// Build the studio frame.
+  const StudioShell({
+    super.key,
+    required this.workspace,
+    required this.videos,
+    required this.videosError,
+    required this.selectedEntry,
+    required this.facts,
+    required this.stageStates,
+    required this.selectedStage,
+    required this.runningStage,
+    required this.runningFraction,
+    required this.controller,
+    required this.importRunning,
+    required this.importDescription,
+    required this.searchController,
+    required this.libraryVisible,
+    required this.inspectorVisible,
+    required this.focusMode,
+    required this.onBack,
+    required this.onToggleLibrary,
+    required this.onToggleInspector,
+    required this.onToggleFocusMode,
+    required this.onDeleteWorkspace,
+    required this.onSelectVideo,
+    required this.onDeleteVideo,
+    required this.onImport,
+    required this.onCancelImport,
+    required this.onRetry,
+    required this.onSelectStage,
+    required this.onPrepare,
+    required this.onRefresh,
+    this.importFraction,
+  });
+
+  /// The workspace the studio is showing.
+  final Workspace workspace;
+
+  /// The videos in the workspace, or null while they load.
+  final List<MatchListEntry>? videos;
+
+  /// Why the video list could not be read, when it could not.
+  final String? videosError;
+
+  /// The selected video, or null when none is chosen.
+  final MatchListEntry? selectedEntry;
+
+  /// Stage facts for every video, or null while they load.
+  final Map<String, VideoStageFacts>? facts;
+
+  /// The resolved state of every stage for the selected video.
+  final Map<PipelineStage, StageState> stageStates;
+
+  /// The selected stage, where null means Play.
+  final PipelineStage? selectedStage;
+
+  /// The stage with a job running, if any.
+  final PipelineStage? runningStage;
+
+  /// Progress of the running stage in the range 0 to 1, when known.
+  final double? runningFraction;
+
+  /// The shared player for the selected video.
+  final PlaybackController? controller;
+
+  /// Whether an import is running.
+  final bool importRunning;
+
+  /// What the running import is doing.
+  final String importDescription;
+
+  /// Completion of the running import in the range 0 to 1, when known.
+  final double? importFraction;
+
+  /// The library search controller, owned by the composition root.
+  final TextEditingController searchController;
+
+  /// Whether the video rail is showing.
+  final bool libraryVisible;
+
+  /// Whether the inspector is showing.
+  final bool inspectorVisible;
+
+  /// Whether focus mode is engaged.
+  final bool focusMode;
+
+  /// Return to the workspace list.
+  final VoidCallback onBack;
+
+  /// Show or hide the video rail.
+  final VoidCallback onToggleLibrary;
+
+  /// Show or hide the inspector.
+  final VoidCallback onToggleInspector;
+
+  /// Toggle focus mode.
+  final VoidCallback onToggleFocusMode;
+
+  /// Delete the workspace.
+  final VoidCallback onDeleteWorkspace;
+
+  /// Select a video.
+  final void Function(MatchListEntry) onSelectVideo;
+
+  /// Delete a video.
+  final void Function(MatchListEntry) onDeleteVideo;
+
+  /// Start importing a recording.
+  final VoidCallback onImport;
+
+  /// Cancel the running import.
+  final VoidCallback onCancelImport;
+
+  /// Retry reading the video list.
+  final VoidCallback onRetry;
+
+  /// Select a stage, where null selects Play.
+  final void Function(PipelineStage?) onSelectStage;
+
+  /// Open the prepare screen and start its background job.
+  final void Function(MatchRecord) onPrepare;
+
+  /// Refresh the rail after a feature writes an artifact.
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = SportcutPalette.of(context);
+    final videos = this.videos;
+    final loading = videos == null && videosError == null;
+    final missing = videos == null
+        ? 0
+        : videos.where((entry) => !entry.recordingAvailable).length;
+    final selected = selectedEntry;
+
+    return Scaffold(
+      backgroundColor: palette.bg,
+      body: Column(
+        children: <Widget>[
+          StudioToolbar(
+            workspace: workspace,
+            searchController: searchController,
+            libraryVisible: libraryVisible,
+            inspectorVisible: inspectorVisible,
+            focusMode: focusMode,
+            onBack: onBack,
+            onToggleLibrary: onToggleLibrary,
+            onToggleInspector: onToggleInspector,
+            onToggleFocusMode: onToggleFocusMode,
+            onDelete: onDeleteWorkspace,
+            onExport: () => onSelectStage(PipelineStage.export),
+          ),
+          StageStrip(
+            states: stageStates,
+            selectedStage: selectedStage,
+            runningStage: runningStage,
+            runningFraction: runningFraction,
+            onSelectStage: onSelectStage,
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                if (constraints.maxWidth < ScMetrics.collapseBreakpoint) {
+                  return _stacked(context, loading);
+                }
+                final rails = _RailWidths.forWidth(constraints.maxWidth);
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    if (libraryVisible)
+                      SizedBox(
+                        width: rails.library,
+                        child: _videoRail(loading),
+                      ),
+                    Expanded(child: _preview(context, loading)),
+                    if (inspectorVisible)
+                      SizedBox(
+                        width: rails.inspector,
+                        child: _inspector(),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const StudioTimelinePlaceholder(),
+          StudioStatusBar(
+            videoCount: videos?.length ?? 0,
+            missingCount: missing,
+            entry: selected,
+            facts: selected == null ? null : facts?[selected.match.id],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _preview(BuildContext context, bool loading) {
+    final palette = SportcutPalette.of(context);
+    final selected = selectedEntry;
+    if (selected == null) {
+      if (loading) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      return ColoredBox(
+        color: palette.bg,
+        child: const Center(
+          child: ScEmptyState(
+            message: 'Select a video to preview.',
+            icon: ScIcons.movie,
+          ),
+        ),
+      );
+    }
+    return PreviewPane(
+      entry: selected,
+      facts: facts,
+      controller: controller,
+      stage: selectedStage,
+      onSelectStage: (PipelineStage stage) => onSelectStage(stage),
+      onPrepare: onPrepare,
+      onRefresh: onRefresh,
+    );
+  }
+
+  Widget _videoRail(bool loading) {
+    return VideoRail(
+      workspaceTitle: workspace.title,
+      entries: videos ?? const <MatchListEntry>[],
+      selectedId: selectedEntry?.match.id,
+      loading: loading,
+      error: videosError,
+      importRunning: importRunning,
+      importDescription: importDescription,
+      importFraction: importFraction,
+      onSelect: onSelectVideo,
+      onDelete: onDeleteVideo,
+      onImport: onImport,
+      onCancelImport: onCancelImport,
+      onRetry: onRetry,
+    );
+  }
+
+  Widget _inspector() {
+    return InspectorPane(
+      states: stageStates,
+      selectedStage: selectedStage,
+      runningStage: runningStage,
+      runningFraction: runningFraction,
+      onSelectPlay: () => onSelectStage(null),
+      onSelectStage: (PipelineStage stage) => onSelectStage(stage),
+    );
+  }
+
+  Widget _stacked(BuildContext context, bool loading) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          SizedBox(
+            height: ScMetrics.stackedPaneHeight,
+            child: _preview(context, loading),
+          ),
+          if (libraryVisible)
+            SizedBox(
+              height: ScMetrics.stackedPaneHeight,
+              child: _videoRail(loading),
+            ),
+          if (inspectorVisible)
+            SizedBox(
+              height: ScMetrics.stackedPaneHeight,
+              child: _inspector(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The rail widths for one workspace width.
+class _RailWidths {
+  const _RailWidths(this.library, this.inspector);
+
+  /// The video-rail width.
+  final double library;
+
+  /// The inspector width.
+  final double inspector;
+
+  /// Pick the widths for [width].
+  factory _RailWidths.forWidth(double width) {
+    if (width >= ScMetrics.narrowBreakpoint1) {
+      return const _RailWidths(
+        ScMetrics.libraryWidth,
+        ScMetrics.inspectorWidth,
+      );
+    }
+    if (width >= ScMetrics.narrowBreakpoint2) {
+      return const _RailWidths(
+        ScMetrics.libraryWidthNarrow1,
+        ScMetrics.inspectorWidthNarrow1,
+      );
+    }
+    return const _RailWidths(
+      ScMetrics.libraryWidthNarrow2,
+      ScMetrics.inspectorWidthNarrow2,
+    );
+  }
+}
+
+/// The 176 px timeline dock placeholder.
+///
+/// PR 5a fills this with the ruler, rally segments, score chips, and playhead.
+/// For now it states the empty window honestly and owns no state.
+class StudioTimelinePlaceholder extends StatelessWidget {
+  /// Build the placeholder.
+  const StudioTimelinePlaceholder({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = SportcutPalette.of(context);
+    final tokens = SportcutTokens.of(context);
+    final typography = SportcutTypography.of(context);
+
+    return Container(
+      height: ScMetrics.timelineHeight,
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border(top: BorderSide(color: palette.border)),
+      ),
+      child: Column(
+        children: <Widget>[
+          Container(
+            height: ScMetrics.timelineHeaderHeight,
+            alignment: Alignment.centerLeft,
+            padding: EdgeInsets.symmetric(horizontal: tokens.space3),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: palette.borderSoft)),
+            ),
+            child: Text(
+              'Timeline',
+              style: typography.sm14.copyWith(
+                color: palette.fg2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.all(tokens.space3),
+              child: Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: palette.bg,
+                  borderRadius: BorderRadius.circular(ScMetrics.radiusThumb),
+                  border: Border.all(color: palette.borderSoft),
+                ),
+                child: Text(
+                  'No rallies in this window.',
+                  style: typography.xs12.copyWith(color: palette.muted),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

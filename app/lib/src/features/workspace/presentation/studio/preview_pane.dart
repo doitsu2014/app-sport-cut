@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/design/sc_metrics.dart';
+import '../../../../app/design/sc_typography.dart';
 import '../../../../app/design/sportcut_tokens.dart';
 import '../../../analysis/presentation/analysis_view.dart';
 import '../../../calibration/presentation/calibration_view.dart';
@@ -14,12 +16,13 @@ import '../../../tracking/presentation/player_tracking_view.dart';
 import '../../domain/pipeline_stage.dart';
 import 'studio_chrome.dart';
 
-/// One shared preview in the center of the studio.
+/// One shared preview in the centre of the studio.
 ///
-/// The pane shows the preview header and whichever feature view the selected
-/// stage names, handing every view the same playback controller.
+/// The pane fills its column, keeps the [ScMetrics.previewMinWidth] floor via
+/// [LayoutBuilder], and sits on the page ground. The feature views inside it
+/// are unchanged in this pass; they keep the shared playback controller.
 class PreviewPane extends StatelessWidget {
-  /// Build the center pane for the selected [entry].
+  /// Build the centre pane for the selected [entry].
   const PreviewPane({
     super.key,
     required this.entry,
@@ -54,18 +57,31 @@ class PreviewPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = this.controller;
-    if (controller == null) {
-      return const SizedBox.shrink();
-    }
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surfaceContainerLowest,
-      child: Column(
-        children: <Widget>[
-          CenterHeader(match: entry.match, stage: stage),
-          Expanded(child: _featureView(entry, facts, controller)),
-        ],
-      ),
+    final palette = SportcutPalette.of(context);
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final width = constraints.maxWidth < ScMetrics.previewMinWidth
+            ? ScMetrics.previewMinWidth
+            : constraints.maxWidth;
+        final controller = this.controller;
+        return ColoredBox(
+          color: palette.bg,
+          child: SizedBox(
+            width: width,
+            height: constraints.maxHeight,
+            child: Column(
+              children: <Widget>[
+                CenterHeader(match: entry.match, stage: stage),
+                Expanded(
+                  child: controller == null
+                      ? const Center(child: CircularProgressIndicator())
+                      : _featureView(entry, facts, controller),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -129,9 +145,9 @@ class CenterHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final palette = SportcutPalette.of(context);
     final tokens = SportcutTokens.of(context);
+    final typography = SportcutTypography.of(context);
     final fps = match.frameRate;
     final fpsLabel = fps == null || fps <= 0
         ? null
@@ -141,19 +157,19 @@ class CenterHeader extends StatelessWidget {
       if (fpsLabel != null) fpsLabel,
     ];
     return Container(
-      height: 40,
+      height: ScMetrics.previewHeaderHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.space3),
       decoration: BoxDecoration(
-        color: scheme.surface,
-        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+        color: palette.surface,
+        border: Border(bottom: BorderSide(color: palette.borderSoft)),
       ),
       child: Row(
         children: <Widget>[
           Text(
             'Preview',
-            style: theme.textTheme.labelLarge?.copyWith(
-              fontSize: 12,
-              color: scheme.onSurfaceVariant,
+            style: typography.xs12.copyWith(
+              color: palette.muted,
+              fontWeight: FontWeight.w600,
             ),
           ),
           SizedBox(width: tokens.space2),
@@ -161,51 +177,9 @@ class CenterHeader extends StatelessWidget {
           const Spacer(),
           Text(
             parts.join(' · '),
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
+            style: typography.chrome9.copyWith(color: palette.muted),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// The error state shown when the video list cannot be read.
-class StudioError extends StatelessWidget {
-  /// Build the error state.
-  const StudioError({
-    super.key,
-    required this.message,
-    required this.onRetry,
-  });
-
-  /// The error text to show.
-  final String message;
-
-  /// Retry loading the videos.
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Icon(Icons.error_outline, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              'The videos could not be read',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 24),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
       ),
     );
   }

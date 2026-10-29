@@ -172,4 +172,27 @@ abstract final class ScMetrics {
 
   /// Default toolbar search-field width.
   static const double searchFieldWidth = 260;
+
+  /// Leading toolbar inset that keeps the Flutter controls clear of the
+  /// native macOS traffic lights (ADR-0003 D6).
+  static const double trafficLightInset = 78;
+
+  /// Library thumbnail corner radius role (ADR-0003 D15).
+  static const double radiusThumb = 4;
+
+  /// Toolbar tool and dense control corner radius role.
+  static const double radiusTool = 7;
+
+  /// Stage strip tab-track corner radius role.
+  static const double radiusTabTrack = 8;
+
+  /// Keyboard keycap corner radius role.
+  static const double radiusKeycap = 4;
+
+  /// Height of each pane when the studio stacks below
+  /// [collapseBreakpoint].
+  static const double stackedPaneHeight = 360;
+
+  /// Height of the preview pane's own header strip.
+  static const double previewHeaderHeight = 40;
 }

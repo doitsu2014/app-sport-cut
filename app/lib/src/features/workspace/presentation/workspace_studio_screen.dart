@@ -13,21 +13,16 @@ import '../../library/presentation/match_list_entry.dart';
 import '../../library/presentation/playback_controller.dart';
 import '../domain/pipeline_stage.dart';
 import '../domain/workspace.dart';
-import 'studio/inspector_pane.dart';
-import 'studio/preview_pane.dart';
 import 'studio/studio_dialogs.dart';
-import 'studio/studio_status_bar.dart';
-import 'studio/studio_toolbar.dart';
-import 'studio/video_rail.dart';
+import 'studio/studio_shell.dart';
 import 'workspace_providers.dart';
 
-/// The three-pane workspace studio.
+/// The composition root for the studio.
 ///
-/// Videos on the left, one shared preview in the center, and the features as a
-/// vertical rail on the right. The studio owns one playback controller per
+/// Every provider watch, listener, controller, and handler lives here; the
+/// frame itself is [StudioShell]. The studio owns one playback controller per
 /// selected video and hands it to whichever feature view is showing, so Play
-/// and Calibrate share a seamless preview. Features that are not yet embedded
-/// keep opening their existing full-screen route.
+/// and the pipeline stages share a seamless preview.
 class WorkspaceStudioScreen extends ConsumerStatefulWidget {
   /// Build the studio for a workspace.
   const WorkspaceStudioScreen({super.key, required this.workspace});
@@ -50,9 +45,22 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
   /// The selected feature, where null means playback.
   PipelineStage? _selectedStage;
 
+  /// The library search query. Filtering arrives with the ephemeral state.
+  final TextEditingController _searchController = TextEditingController();
+
+  /// Whether the video rail is showing.
+  bool _libraryVisible = true;
+
+  /// Whether the inspector is showing.
+  bool _inspectorVisible = true;
+
+  /// Whether focus mode is engaged.
+  bool _focusMode = false;
+
   @override
   void dispose() {
     _controller?.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -66,9 +74,6 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     final loadedEntries = videos.value;
     final selectedEntry =
         loadedEntries == null ? null : _selectedEntry(loadedEntries);
-    final missingCount = loadedEntries == null
-        ? 0
-        : loadedEntries.where((entry) => !entry.recordingAvailable).length;
 
     // Preparing analysis runs in the background; announce how it ended, even
     // if the user has moved to another feature or video, and refresh the rail.
@@ -89,8 +94,8 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     });
 
     // Scoring the first rally flips Review & score from ready to done, and
-    // keeping the first clip flips Export; refresh the stage facts so the rail
-    // shows the check rather than a stale state.
+    // keeping the first clip flips Export; refresh the stage facts so the strip
+    // and inspector show the new state rather than a stale one.
     ref.listen(editingControllerProvider, (previous, next) {
       if (_editHasScore(previous?.edit) != _editHasScore(next.edit) ||
           _editHasClips(previous?.edit) != _editHasClips(next.edit)) {
@@ -98,99 +103,62 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
       }
     });
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
-      body: Column(
-        children: <Widget>[
-          StudioToolbar(
-            workspace: widget.workspace,
-            videoCount: loadedEntries?.length ?? 0,
-            importRunning: import.isRunning,
-            showImport: loadedEntries == null || loadedEntries.isNotEmpty,
-            onBack: () {
-              Navigator.of(context).maybePop();
-            },
-            onImport: _import,
-            onDelete: _confirmDeleteWorkspace,
-          ),
-          if (import.isRunning)
-            ImportProgress(
-              description: import.description,
-              onCancel: () =>
-                  ref.read(importControllerProvider.notifier).cancel(),
-            ),
-          Expanded(
-            child: videos.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => StudioError(
-                message: '$error',
-                onRetry: () => ref.invalidate(
-                  workspaceVideosProvider(widget.workspace.id),
-                ),
-              ),
-              data: (entries) {
-                if (entries.isEmpty) {
-                  return EmptyStudio(
-                    importRunning: import.isRunning,
-                    onImport: _import,
-                  );
-                }
-                _ensureSelection(entries);
-                final selected = _selectedEntry(entries);
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    VideoRail(
-                      entries: entries,
-                      selectedId: _selectedVideoId,
-                      busyId: analysis.running ? analysis.runningMatchId : null,
-                      onSelect: (entry) => _selectVideo(entry.match),
-                      onDelete: (entry) => _confirmDeleteMatch(entry.match),
-                    ),
-                    const VerticalDivider(width: 1),
-                    Expanded(
-                      child: selected == null
-                          ? const SizedBox.shrink()
-                          : PreviewPane(
-                              entry: selected,
-                              facts: facts,
-                              controller: _controller,
-                              stage: _selectedStage,
-                              onSelectStage: (stage) =>
-                                  setState(() => _selectedStage = stage),
-                              onPrepare: _startPreparing,
-                              onRefresh: _refresh,
-                            ),
-                    ),
-                    const VerticalDivider(width: 1),
-                    InspectorPane(
-                      states: selected == null
-                          ? const <PipelineStage, StageState>{}
-                          : _statesFor(selected, facts),
-                      selectedStage: _selectedStage,
-                      busyStages: selected != null &&
-                              analysis.runningFor(selected.match.id)
-                          ? const <PipelineStage>{PipelineStage.analyze}
-                          : const <PipelineStage>{},
-                      onSelectPlay: () => setState(() => _selectedStage = null),
-                      onSelectStage: _selectStage,
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-          StudioStatusBar(
-            videoCount: loadedEntries?.length ?? 0,
-            missingCount: missingCount,
-            entry: selectedEntry,
-            stage: _selectedStage,
-            facts:
-                selectedEntry == null ? null : facts?[selectedEntry.match.id],
-          ),
-        ],
+    if (loadedEntries != null && loadedEntries.isNotEmpty) {
+      _ensureSelection(loadedEntries);
+    }
+
+    final runningForSelected =
+        selectedEntry != null && analysis.runningFor(selectedEntry.match.id);
+    final stageStates = selectedEntry == null
+        ? const <PipelineStage, StageState>{}
+        : _statesFor(selectedEntry, facts);
+    final videosError =
+        videos.hasError && !videos.hasValue ? '${videos.error}' : null;
+
+    return StudioShell(
+      workspace: widget.workspace,
+      videos: loadedEntries,
+      videosError: videosError,
+      selectedEntry: selectedEntry,
+      facts: facts,
+      stageStates: stageStates,
+      selectedStage: _selectedStage,
+      runningStage: runningForSelected ? PipelineStage.analyze : null,
+      runningFraction: runningForSelected ? analysis.progress : null,
+      controller: _controller,
+      importRunning: import.isRunning,
+      importDescription: import.description,
+      searchController: _searchController,
+      libraryVisible: _libraryVisible,
+      inspectorVisible: _inspectorVisible,
+      focusMode: _focusMode,
+      onBack: () => Navigator.of(context).maybePop(),
+      onToggleLibrary: () => setState(() => _libraryVisible = !_libraryVisible),
+      onToggleInspector: () =>
+          setState(() => _inspectorVisible = !_inspectorVisible),
+      onToggleFocusMode: () => setState(() => _focusMode = !_focusMode),
+      onDeleteWorkspace: _confirmDeleteWorkspace,
+      onSelectVideo: (entry) => _selectVideo(entry.match),
+      onDeleteVideo: (entry) => _confirmDeleteMatch(entry.match),
+      onImport: _import,
+      onCancelImport: () =>
+          ref.read(importControllerProvider.notifier).cancel(),
+      onRetry: () => ref.invalidate(
+        workspaceVideosProvider(widget.workspace.id),
       ),
+      onSelectStage: _selectStageFromStrip,
+      onPrepare: _startPreparing,
+      onRefresh: _refresh,
     );
+  }
+
+  /// Select a stage from the strip or inspector, where null is Play.
+  void _selectStageFromStrip(PipelineStage? stage) {
+    if (stage == null) {
+      setState(() => _selectedStage = null);
+      return;
+    }
+    _selectStage(stage);
   }
 
   /// Pick the first video once, so the studio opens with something in view.
@@ -222,9 +190,8 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
   ) {
     final videoFacts = facts?[entry.match.id];
     if (videoFacts == null) {
-      return <PipelineStage, StageState>{
-        for (final stage in PipelineStage.values) stage: StageState.idle,
-      };
+      // The facts are still loading: report no state rather than a wrong one.
+      return const <PipelineStage, StageState>{};
     }
     return resolveStageStates(videoFacts);
   }

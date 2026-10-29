@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/design/sc_metrics.dart';
+import '../../../../app/design/components/sc_panel.dart';
+import '../../../../app/design/components/sc_pipeline_row.dart';
+import '../../../../app/design/sc_status.dart';
+import '../../../../app/design/sc_tints.dart';
 import '../../../../app/design/sportcut_tokens.dart';
 import '../../domain/pipeline_stage.dart';
-import 'studio_chrome.dart';
 
-/// The right rail listing the pipeline stages as selectable features.
+/// The right rail: the pipeline stages as a selectable, stateful list.
+///
+/// The rows are grouped into the stages that read the match and the stages
+/// that shape the reel. The Rally and Clip tabs replace this body later; for
+/// now it is the pipeline. The pane reads no provider: the composition root
+/// passes the resolved states and callbacks.
 class InspectorPane extends StatelessWidget {
   /// Build the inspector for the selected video's [states].
   const InspectorPane({
     super.key,
     required this.states,
     required this.selectedStage,
-    required this.busyStages,
+    required this.runningStage,
+    required this.runningFraction,
     required this.onSelectPlay,
     required this.onSelectStage,
   });
@@ -23,8 +31,11 @@ class InspectorPane extends StatelessWidget {
   /// The selected feature, where null means playback.
   final PipelineStage? selectedStage;
 
-  /// Stages with a job running in the background for the selected video.
-  final Set<PipelineStage> busyStages;
+  /// The stage with a job running, if any.
+  final PipelineStage? runningStage;
+
+  /// Progress of the running stage in the range 0 to 1, when known.
+  final double? runningFraction;
 
   /// Switch the center back to playback.
   final VoidCallback onSelectPlay;
@@ -48,35 +59,43 @@ class InspectorPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final palette = SportcutPalette.of(context);
     final tokens = SportcutTokens.of(context);
-    final doneCount =
-        states.values.where((state) => state == StageState.done).length;
+    final doneCount = <PipelineStage>[..._analysis, ..._studio]
+        .where((stage) => states[stage] == StageState.done)
+        .length;
+    final playStatus = states.isEmpty ? ScStatus.idle : ScStatus.ready;
+    var number = 0;
+    final analysisRows = <Widget>[
+      for (final stage in _analysis) _row(stage, ++number),
+    ];
+    final studioRows = <Widget>[
+      for (final stage in _studio) _row(stage, ++number),
+    ];
+
     return Container(
-      width: ScMetrics.inspectorWidth,
-      color: scheme.surface,
+      decoration: BoxDecoration(
+        color: ScTints.railSurface(palette.surface, palette.bg),
+        border: Border(left: BorderSide(color: palette.border)),
+      ),
       child: Column(
         children: <Widget>[
-          RailHeader(
-            label: 'Pipeline',
-            trailing: '$doneCount / ${PipelineStage.values.length}',
-          ),
+          ScRailHeader(label: 'Pipeline', count: doneCount),
           Expanded(
             child: ListView(
               padding: EdgeInsets.all(tokens.space2),
               children: <Widget>[
-                FeatureRow(
-                  label: 'Play',
+                ScPipelineRow(
+                  number: 0,
+                  name: 'Play',
+                  status: playStatus,
                   selected: selectedStage == null,
-                  icon: Icons.play_circle_outline,
-                  done: false,
-                  ready: false,
                   onTap: onSelectPlay,
                 ),
-                const SectionHeader(label: 'Analysis'),
-                for (final stage in _analysis) _item(stage),
-                const SectionHeader(label: 'Studio'),
-                for (final stage in _studio) _item(stage),
+                const ScSectionHeader(label: 'Analysis'),
+                ...analysisRows,
+                const ScSectionHeader(label: 'Studio'),
+                ...studioRows,
               ],
             ),
           ),
@@ -85,119 +104,33 @@ class InspectorPane extends StatelessWidget {
     );
   }
 
-  FeatureRow _item(PipelineStage stage) => FeatureRow(
-        label: stage.label,
-        selected: selectedStage == stage,
-        icon: _stageIcon(stage),
-        done: states[stage] == StageState.done,
-        ready: states[stage] == StageState.ready,
-        busy: busyStages.contains(stage),
-        onTap: () => onSelectStage(stage),
-      );
-
-  static IconData _stageIcon(PipelineStage stage) => switch (stage) {
-        PipelineStage.import => Icons.download_done,
-        PipelineStage.calibrate => Icons.grid_on,
-        PipelineStage.analyze => Icons.settings_input_component,
-        PipelineStage.track => Icons.person_search,
-        PipelineStage.score => Icons.scoreboard,
-        PipelineStage.highlight => Icons.star_outline,
-        PipelineStage.export => Icons.ios_share,
-      };
-}
-
-/// One selectable feature in the [InspectorPane].
-class FeatureRow extends StatelessWidget {
-  /// Build a feature row.
-  const FeatureRow({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.icon,
-    required this.done,
-    required this.ready,
-    this.busy = false,
-    required this.onTap,
-  });
-
-  /// The feature's name.
-  final String label;
-
-  /// Whether this is the showing feature.
-  final bool selected;
-
-  /// The feature's icon.
-  final IconData icon;
-
-  /// Whether the feature's output exists.
-  final bool done;
-
-  /// Whether the feature can be done now.
-  final bool ready;
-
-  /// Whether this feature's job is running in the background.
-  final bool busy;
-
-  /// Open the feature.
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final tokens = SportcutTokens.of(context);
-    final palette = SportcutPalette.of(context);
-    final color = selected ? scheme.primary : scheme.onSurfaceVariant;
-
-    return Material(
-      color: selected ? scheme.surfaceContainerHighest : Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(tokens.radiusSm),
-        side: BorderSide(
-          color: selected ? scheme.outlineVariant : Colors.transparent,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: tokens.space3,
-            vertical: tokens.space2,
-          ),
-          child: Row(
-            children: <Widget>[
-              Icon(icon, size: 18, color: color),
-              SizedBox(width: tokens.space2),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color:
-                        selected ? scheme.onSurface : scheme.onSurfaceVariant,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  ),
-                ),
-              ),
-              if (busy)
-                const BusySpinner(tooltip: 'Running in the background')
-              else if (done)
-                Icon(Icons.check, size: 15, color: palette.success)
-              else if (ready)
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: scheme.primary,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+  Widget _row(PipelineStage stage, int number) {
+    final running = stage == runningStage;
+    return ScPipelineRow(
+      number: number,
+      name: stage.label,
+      status: _statusFor(stage),
+      detail: running ? _percent : null,
+      selected: selectedStage == stage,
+      onTap: () => onSelectStage(stage),
     );
+  }
+
+  /// The state to show for [stage].
+  ScStatus _statusFor(PipelineStage stage) {
+    if (stage == runningStage) {
+      return ScStatus.running;
+    }
+    return switch (states[stage]) {
+      StageState.done => ScStatus.done,
+      StageState.ready => ScStatus.ready,
+      StageState.idle => ScStatus.blocked,
+      null => ScStatus.idle,
+    };
+  }
+
+  String get _percent {
+    final value = (runningFraction ?? 0).clamp(0.0, 1.0);
+    return '${(value * 100).round()}%';
   }
 }

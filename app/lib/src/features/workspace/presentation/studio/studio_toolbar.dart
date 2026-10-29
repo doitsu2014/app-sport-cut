@@ -1,110 +1,160 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/design/components/sc_actions.dart';
+import '../../../../app/design/components/sc_search_field.dart';
+import '../../../../app/design/sc_icons.dart';
 import '../../../../app/design/sc_metrics.dart';
+import '../../../../app/design/sc_tints.dart';
+import '../../../../app/design/sc_typography.dart';
 import '../../../../app/design/sportcut_tokens.dart';
 import '../../domain/workspace.dart';
-import 'studio_chrome.dart';
 
-/// The studio toolbar: back, the workspace title, and the global actions.
+/// The studio toolbar: back, wordmark, breadcrumb, command search, rail and
+/// focus toggles, delete, and the single primary action, Export.
+///
+/// The leading edge is padded by [ScMetrics.trafficLightInset] so the native
+/// macOS traffic lights never sit under a control (ADR-0003 D6). Import is
+/// deliberately absent: it lives in the video-rail footer (ADR-0003 D4). The
+/// widget is data-in / callback-out and reads no provider.
 class StudioToolbar extends StatelessWidget {
   /// Build the toolbar for [workspace].
   const StudioToolbar({
     super.key,
     required this.workspace,
-    required this.videoCount,
-    required this.importRunning,
-    required this.showImport,
+    required this.searchController,
+    required this.libraryVisible,
+    required this.inspectorVisible,
+    required this.focusMode,
     required this.onBack,
-    required this.onImport,
+    required this.onToggleLibrary,
+    required this.onToggleInspector,
+    required this.onToggleFocusMode,
     required this.onDelete,
+    required this.onExport,
   });
 
-  /// The workspace whose title is shown.
+  /// The workspace named in the breadcrumb.
   final Workspace workspace;
 
-  /// How many videos the workspace holds.
-  final int videoCount;
+  /// The search field's controller, owned by the composition root.
+  ///
+  /// Filtering and the `⌘K` binding arrive with the ephemeral studio state.
+  final TextEditingController searchController;
 
-  /// Whether an import is running.
-  final bool importRunning;
+  /// Whether the video rail is showing.
+  final bool libraryVisible;
 
-  /// Whether the import action is offered.
-  final bool showImport;
+  /// Whether the inspector rail is showing.
+  final bool inspectorVisible;
+
+  /// Whether focus mode is engaged.
+  final bool focusMode;
 
   /// Return to the workspace list.
   final VoidCallback onBack;
 
-  /// Start importing a recording.
-  final VoidCallback onImport;
+  /// Show or hide the video rail.
+  final VoidCallback onToggleLibrary;
+
+  /// Show or hide the inspector rail.
+  final VoidCallback onToggleInspector;
+
+  /// Toggle focus mode.
+  final VoidCallback onToggleFocusMode;
 
   /// Delete the workspace.
   final VoidCallback onDelete;
 
+  /// Select the Export stage.
+  final VoidCallback onExport;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final palette = SportcutPalette.of(context);
     final tokens = SportcutTokens.of(context);
+    final typography = SportcutTypography.of(context);
+    final wordmark = typography.display32.copyWith(
+      fontSize: typography.sm14.fontSize,
+      letterSpacing: 0,
+    );
+    final breadcrumb = typography.micro10.copyWith(color: palette.muted);
+
     return Container(
       height: ScMetrics.toolbarHeight,
-      padding: EdgeInsets.symmetric(horizontal: tokens.space4),
+      padding: EdgeInsets.only(
+        left: ScMetrics.trafficLightInset,
+        right: tokens.space3,
+      ),
       decoration: BoxDecoration(
-        color: scheme.surface,
-        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+        color: ScTints.toolbarSurface(palette.surface, palette.bg),
+        border: Border(bottom: BorderSide(color: palette.border)),
       ),
       child: Row(
         children: <Widget>[
-          IconButton(
+          ScIconButton(
+            icon: ScIcons.chevronLeft,
+            label: 'Back to workspaces',
             onPressed: onBack,
-            tooltip: 'Back to workspaces',
-            icon: const Icon(Icons.arrow_back, size: 18),
           ),
           SizedBox(width: tokens.space2),
-          Text(
-            'Sportcut',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontSize: 14,
-              height: 1.1,
-              letterSpacing: -0.01,
-            ),
-          ),
+          Text('Sportcut', maxLines: 1, style: wordmark),
           SizedBox(width: tokens.space3),
-          Container(width: 1, height: 16, color: scheme.outlineVariant),
+          Container(
+            width: tokens.space1 / 4,
+            height: tokens.space4,
+            color: palette.border,
+          ),
           SizedBox(width: tokens.space3),
           Expanded(
             child: Text(
-              workspace.title,
+              'Workspace / ${workspace.title}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
-              ),
+              style: breadcrumb,
             ),
           ),
-          if (videoCount > 0) ...<Widget>[
-            StudioChip(
-              label: '$videoCount ${videoCount == 1 ? 'video' : 'videos'}',
+          SizedBox(width: tokens.space3),
+          ScSearchField(
+            controller: searchController,
+            hint: 'Search videos',
+            clearLabel: 'Clear search',
+          ),
+          SizedBox(width: tokens.space2),
+          ScToolbarButton(
+            icon: ScIcons.viewSidebar,
+            label: 'Toggle library',
+            selected: libraryVisible,
+            onPressed: onToggleLibrary,
+          ),
+          Transform.flip(
+            flipX: true,
+            child: ScToolbarButton(
+              icon: ScIcons.viewSidebar,
+              label: 'Toggle inspector',
+              selected: inspectorVisible,
+              onPressed: onToggleInspector,
             ),
-            SizedBox(width: tokens.space2),
-          ],
-          if (showImport) ...<Widget>[
-            FilledButton.icon(
-              onPressed: importRunning ? null : onImport,
-              icon: const Icon(Icons.add, size: 16),
-              label: Text(importRunning ? 'Importing' : 'Import'),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(0, 30),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                textStyle: theme.textTheme.labelLarge?.copyWith(fontSize: 12),
-              ),
-            ),
-            SizedBox(width: tokens.space2),
-          ],
-          IconButton(
+          ),
+          ScToolbarButton(
+            icon: focusMode ? ScIcons.fullscreenExit : ScIcons.fullscreen,
+            label: 'Focus mode (F)',
+            selected: focusMode,
+            onPressed: onToggleFocusMode,
+          ),
+          SizedBox(width: tokens.space1),
+          ScIconButton(
+            icon: ScIcons.delete,
+            label: 'Delete workspace',
             onPressed: onDelete,
-            tooltip: 'Delete workspace',
-            icon: const Icon(Icons.delete_outline, size: 18),
+          ),
+          SizedBox(width: tokens.space2),
+          SizedBox(
+            height: ScMetrics.toolButton,
+            child: ScButton.compact(
+              label: 'Export',
+              icon: ScIcons.download,
+              onPressed: onExport,
+            ),
           ),
         ],
       ),

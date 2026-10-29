@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/design/sc_metrics.dart';
+import '../../../../app/design/sc_typography.dart';
 import '../../../../app/design/sportcut_tokens.dart';
 import '../../../library/presentation/match_list_entry.dart';
 import '../../domain/pipeline_stage.dart';
-import 'studio_chrome.dart';
 
-/// The status bar along the bottom of the studio.
+/// The 30 px status bar along the bottom of the studio.
+///
+/// The left side carries the on-device promise and the video counts; the right
+/// side carries the current score and export readiness. Readiness is sentence
+/// case — `Checking`, `Ready to export`, `Needs a clip` — because the uppercase
+/// READY/ANALYZING vocabulary belongs to the stage strip (FR-SHL-14).
 class StudioStatusBar extends StatelessWidget {
   /// Build the status bar.
   const StudioStatusBar({
@@ -14,7 +19,6 @@ class StudioStatusBar extends StatelessWidget {
     required this.videoCount,
     required this.missingCount,
     required this.entry,
-    required this.stage,
     required this.facts,
   });
 
@@ -27,21 +31,19 @@ class StudioStatusBar extends StatelessWidget {
   /// The selected video, or null when none is chosen.
   final MatchListEntry? entry;
 
-  /// The selected feature, where null means playback.
-  final PipelineStage? stage;
-
   /// Stage facts for the selected video, or null while loading.
   final VideoStageFacts? facts;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final palette = SportcutPalette.of(context);
     final tokens = SportcutTokens.of(context);
-    final score = entry?.score;
-    final statusStyle = theme.textTheme.labelSmall?.copyWith(
-      color: scheme.onSurfaceVariant,
+    final typography = SportcutTypography.of(context);
+    final style = typography.micro10.copyWith(color: palette.muted);
+    final scoreStyle = SportcutTypography.withTabular(
+      style.copyWith(color: palette.fg2),
     );
+    final score = entry?.score;
     final ready = facts?.hasSelectedClips;
     final String readyLabel;
     if (ready == null) {
@@ -51,51 +53,53 @@ class StudioStatusBar extends StatelessWidget {
     } else {
       readyLabel = 'Needs a clip';
     }
+    final videoLabel = videoCount == 1 ? '1 video' : '$videoCount videos';
+    final missingLabel =
+        missingCount == 1 ? '1 missing' : '$missingCount missing';
+    final dot = tokens.space1 + tokens.space1 / 4;
+
     return Container(
       height: ScMetrics.statusHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.space3),
       decoration: BoxDecoration(
-        color: scheme.surface,
-        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+        color: palette.surface,
+        border: Border(top: BorderSide(color: palette.border)),
       ),
       child: Row(
         children: <Widget>[
           Container(
-            width: 5,
-            height: 5,
+            width: dot,
+            height: dot,
             decoration: BoxDecoration(
-              color: scheme.primary,
+              color: palette.accent,
               shape: BoxShape.circle,
             ),
           ),
-          SizedBox(width: tokens.space1 + 2),
-          Text('On-device · No cloud', style: statusStyle),
+          SizedBox(width: tokens.space1 + tokens.space1 / 2),
+          Text('On-device · No cloud', style: style),
           SizedBox(width: tokens.space3),
+          Text('$videoLabel · ', style: style),
           Text(
-            '$videoCount ${videoCount == 1 ? 'video' : 'videos'}',
-            style: statusStyle,
-          ),
-          if (missingCount > 0) ...<Widget>[
-            SizedBox(width: tokens.space3),
-            Text(
-              '$missingCount missing',
-              style: statusStyle?.copyWith(color: scheme.error),
+            missingLabel,
+            style: style.copyWith(
+              color: missingCount > 0 ? palette.danger : palette.muted,
             ),
-          ],
+          ),
           const Spacer(),
           if (score != null) ...<Widget>[
             Text(
               'Score ${score.left}–${score.right}',
-              style: statusStyle,
+              style: scoreStyle,
             ),
             SizedBox(width: tokens.space3),
           ],
-          Text(
-            entry == null ? 'No video selected' : (stage?.label ?? 'Playback'),
-            style: statusStyle,
-          ),
-          SizedBox(width: tokens.space2),
-          if (entry != null) StudioChip(label: readyLabel),
+          if (entry != null)
+            Text(
+              readyLabel,
+              style: style.copyWith(
+                color: ready == true ? palette.accent : palette.muted,
+              ),
+            ),
         ],
       ),
     );
