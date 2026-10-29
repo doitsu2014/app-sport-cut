@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/design/sc_metrics.dart';
+import '../../../app/design/sc_overlay_colors.dart';
 import '../../../app/design/sportcut_tokens.dart';
 import '../../analysis/presentation/analysis_providers.dart';
 import '../../analysis/presentation/analysis_view.dart';
@@ -452,7 +454,7 @@ class _StudioToolbar extends StatelessWidget {
     final scheme = theme.colorScheme;
     final tokens = SportcutTokens.of(context);
     return Container(
-      height: tokens.chromeHeight,
+      height: ScMetrics.toolbarHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.space4),
       decoration: BoxDecoration(
         color: scheme.surface,
@@ -602,7 +604,7 @@ class _StudioStatusBar extends StatelessWidget {
       readyLabel = 'Needs a clip';
     }
     return Container(
-      height: tokens.statusHeight,
+      height: ScMetrics.statusHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.space3),
       decoration: BoxDecoration(
         color: scheme.surface,
@@ -707,7 +709,7 @@ class _VideoRail extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final tokens = SportcutTokens.of(context);
     return Container(
-      width: tokens.videoRailWidth,
+      width: ScMetrics.libraryWidth,
       color: scheme.surface,
       child: Column(
         children: <Widget>[
@@ -864,7 +866,7 @@ class _VideoThumb extends StatelessWidget {
       decoration: BoxDecoration(
         // The footage bed is fixed in both themes; this is a thumbnail, not
         // UI chrome.
-        color: const Color(0xFF0C3B2A),
+        color: ScOverlayColors.thumbnailBed,
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: scheme.outlineVariant),
       ),
@@ -984,7 +986,7 @@ class _FeatureRail extends StatelessWidget {
     final doneCount =
         states.values.where((state) => state == StageState.done).length;
     return Container(
-      width: tokens.featureRailWidth,
+      width: ScMetrics.inspectorWidth,
       color: scheme.surface,
       child: Column(
         children: <Widget>[
@@ -1085,6 +1087,7 @@ class _FeatureRow extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final tokens = SportcutTokens.of(context);
+    final palette = SportcutPalette.of(context);
     final color = selected ? scheme.primary : scheme.onSurfaceVariant;
 
     return Material(
@@ -1122,7 +1125,7 @@ class _FeatureRow extends StatelessWidget {
               if (busy)
                 const _BusySpinner(tooltip: 'Running in the background')
               else if (done)
-                Icon(Icons.check, size: 15, color: tokens.success)
+                Icon(Icons.check, size: 15, color: palette.success)
               else if (ready)
                 Container(
                   width: 6,

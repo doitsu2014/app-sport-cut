@@ -1,19 +1,11 @@
-import 'dart:ui' show FontFeature, FontVariation;
-
 import 'package:flutter/material.dart';
 
+import 'design/sc_metrics.dart';
+import 'design/sc_typography.dart';
 import 'design/sportcut_tokens.dart';
 
 /// Court green. Kept as the brand color for callers that need one value.
 const sportcutSeedColor = Color(0xFF0E6E45);
-
-const String _displayFamily = 'Archivo';
-const String _bodyFamily = 'IBMPlexSans';
-const String _monoFamily = 'IBMPlexMono';
-
-const List<FontFeature> _tabularFigures = <FontFeature>[
-  FontFeature.tabularFigures(),
-];
 
 /// The Sportcut theme for one system appearance.
 ///
@@ -27,79 +19,32 @@ ThemeData buildSportcutTheme(Brightness brightness) {
   final tokens = brightness == Brightness.dark
       ? SportcutTokens.dark
       : SportcutTokens.light;
-
-  TextStyle display(
-    double size,
-    double height,
-    FontWeight weight, {
-    double tracking = -0.025,
-  }) {
-    return TextStyle(
-      fontFamily: _displayFamily,
-      fontSize: size,
-      height: height,
-      fontWeight: weight,
-      letterSpacing: size * tracking,
-      fontFeatures: _tabularFigures,
-      fontVariations: <FontVariation>[
-        FontVariation('wght', weight.value.toDouble()),
-      ],
-      color: palette.fg,
-    );
-  }
-
-  TextStyle body(
-    double size,
-    double height,
-    FontWeight weight, {
-    double letterSpacing = 0,
-  }) {
-    return TextStyle(
-      fontFamily: _bodyFamily,
-      fontSize: size,
-      height: height,
-      fontWeight: weight,
-      letterSpacing: letterSpacing,
-      fontVariations: <FontVariation>[
-        FontVariation('wght', weight.value.toDouble()),
-      ],
-      color: palette.fg,
-    );
-  }
-
-  TextStyle mono(
-    double size,
-    double height,
-    FontWeight weight, {
-    double letterSpacing = 0,
-  }) {
-    return TextStyle(
-      fontFamily: _monoFamily,
-      fontSize: size,
-      height: height,
-      fontWeight: weight,
-      letterSpacing: letterSpacing,
-      fontFeatures: _tabularFigures,
-      color: palette.fg,
-    );
-  }
+  final typography = brightness == Brightness.dark
+      ? SportcutTypography.dark
+      : SportcutTypography.light;
 
   final textTheme = TextTheme(
-    displayLarge: display(64, 1.0, FontWeight.w700, tracking: -0.035),
-    displayMedium: display(44, 1.06, FontWeight.w700, tracking: -0.03),
-    displaySmall: display(32, 1.12, FontWeight.w700),
-    headlineLarge: display(44, 1.06, FontWeight.w700, tracking: -0.03),
-    headlineMedium: display(32, 1.12, FontWeight.w700),
-    headlineSmall: display(24, 1.2, FontWeight.w600),
-    titleLarge: display(20, 1.2, FontWeight.w700, tracking: -0.02),
-    titleMedium: body(16, 1.4, FontWeight.w600),
-    titleSmall: body(14, 1.4, FontWeight.w600),
-    bodyLarge: body(16, 1.55, FontWeight.w400),
-    bodyMedium: body(16, 1.55, FontWeight.w400),
-    bodySmall: body(14, 1.45, FontWeight.w400),
-    labelLarge: body(14, 1.2, FontWeight.w600, letterSpacing: 0.01),
-    labelMedium: body(12, 1.3, FontWeight.w600, letterSpacing: 0.02),
-    labelSmall: mono(10, 1.35, FontWeight.w500, letterSpacing: 0.08),
+    displayLarge: typography.display64,
+    displayMedium: typography.display44,
+    displaySmall: typography.display32,
+    headlineLarge: typography.display44,
+    headlineMedium: typography.display32,
+    headlineSmall: typography.title24,
+    titleLarge: typography.title20,
+    titleMedium: typography.body16.copyWith(fontWeight: FontWeight.w600),
+    titleSmall: typography.sm14.copyWith(fontWeight: FontWeight.w600),
+    bodyLarge: typography.body16,
+    bodyMedium: typography.body16,
+    bodySmall: typography.sm14,
+    labelLarge: typography.sm14.copyWith(
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.01,
+    ),
+    labelMedium: typography.xs12.copyWith(
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.02,
+    ),
+    labelSmall: typography.micro10,
   );
 
   final scheme = ColorScheme.fromSeed(
@@ -134,10 +79,21 @@ ThemeData buildSportcutTheme(Brightness brightness) {
     inversePrimary: palette.accent,
   );
 
+  // The focus treatment lives on component styles, not `ThemeData.focusColor`:
+  // a ring needs a border, and focusColor is only a fill.
+  WidgetStateProperty<BorderSide?> focusSide({BorderSide? base}) {
+    return WidgetStateProperty.resolveWith<BorderSide?>((states) {
+      if (states.contains(WidgetState.focused)) {
+        return BorderSide(color: palette.accent, width: 2);
+      }
+      return base;
+    });
+  }
+
   final filledStyle = FilledButton.styleFrom(
     foregroundColor: palette.accentOn,
-    minimumSize: const Size(0, 40),
-    padding: const EdgeInsets.symmetric(horizontal: 16),
+    minimumSize: const Size(0, ScMetrics.button),
+    padding: EdgeInsets.symmetric(horizontal: tokens.space4),
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(tokens.radiusMd),
     ),
@@ -163,12 +119,13 @@ ThemeData buildSportcutTheme(Brightness brightness) {
       return palette.accentOn;
     }),
     overlayColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
+    side: focusSide(),
   );
 
   final outlinedStyle = OutlinedButton.styleFrom(
     foregroundColor: palette.fg,
-    minimumSize: const Size(0, 40),
-    padding: const EdgeInsets.symmetric(horizontal: 16),
+    minimumSize: const Size(0, ScMetrics.button),
+    padding: EdgeInsets.symmetric(horizontal: tokens.space4),
     side: BorderSide(color: palette.border),
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(tokens.radiusMd),
@@ -176,18 +133,20 @@ ThemeData buildSportcutTheme(Brightness brightness) {
     textStyle: textTheme.labelLarge,
   ).copyWith(
     overlayColor: WidgetStatePropertyAll<Color>(palette.surfaceWarm),
+    side: focusSide(base: BorderSide(color: palette.border)),
   );
 
   final textStyle = TextButton.styleFrom(
     foregroundColor: palette.fg2,
-    minimumSize: const Size(0, 36),
-    padding: const EdgeInsets.symmetric(horizontal: 12),
+    minimumSize: const Size(0, ScMetrics.button),
+    padding: EdgeInsets.symmetric(horizontal: tokens.space3),
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(tokens.radiusSm),
     ),
     textStyle: textTheme.labelLarge,
   ).copyWith(
     overlayColor: WidgetStatePropertyAll<Color>(palette.surfaceWarm),
+    side: focusSide(),
   );
 
   return ThemeData(
@@ -196,7 +155,7 @@ ThemeData buildSportcutTheme(Brightness brightness) {
     colorScheme: scheme,
     scaffoldBackgroundColor: palette.bg,
     canvasColor: palette.bg,
-    fontFamily: _bodyFamily,
+    fontFamily: 'IBMPlexSans',
     textTheme: textTheme,
     primaryTextTheme: textTheme.apply(
       displayColor: palette.accentOn,
@@ -207,12 +166,11 @@ ThemeData buildSportcutTheme(Brightness brightness) {
     dividerColor: palette.borderSoft,
     splashFactory: NoSplash.splashFactory,
     visualDensity: VisualDensity.standard,
-    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    materialTapTargetSize: MaterialTapTargetSize.padded,
     hoverColor: palette.surfaceWarm,
     highlightColor: palette.surfaceWarm,
-    focusColor: palette.accent.withAlpha(30),
     disabledColor: palette.muted,
-    extensions: <ThemeExtension<dynamic>>[tokens],
+    extensions: <ThemeExtension<dynamic>>[palette, tokens, typography],
     appBarTheme: AppBarTheme(
       backgroundColor: palette.surface,
       foregroundColor: palette.fg,
@@ -220,8 +178,8 @@ ThemeData buildSportcutTheme(Brightness brightness) {
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      toolbarHeight: tokens.chromeHeight,
-      titleTextStyle: display(18, 1.2, FontWeight.w700),
+      toolbarHeight: ScMetrics.toolbarHeight,
+      titleTextStyle: typography.title20,
       iconTheme: IconThemeData(color: palette.fg2, size: 20),
     ),
     cardTheme: CardThemeData(
@@ -243,10 +201,8 @@ ThemeData buildSportcutTheme(Brightness brightness) {
         borderRadius: BorderRadius.circular(tokens.radiusLg),
         side: BorderSide(color: palette.borderSoft),
       ),
-      titleTextStyle: display(18, 1.2, FontWeight.w700),
-      contentTextStyle: body(16, 1.55, FontWeight.w400).copyWith(
-        color: palette.fg2,
-      ),
+      titleTextStyle: typography.title20,
+      contentTextStyle: typography.body16.copyWith(color: palette.fg2),
     ),
     filledButtonTheme: FilledButtonThemeData(style: filledStyle),
     outlinedButtonTheme: OutlinedButtonThemeData(style: outlinedStyle),
@@ -255,16 +211,30 @@ ThemeData buildSportcutTheme(Brightness brightness) {
       style: ButtonStyle(
         foregroundColor: WidgetStatePropertyAll<Color>(palette.fg2),
         overlayColor: WidgetStatePropertyAll<Color>(palette.surfaceWarm),
-        minimumSize: const WidgetStatePropertyAll<Size>(Size(32, 32)),
+        // The visual square is 36; `tapTargetSize` keeps the hit area at or
+        // above the 44 px floor.
+        minimumSize: const WidgetStatePropertyAll<Size>(
+          Size(ScMetrics.iconButtonVisual, ScMetrics.iconButtonVisual),
+        ),
+        fixedSize: const WidgetStatePropertyAll<Size>(
+          Size(ScMetrics.iconButtonVisual, ScMetrics.iconButtonVisual),
+        ),
+        padding: WidgetStatePropertyAll<EdgeInsetsGeometry>(
+          EdgeInsets.all(tokens.space1),
+        ),
+        iconSize: const WidgetStatePropertyAll<double>(ScMetrics.toolbarIcon),
+        tapTargetSize: MaterialTapTargetSize.padded,
+        side: focusSide(),
       ),
     ),
     inputDecorationTheme: InputDecorationThemeData(
       filled: true,
       fillColor: palette.surface,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 10,
+      constraints: const BoxConstraints(minHeight: ScMetrics.field),
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: tokens.space3,
+        vertical: tokens.space1,
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(tokens.radiusSm),
@@ -286,13 +256,11 @@ ThemeData buildSportcutTheme(Brightness brightness) {
         borderRadius: BorderRadius.circular(tokens.radiusSm),
         borderSide: BorderSide(color: palette.danger, width: 1.5),
       ),
-      labelStyle: textTheme.labelMedium?.copyWith(color: palette.muted),
-      floatingLabelStyle: textTheme.labelMedium?.copyWith(
-        color: palette.accent,
-      ),
-      hintStyle: textTheme.bodySmall?.copyWith(color: palette.muted),
-      helperStyle: textTheme.bodySmall?.copyWith(color: palette.muted),
-      errorStyle: textTheme.bodySmall?.copyWith(color: palette.danger),
+      labelStyle: typography.xs12.copyWith(color: palette.muted),
+      floatingLabelStyle: typography.xs12.copyWith(color: palette.accent),
+      hintStyle: typography.sm14.copyWith(color: palette.muted),
+      helperStyle: typography.xs12.copyWith(color: palette.muted),
+      errorStyle: typography.xs12.copyWith(color: palette.danger),
     ),
     dividerTheme: DividerThemeData(
       color: palette.borderSoft,
@@ -300,22 +268,23 @@ ThemeData buildSportcutTheme(Brightness brightness) {
       space: 1,
     ),
     listTileTheme: ListTileThemeData(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: tokens.space3,
+        vertical: tokens.space1,
+      ),
       minLeadingWidth: 0,
-      horizontalTitleGap: 8,
+      horizontalTitleGap: tokens.space2,
       iconColor: palette.fg2,
       textColor: palette.fg,
       titleTextStyle: textTheme.titleSmall,
-      subtitleTextStyle: textTheme.bodySmall?.copyWith(color: palette.muted),
+      subtitleTextStyle: typography.sm14.copyWith(color: palette.muted),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(tokens.radiusMd),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: palette.surface,
-      contentTextStyle: body(13, 1.4, FontWeight.w400).copyWith(
-        color: palette.fg,
-      ),
+      contentTextStyle: typography.sm14.copyWith(color: palette.fg),
       actionTextColor: palette.accent,
       behavior: SnackBarBehavior.floating,
       elevation: 0,
@@ -329,14 +298,17 @@ ThemeData buildSportcutTheme(Brightness brightness) {
         color: palette.fg,
         borderRadius: BorderRadius.circular(tokens.radiusSm),
       ),
-      textStyle: body(11, 1.3, FontWeight.w500).copyWith(color: palette.bg),
+      textStyle: typography.xs12.copyWith(
+        color: palette.bg,
+        fontWeight: FontWeight.w500,
+      ),
       waitDuration: const Duration(milliseconds: 400),
     ),
     sliderTheme: SliderThemeData(
       activeTrackColor: palette.accent,
       inactiveTrackColor: palette.surfaceWarm,
       thumbColor: palette.accent,
-      overlayColor: palette.accent.withAlpha(31),
+      overlayColor: palette.accent.withValues(alpha: 0.12),
       trackHeight: 3,
       showValueIndicator: ShowValueIndicator.never,
     ),
@@ -344,6 +316,62 @@ ThemeData buildSportcutTheme(Brightness brightness) {
       color: palette.accent,
       linearTrackColor: palette.surfaceWarm,
       circularTrackColor: palette.surfaceWarm,
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith<Color?>((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return palette.muted;
+        }
+        return states.contains(WidgetState.selected)
+            ? palette.accentOn
+            : palette.fg2;
+      }),
+      trackColor: WidgetStateProperty.resolveWith<Color?>((states) {
+        return states.contains(WidgetState.selected)
+            ? palette.accent
+            : palette.surfaceWarm;
+      }),
+      trackOutlineColor: WidgetStatePropertyAll<Color>(palette.border),
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: const WidgetStatePropertyAll<Size>(
+          Size(0, ScMetrics.buttonCompact),
+        ),
+        padding: WidgetStatePropertyAll<EdgeInsetsGeometry>(
+          EdgeInsets.symmetric(horizontal: tokens.space3),
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          return states.contains(WidgetState.selected)
+              ? palette.surfaceWarm
+              : Colors.transparent;
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          return states.contains(WidgetState.selected)
+              ? palette.fg
+              : palette.fg2;
+        }),
+        side: WidgetStatePropertyAll<BorderSide>(
+          BorderSide(color: palette.border),
+        ),
+        shape: WidgetStatePropertyAll<OutlinedBorder>(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(tokens.radiusSm),
+          ),
+        ),
+        textStyle: WidgetStatePropertyAll<TextStyle>(
+          typography.xs12.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ),
+    ),
+    bannerTheme: MaterialBannerThemeData(
+      backgroundColor: palette.surface,
+      surfaceTintColor: Colors.transparent,
+      contentTextStyle: typography.sm14.copyWith(color: palette.fg),
+      elevation: 0,
+      padding: EdgeInsets.all(tokens.space3),
+      dividerColor: palette.borderSoft,
     ),
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith<Color?>((states) {
@@ -353,13 +381,14 @@ ThemeData buildSportcutTheme(Brightness brightness) {
       }),
       checkColor: WidgetStatePropertyAll<Color>(palette.accentOn),
       side: BorderSide(color: palette.border),
+      materialTapTargetSize: MaterialTapTargetSize.padded,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
     ),
     popupMenuTheme: PopupMenuThemeData(
       color: palette.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 8,
-      textStyle: textTheme.bodySmall,
+      textStyle: typography.sm14,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(tokens.radiusMd),
         side: BorderSide(color: palette.borderSoft),
@@ -367,7 +396,7 @@ ThemeData buildSportcutTheme(Brightness brightness) {
     ),
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: palette.accent,
-      selectionColor: palette.accent.withAlpha(48),
+      selectionColor: palette.accent.withValues(alpha: 0.19),
       selectionHandleColor: palette.accent,
     ),
   );
