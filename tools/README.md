@@ -11,6 +11,7 @@ otherwise.
 | `check-layering.sh` | Enforces the Clean Architecture dependency rule, deriving each crate's layer from its directory. | `cargo`, `jq` |
 | `generate-layering-diagram.sh` | Regenerates `docs/architecture/layering-diagram.html` from `cargo metadata`. | `cargo`, `python3` |
 | `run-macos.sh` | Development run of the Flutter client on macOS with `flutter run -d macos`. The client connects to a service started separately. | Flutter SDK, Xcode, CocoaPods |
+| `capture-app-screenshots.sh` | Runs the screenshot suites and captures the app as PNGs: the headless widget-test suite by default, or `--integration` for the macOS desktop suite. Writes to `app/build/screenshots` unless `--output` names another directory; prints the absolute output path and PNG count. | Flutter SDK; macOS runtime with a GUI session for `--integration` |
 
 Run `preflight.sh --profile engine` for engine-only work and `--profile macos`
 for client work. `--profile all` is the default.

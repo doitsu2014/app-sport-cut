@@ -24,7 +24,8 @@ app/
         highlights/               highlight review (later phase)
         export/                   export settings (later phase)
   macos/                         platform project
-  test/                           widget and catalog tests
+  test/                           widget and catalog tests, including test/screenshots/
+  integration_test/               macOS-runtime screenshot automation
 ```
 
 Each feature is a folder with `domain/`, `data/`, and `presentation/` as it needs
@@ -88,6 +89,32 @@ flutter test
 library and drives the facade, so the native boundary is exercised without a
 device. Running the app itself still requires the platform toolchains:
 `tools/preflight.sh --profile macos` reports what is missing.
+
+### Screenshots
+
+The screenshot suites render the real app and write PNGs. The same capture path
+serves both runtimes: `IntegrationTestWidgetsFlutterBinding.takeScreenshot` is
+not implemented on macOS, so the suites rasterise a `RepaintBoundary` with
+`RenderRepaintBoundary.toImage` and save the PNG themselves.
+
+```bash
+cd app
+flutter test test/screenshots                      # headless, writes PNGs to build/screenshots
+flutter test integration_test -d macos              # real macOS runtime; requires a GUI session
+cd ..
+tools/capture-app-screenshots.sh                    # headless suite via the shared entry point
+tools/capture-app-screenshots.sh --integration      # macOS runtime suite
+tools/capture-app-screenshots.sh --output DIR       # choose where the PNGs land
+```
+
+The headless suite is sized with `tester.view`; the integration suite sizes the
+live binding with `setSurfaceSize`, because that runner owns the surface. The
+integration path needs a logged-in GUI/WindowServer session and is not headless.
+
+Screenshots are build output and are gitignored (`app/build/`); never commit
+them. The output directory defaults to `app/build/screenshots` and can be
+overridden with `SPORTCUT_SCREENSHOT_DIR` (compile-time `--dart-define` or the
+environment), which the capture script sets for you.
 
 ## Dependencies
 

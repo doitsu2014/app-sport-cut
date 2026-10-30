@@ -166,7 +166,7 @@ void main() {
   });
 
   testWidgets('a finished reel is offered to the user', (tester) async {
-    engine.manifestArtifacts = <ArtifactDto>[
+    engine.manifestArtifacts = const <ArtifactDto>[
       ArtifactDto(
         kind: 'export',
         relativePath: 'export/highlight.mp4',

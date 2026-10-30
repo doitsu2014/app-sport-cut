@@ -17,11 +17,31 @@ import 'package:sportcut/src/features/library/domain/match_record.dart';
 import 'package:sportcut/src/features/workspace/domain/workspace.dart';
 
 class FakeMatchLibrary implements MatchLibrary {
-  FakeMatchLibrary({List<MatchRecord>? matches})
-      : matches = List<MatchRecord>.from(matches ?? const <MatchRecord>[]);
+  FakeMatchLibrary({
+    List<MatchRecord>? matches,
+    List<Workspace>? workspaces,
+    Map<String, List<ArtifactDto>>? manifestArtifacts,
+    Map<String, int>? clipCounts,
+  })  : matches = List<MatchRecord>.from(matches ?? const <MatchRecord>[]),
+        workspaces = List<Workspace>.from(workspaces ?? const <Workspace>[]),
+        manifestArtifacts = Map<String, List<ArtifactDto>>.from(
+          manifestArtifacts ?? const <String, List<ArtifactDto>>{},
+        ),
+        clipCounts = Map<String, int>.from(clipCounts ?? const <String, int>{});
 
   /// Stored matches, newest first.
   final List<MatchRecord> matches;
+
+  /// Stored workspaces, in the order they were created.
+  final List<Workspace> workspaces;
+
+  /// Artifacts [manifest] reports, keyed by match id.
+  ///
+  /// Absent matches report no artifacts, which is what the empty states expect.
+  final Map<String, List<ArtifactDto>> manifestArtifacts;
+
+  /// Kept clip counts [selectedClipCounts] reports, keyed by match id.
+  final Map<String, int> clipCounts;
 
   /// Error thrown by [importVideo] and [generateArtifacts], when set.
   Object? failure;
@@ -59,35 +79,43 @@ class FakeMatchLibrary implements MatchLibrary {
   }
 
   @override
-  Future<List<Workspace>> listWorkspaces() async => const <Workspace>[];
+  Future<List<Workspace>> listWorkspaces() async =>
+      List<Workspace>.unmodifiable(workspaces);
 
   @override
-  Future<Workspace> createWorkspace({String? title}) async => Workspace(
-        id: 'workspace-1',
-        title: title ?? 'Untitled workspace',
-        createdAt: DateTime(2026, 3, 2),
-      );
+  Future<Workspace> createWorkspace({String? title}) async {
+    final workspace = Workspace(
+      id: 'workspace-${workspaces.length + 1}',
+      title: title ?? 'Untitled workspace',
+      createdAt: DateTime(2026, 3, 2),
+    );
+    workspaces.add(workspace);
+    return workspace;
+  }
 
   @override
   Future<void> deleteWorkspace(
     Workspace workspace, {
     bool deleteArtifacts = false,
     bool deleteRecording = false,
-  }) async {}
+  }) async {
+    workspaces.removeWhere((stored) => stored.id == workspace.id);
+  }
 
   @override
   Future<ArtifactManifestDto> manifest(MatchRecord match) async =>
       ArtifactManifestDto(
         matchId: match.id,
         originalPath: match.videoPath,
-        artifacts: const <ArtifactDto>[],
+        artifacts: manifestArtifacts[match.id] ?? const <ArtifactDto>[],
         missingKinds: const <String>[],
         notRebuildableKinds: const <String>[],
         originalPresent: true,
       );
 
   @override
-  Future<Map<String, int>> selectedClipCounts() async => const <String, int>{};
+  Future<Map<String, int>> selectedClipCounts() async =>
+      Map<String, int>.unmodifiable(clipCounts);
 
   @override
   Future<Map<String, ({int left, int right})>> scoreSummaries() async => scores;
@@ -144,7 +172,7 @@ class FakeMatchLibrary implements MatchLibrary {
     return ArtifactManifestDto(
       matchId: match.id,
       originalPath: match.videoPath,
-      artifacts: <ArtifactDto>[
+      artifacts: const <ArtifactDto>[
         ArtifactDto(
           kind: 'proxy',
           relativePath: 'proxy/proxy.mp4',
