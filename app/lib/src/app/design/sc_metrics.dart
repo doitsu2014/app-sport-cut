@@ -137,6 +137,15 @@ abstract final class ScMetrics {
   /// Court handle hit target.
   static const double courtHandleHit = 44;
 
+  /// Court handle outline width, from the calibration overlay contract.
+  static const double handleBorder = 2;
+
+  /// Court outline stroke width.
+  static const double courtOutline = 2;
+
+  /// Hairline rule width.
+  static const double hairline = 1;
+
   /// Vertical section rhythm on a desktop window.
   static const double sectionYDesktop = 72;
 

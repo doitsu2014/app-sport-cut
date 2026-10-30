@@ -51,7 +51,7 @@ The atmosphere is dry and confident. Surfaces are cool chalk and graphite, not c
 - Pair every semantic state with a label or icon: `READY`, `ANALYZING`, `DONE`, `BLOCKED` — not a colored dot alone.
 - Scores use **L** and **R** labels. Accent marks who is serving. Losing a rally is not an error state, so it is never red.
 - Body text must reach 4.5:1 against its surface; large text, icons, and essential graphics 3:1. Audit dark mode independently rather than assuming the light ratios carry over.
-- On footage, use the fixed overlay bed `#0A0F0C` with chalk `#F2F5F0` and a scrim between 32% and 56% opacity. The overlay never samples the frame color beneath it.
+- On footage, use the fixed stage bed `#050806` (ADR-0003 D16 supersedes the earlier `#0A0F0C` value) with chalk `#F2F5F0` and a scrim between 32% and 56% opacity. The overlay never samples the frame color beneath it.
 - Semantic text (`--success`, `--warn`, `--danger`) stays on `--surface` or `--bg`; on tinted fills, use `--fg` or `--accent-on`.
 
 ## 3. Typography

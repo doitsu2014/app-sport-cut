@@ -14,15 +14,6 @@ import '../../library/domain/match_record.dart';
 import '../domain/court_calibration.dart';
 import 'calibration_controller.dart';
 
-/// How the corner order reads to the user, in the order the handles are
-/// numbered.
-const List<String> _cornerHints = <String>[
-  '1 · nearest you, left',
-  '2 · nearest you, right',
-  '3 · farthest, right',
-  '4 · farthest, left',
-];
-
 /// The Mark court work surface in the studio inspector.
 ///
 /// The panel carries everything that is not the overlay itself: the current
@@ -109,12 +100,6 @@ class _CalibrationPanelState extends ConsumerState<CalibrationPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         const ScSectionHeader(label: 'Court'),
-        Text(
-          'Drag each handle onto a corner of the court, starting with the one '
-          'nearest you.',
-          style: typography.sm14.copyWith(color: palette.fg2),
-        ),
-        SizedBox(height: tokens.space2),
         ScMetaList(
           items: <(String, String)>[
             ('Court runs', _orientationLabel(state.orientation)),
@@ -122,15 +107,6 @@ class _CalibrationPanelState extends ConsumerState<CalibrationPanel> {
           ],
         ),
         SizedBox(height: tokens.space2),
-        for (final String hint in _cornerHints)
-          Padding(
-            padding: EdgeInsets.only(bottom: tokens.space1 / 2),
-            child: Text(
-              hint,
-              style: typography.micro10.copyWith(color: palette.muted),
-            ),
-          ),
-        SizedBox(height: tokens.space3),
         Text(
           'Which way does the court run?',
           style: typography.xs12.copyWith(
@@ -192,6 +168,6 @@ class _CalibrationPanelState extends ConsumerState<CalibrationPanel> {
       return 'The dashed line is the net the engine projects from your '
           'corners. Adjust until it sits on the real one.';
     }
-    return 'Marking the court…';
+    return 'Drag a handle to project the net.';
   }
 }

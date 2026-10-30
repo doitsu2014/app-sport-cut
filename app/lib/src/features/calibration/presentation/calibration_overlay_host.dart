@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/design/components/sc_calibration_overlay.dart';
+import '../../../bridge/models.dart';
 import '../../library/domain/match_record.dart';
 import 'calibration_controller.dart';
 
@@ -64,11 +65,11 @@ class _CalibrationOverlayHostState
     });
   }
 
-  /// Mark a handle active and remember that a drag is in progress.
+  /// Mark a handle active and leave dragging off until a pan actually moves.
   void _select(int index) {
     setState(() {
       _activeIndex = index;
-      _dragging = true;
+      _dragging = false;
     });
   }
 
@@ -84,6 +85,9 @@ class _CalibrationOverlayHostState
       return;
     }
     final corner = corners[index];
+    if (!_dragging) {
+      setState(() => _dragging = true);
+    }
     ref
         .read(calibrationControllerProvider.notifier)
         .nudgeCorner(index, position.dx - corner.x, position.dy - corner.y);
@@ -95,14 +99,17 @@ class _CalibrationOverlayHostState
   /// releases only where a handle is hit and leaves the preview's transport
   /// reachable everywhere else.
   void _release() {
-    if (!_dragging) {
+    if (!_dragging && _activeIndex < 0) {
       return;
     }
+    final wasDragging = _dragging;
     setState(() {
       _activeIndex = -1;
       _dragging = false;
     });
-    unawaited(ref.read(calibrationControllerProvider.notifier).project());
+    if (wasDragging) {
+      unawaited(ref.read(calibrationControllerProvider.notifier).project());
+    }
   }
 
   @override
@@ -111,6 +118,7 @@ class _CalibrationOverlayHostState
     final corners = <Offset>[
       for (final corner in state.corners) Offset(corner.x, corner.y),
     ];
+    final geometry = _geometry(state.geometry);
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -124,13 +132,33 @@ class _CalibrationOverlayHostState
           child: ScCalibrationOverlay(
             box: box,
             corners: corners,
+            geometry: geometry,
             activeIndex: _activeIndex,
-            instruction: 'Drag each handle to a court corner, nearest first.',
             onSelect: _select,
             onDrag: _drag,
           ),
         );
       },
     );
+  }
+
+  /// The engine's projected outline and net, normalized to the displayed box.
+  ///
+  /// A payload with the wrong shape or a point outside the frame is treated as
+  /// "nothing projected": the overlay then draws no court rather than a
+  /// plausible but wrong one (security review S-1).
+  ScCourtGeometry? _geometry(CourtGeometryDto? dto) {
+    if (dto == null) {
+      return null;
+    }
+    Offset clamp(CourtCornerDto point) => Offset(
+          point.x.clamp(0.0, 1.0).toDouble(),
+          point.y.clamp(0.0, 1.0).toDouble(),
+        );
+    final geometry = ScCourtGeometry(
+      outline: <Offset>[for (final corner in dto.corners) clamp(corner)],
+      net: <Offset>[for (final point in dto.net) clamp(point)],
+    );
+    return geometry.isValid ? geometry : null;
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/design/components/sc_calibration_overlay.dart';
 import '../../../app/design/sportcut_tokens.dart';
 import '../../library/domain/match_record.dart';
 import '../../library/presentation/match_list_entry.dart';
@@ -46,6 +47,8 @@ class CalibrationView extends StatelessWidget {
           child: VideoPreview(
             entry: MatchListEntry(match: match, recordingAvailable: true),
             controller: controller,
+            transportAccent: false,
+            underlay: const ScCalibrationScrim(),
             overlay: CalibrationOverlayHost(match: match),
           ),
         ),

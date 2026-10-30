@@ -10,7 +10,7 @@
 | Feature | Court calibration (area CAL) |
 | Owner | Product owner |
 | Contributors | Product, Design, Engineering, QA, Security/Privacy, Legal/Licensing |
-| Source baseline | Commit `1541c64` (2026-10-29); design system v1.0 |
+| Source baseline | HEAD at 2026-10-30 (feature-3 change); design system v1.0 |
 | Product contract | [00-product-context.md](00-product-context.md) |
 
 This document is one of nine feature BRDs. It cites the shared identifiers,
@@ -25,11 +25,12 @@ objectives, requirements, risks, and milestones in
 custody, and engine into the Rust background service. The Flutter client draws
 the marks and sends them over the
 [Sportcut Service Protocol v1](../architecture/protocol.md); the service
-validates, writes the calibration artifact, and writes the catalog copy. This
-note supersedes "the client stores" and "SQLite in the client" wording below.
-The marking workflow, validation rules, and acceptance outcomes are unchanged.
-See [protocol.md §6.3](../architecture/protocol.md#83-calibration-composite)
-and [background-service.md §6.2](../architecture/background-service.md#72-catalog).
+validates and writes the calibration artifact and manifest entry. Until
+ADR-0001 Phase 4 lands, the application also writes its own v5 catalog row; the
+`library.calibration.save` composite is the declared replacement. The marking
+workflow, validation rules, and acceptance outcomes are unchanged.
+See [protocol.md §8.3](../architecture/protocol.md#83-calibration-composite)
+and [background-service.md §7.2](../architecture/background-service.md#72-catalog).
 
 ## 1. Purpose and users
 
@@ -48,9 +49,9 @@ metric measurement, and never invents a court the user did not mark.
 Relationship to the product BRD: calibration is in scope for v1
 ([00 §3.1](00-product-context.md#31-in-scope-for-v1)), delivers the shared
 business requirement for user-confirmed setup (BR-3), and is the prerequisite
-for player tracking. The product BRD records the area as Done at baseline
+for player tracking. The product BRD records the area as Partial
 ([00 §3.3](00-product-context.md#33-current-delivery-status)); this document
-separates that functional status from the design-contract gaps recorded in §6.
+records the functional and design-contract state on the current HEAD.
 
 ## 2. Scope
 
@@ -82,12 +83,28 @@ Each item requires a change request; none may enter silently.
 
 ### 2.3 Current delivery and explicit gaps
 
-Functional status is **Done** at baseline, supported by the records in §8.
-Design-contract conformance is **Partial**: the overlay draws a solid amber net
-line, 40 px corner handles, and raw colours instead of the tokens and geometry
-in [DESIGN.md](../../design-system/DESIGN.md) §6 and §2. These gaps are stated in
-§6 and traced to risks in §9. No real-footage accuracy measurement exists; the
-Phase 0 test-footage gate remains open.
+The design-contract rows in §5 are individually satisfied on HEAD. The area
+still reads **Partial** because evidence remains open: no golden-image design
+assertion, two stale screen tests, an absent verification record, and no
+real-footage accuracy measurement.
+
+The central functional gap was that the engine's returned projection was not
+rendered: the overlay derived a net from corner midpoints, drew no court
+outline, ignored orientation, painted a net before any projection, and left the
+stale net after an engine rejection. This feature now paints the engine's
+`CourtGeometryDto` outline and net.
+
+The design-contract work in this feature is the instruction surface (one plain
+line, no filled pill, no duplicated inspector paragraph or hints), the overlay
+scrim, the competing transport accent, the standard easing curve and
+calibration motion, and the recorded contrast check. The 40 px amber handles,
+solid net, raw colours, and floating `PROJECTED NET` chip named at the previous
+baseline are already fixed on HEAD.
+
+Two named screen tests throw on HEAD because they look up `FilledButton` while
+the panel renders `ScButton`; `docs/verification/court-calibration.md` is not in
+the working tree, and no real-footage accuracy measurement exists. The Phase 0
+test-footage gate remains open.
 
 ## 3. Functional requirements
 
@@ -130,7 +147,7 @@ Every row has one observable acceptance criterion. Priorities are MoSCoW.
 | Error | Player error overlays the frame; a projection or save error appears as text and keeps the corners editable. | FR-CAL-13, FR-CAL-15 |
 | Success | Snackbar names the match; the stored flag flips and the button reads **Update court**. | FR-CAL-14, FR-CAL-16 |
 | Disabled | Save is disabled when incomplete or while saving; scrubber and play are disabled when playback is not ready. | FR-CAL-11, FR-CAL-24 |
-| Cancellation | No cancel or discard action exists. Leaving the calibration view disposes a route-owned player and keeps the unsaved session for that match. | FR-CAL-19; gap recorded in §9 |
+| Cancellation | A **Cancel** control leaves the Mark court stage without saving; the legacy route pops and the studio returns to playback. The unsaved session stays parked for that match: there is no discard action and no unsaved marker. | FR-CAL-19; R-CAL-4 remains |
 
 ## 5. Design-contract specifics
 
@@ -138,19 +155,19 @@ The design system is a contract. Shared requirements are cited from
 [00 §7](00-product-context.md#7-shared-design-system-requirements); this table
 applies them to calibration and states what the code does at baseline.
 
-| Point | Contract | Baseline implementation | Status |
+| Point | Contract | Implementation on HEAD | Status |
 | --- | --- | --- | --- |
-| Handle size and hit target | 24 px visual handle, 44 px hit target (DESIGN.md §6); 44 px hit targets (DS-15) | `_handleRadius = 20` gives a 40 px box and a 40 px hit area in [calibration_view.dart](../../app/lib/src/features/calibration/presentation/calibration_view.dart) | Gap |
-| Handle colour | Accent only while a handle is dragged (DESIGN.md §6); one signal per pane (DS-3) | Handles are always amber `Color(0xFFFFC107)`; no accent-on-drag state | Gap |
-| Net line | Dashed net line (DESIGN.md §6) | Solid amber line, 3 px stroke | Gap |
-| Instruction | One instruction line (DESIGN.md §6); scorekeeper voice (DS-10) | One instruction sentence, four corner hints, and a separate orientation question | Partial |
-| Overlay bed | Fixed `#0A0F0C` bed, chalk `#F2F5F0`, 32–56 % scrim (DESIGN.md §2) | Black frame with white outline and amber net; no fixed bed or scrim | Partial |
-| Floating chrome | No floating cards, tooltips, or chrome over the court action area (DESIGN.md §9) | A `PROJECTED NET` chip floats above the net midpoint in [calibration_view.dart](../../app/lib/src/features/calibration/presentation/calibration_view.dart) | Gap |
-| Tokens | `--accent` `#0E6E45` light and `#46D08D` dark; `--space-3` 12 px, `--space-4` 16 px; `--radius-sm` 6 px; `--motion-fast` 120 ms, `--motion-base` 180 ms ([tokens.css](../../design-system/tokens.css)); no raw values (DS-1) | Raw `Colors.black`, `Colors.white70`, `Color(0xFFFFC107)`; controls use 12/16 px padding | Gap |
-| Motion | Explain change at 120/180 ms with `cubic-bezier(0.2,0,0,1)`; reduced motion collapses transitions (DESIGN.md §7, DS-11) | No animation on handle drag or net change; nothing loops | Not implemented |
-| Focus | 2 px surface gap plus 2 px accent ring in both themes (DESIGN.md §4, DS-9) | Material button and segmented-control defaults; no calibration-specific focus treatment | Unverified |
-| Contrast | Body text 4.5:1, large text and essential graphics 3:1, both themes (DESIGN.md §2, DS-15) | White and amber on footage; no contrast audit recorded | Unverified |
-| Layout | Preview never narrower than 480 px; rails collapse before the preview (DESIGN.md §5, DS-14) | Calibration shares the studio's centre pane; no calibration-specific width rule | Inherited from shell |
+| Handle size and hit target | 24 px visual handle, 44 px hit target (DESIGN.md §6); 44 px hit targets (DS-15) | `ScMetrics.courtHandleVisual = 24` inside `ScMetrics.courtHandleHit = 44` in [sc_calibration_overlay.dart](../../app/lib/src/app/design/components/sc_calibration_overlay.dart); the stage can clip the square at a frame edge (§7) | Satisfied (edge case noted) |
+| Handle colour | Accent only while a handle is dragged (DESIGN.md §6); one signal per pane (DS-3) | Handles use the fixed overlay bed/chalk and take signal only while a confirmed drag is under way; the shared transport drops its accent during the calibrate stage | Satisfied |
+| Net line | Dashed net line (DESIGN.md §6) | `_CourtPainter` draws the engine's `geometry.net` as a dashed chalk line | Satisfied |
+| Instruction | One instruction line (DESIGN.md §6); scorekeeper voice (DS-10) | One plain `xs12` line over the overlay names the dashed net; the inspector paragraph and corner hints are removed; order is carried by handle semantics | Satisfied |
+| Overlay bed | Fixed stage bed and chalk from the binding stage tokens (DESIGN.md §2; ADR-0003 D16 fixes the bed at `#050806` and supersedes the earlier `#0A0F0C` wording), 32–56 % scrim | `ScOverlayColors.bed` `#050806` with a 52 % calibration scrim; chalk outline, net, and handles, plus an opaque bed band behind the instruction | Satisfied (the darker bed tightens contrast) |
+| Floating chrome | No floating cards, tooltips, or chrome over the court action area (DESIGN.md §9) | The instruction is plain text; no pill, card, or `PROJECTED NET` chip | Satisfied |
+| Tokens | `--accent` `#0E6E45` light and `#46D08D` dark; `--space-3` 12 px, `--space-4` 16 px; `--radius-sm` 6 px; `--motion-fast` 120 ms, `--motion-base` 180 ms ([tokens.css](../../design-system/tokens.css)); no raw values (DS-1) | Palette, spacing, radius, and motion tokens are used; `SportcutTokens.easeStandard` and `ScMetrics.hairline`/`handleBorder` replace raw constants; the stage bed stays `#050806` per ADR-0003 D16 | Satisfied |
+| Motion | Explain change at 120/180 ms with `cubic-bezier(0.2,0,0,1)`; reduced motion collapses transitions (DESIGN.md §7, DS-11) | Handle colour and net appearance animate at `motionFast`/`motionBase` with `easeStandard`; `ScMotion` collapses them under reduced motion; nothing loops | Satisfied |
+| Focus | 2 px surface gap plus 2 px accent ring in both themes (DESIGN.md §4, DS-9) | Handles keep the shared `ScFocusRing`; Enter/Space activate | Satisfied |
+| Contrast | Body text 4.5:1, large text and essential graphics 3:1, both themes (DESIGN.md §2, DS-15) | Text pairs pass; chalk graphics on the 52 % scrim measure ≈3.7:1 over pure white footage (≥3:1); the 12 px instruction sits on an opaque bed band (≈18:1). Calculation recorded in the intent's code-generation notes | Satisfied |
+| Layout | Preview never narrower than 480 px; rails collapse before the preview (DESIGN.md §5, DS-14) | Calibration shares the studio's centre pane and its minimum width | Inherited from shell |
 
 Any local change may tighten these rules, not relax them.
 
@@ -165,21 +182,20 @@ acceptance criterion.
 | NFR-CAL-02 | Calibration works offline | Must | Marking, projection, and saving make no network call; only the local service (engine and its SQLite catalog) is touched. | NFR-1, BR-1 |
 | NFR-CAL-03 | Saves are atomic and versioned | Must | The artifact reaches final only after a successful write; `schema_version` 1 is written; a newer schema is rejected rather than guessed. | NFR-3, NFR-4 |
 | NFR-CAL-04 | Geometry rules live in the engine | Must | The client renders; the service stores. The engine owns validation and the homography, and the same rules apply to any caller. | NFR-7, NFR-8 |
-| NFR-CAL-05 | Client behaviour is testable without a device | Must | Controller and widget tests run with fake playback and fake engine; 12 controller tests and 6 screen tests exist at baseline. | NFR-7 |
+| NFR-CAL-05 | Client behaviour is testable without a device | Must | Controller and widget tests run with fake playback and fake engine; 12 controller tests and 6 screen tests exist on HEAD, of which 2 screen tests are stale (`FilledButton` lookups against `ScButton`, see §7). | NFR-7 |
 | NFR-CAL-06 | Calibration adds no third-party package | Should | The feature uses `sportcut-court`, `sportcut-storage`, the facade, and Flutter standard widgets only; no new dependency row is needed. | NFR-10 |
 
 ## 7. Acceptance and verification evidence
 
-Evidence at baseline `1541c64`. Records that name code paths are current; test
-counts are as reported by the baseline verification record and re-confirmed where
-noted.
+Evidence on HEAD (2026-10-30). Records that name code paths are current; test
+counts were re-confirmed by inspection on that date.
 
 | Scenario | Evidence | Result |
 | --- | --- | --- |
-| Four corners marked and projected | [calibration_screen_test.dart](../../app/test/calibration_screen_test.dart), `the four corners are marked and the court is projected` | Pass at baseline |
-| Drag one corner | Same file, `dragging a handle moves that corner`; `a handle dragged past the edge of the frame stops at the edge` | Pass at baseline |
-| Orientation choice saved | Same file, `the way the court runs is the user choice, and is saved` | Pass at baseline |
-| Incomplete court cannot be saved | Same file, `an incomplete court cannot be saved`; [calibration_controller_test.dart](../../app/test/calibration_controller_test.dart), `an incomplete calibration is not saved` | Pass at baseline |
+| Four corners marked and projected | [calibration_controller_test.dart](../../app/test/calibration_controller_test.dart), `a complete calibration is projected through the engine`; the screen test is stale on its `FilledButton` Save lookup (see the note below) | Pass (controller); screen row stale |
+| Drag one corner | [calibration_screen_test.dart](../../app/test/calibration_screen_test.dart), `dragging a handle moves that corner`; `a handle dragged past the edge of the frame stops at the edge` | Pass |
+| Orientation choice saved | Same file, `the way the court runs is the user choice, and is saved` | Pass |
+| Incomplete court cannot be saved | [calibration_controller_test.dart](../../app/test/calibration_controller_test.dart), `an incomplete calibration is not saved`; the screen half reads `FilledButton` and is stale | Pass (controller); screen row stale |
 | Save failure is reported | Controller file, `a save that fails is reported rather than silently dropped` | Pass at baseline |
 | Stored court reloads | Controller file, `opening a calibrated match loads the court the user marked` | Pass at baseline |
 | Engine rejection is shown | Controller file, `a court the engine rejects is reported and nothing is drawn`; screen file, `a court the engine rejects is reported to the user` | Pass at baseline |
@@ -190,14 +206,28 @@ noted.
 | Artifact written and read back | [facade.rs](../../core/adapters/api/tests/facade.rs), `saving_a_calibration_writes_the_artifact_and_reads_back`; `saving_the_same_calibration_again_discards_nothing` | Pass at baseline |
 | Missing calibration is not invented | Same file, `a_match_reports_no_calibration_until_one_is_saved`; `a_missing_calibration_is_reported_as_needing_the_user` | Pass at baseline |
 | Catalog persistence | [match_catalog_test.dart](../../app/test/match_catalog_test.dart), `a court calibration is stored on the match and read back` | Pass at baseline |
-| Transport round trip (FFI baseline; retired) | The FFI bridge test that exercised `a calibration crosses the bridge, is stored, and reads back` was deleted with the FFI path | Superseded: the equivalent evidence is protocol conformance for `engine.calibration.save` and `engine.calibration.get` |
-| Rotation-normalized space | Rotation-tagged fixture check in `docs/verification/court-calibration.md` at `1541c64`: proxy and frames carry rotation; stored pixels do not | Recorded manual check |
-| Design conformance (dashed net, handle 24/44, accent-on-drag) | No automated design or visual test exists | Gap |
+| Transport round trip | Protocol conformance covers the request/response shape for `engine.calibration.save` and `engine.calibration.get` (`core/gateways/protocol` corpus); behavioural save-then-read is covered at facade level | Partial: shape-only at protocol level |
+| Rotation-normalized space | The verification record is not in the working tree (`docs/verification/court-calibration.md` is absent); only source documentation asserts the property | Missing evidence |
+| Design conformance (dashed engine net, handle 24/44, accent-on-drag, plain instruction, bed/scrim, motion) | No golden-image or design-conformance assertion exists; the screenshot suite captures `calibration_default` and `calibration_projected` without a reference comparison, and the implementation is source-reviewed in this feature | Gap: no automated assertion |
 | Real-footage calibration accuracy | Every fixture is synthetic; no labeled real recording has been marked and checked | Gap |
+| Test counts | 12 controller tests, 6 screen tests (2 stale `FilledButton` lookups), 20 court tests on HEAD | Counted 2026-10-30 |
 
 The verification record also carries forward three known limits: the court is
 normalized rather than metric; the user states orientation; a baseline-behind
-camera reads as near/far while the score screen says left/right.
+camera reads as near/far while the screen says left/right.
+
+Two screen tests in `calibration_screen_test.dart` read
+`tester.widget<FilledButton>` while the panel renders `ScButton`; they throw on
+HEAD and are recorded, not repaired, under the project working agreement. The
+verification record cited elsewhere in this document
+(`docs/verification/court-calibration.md`) is not in the working tree; the
+rotation-normalized claim is therefore asserted by source, not by a recorded
+manual check. Real-footage accuracy remains unmeasured.
+
+The 44 px hit target is measured on the handle itself. When a corner sits on the
+frame edge, the aspect-fit stage can clip part of the square, reducing the
+reachable area; this is a pre-existing edge case and a follow-up, not a
+regression from this feature.
 
 ## 8. Dependencies and constraints
 
@@ -243,8 +273,8 @@ documentation references. Shared objectives that gate this feature: BO-5 and BO-
 | Business requirement | Functional requirements | Design contract | Owning code | Verification |
 | --- | --- | --- | --- | --- |
 | BR-3 Semi-automatic, user-confirmed | FR-CAL-01–18, FR-CAL-21 | §6 Overlays | [calibration_view.dart](../../app/lib/src/features/calibration/presentation/calibration_view.dart), [calibration_controller.dart](../../app/lib/src/features/calibration/presentation/calibration_controller.dart) | `calibration_*_test.dart` |
-| BR-8 Design fidelity | FR-CAL-07–09 | DESIGN §6, §7; DS-1, DS-3, DS-9, DS-11 | Same view | Gap; see §5 |
-| BR-9 Accessibility | FR-CAL-02, FR-CAL-04 | DS-15; DESIGN §6 | Handle hit area | Gap at 40 px |
+| BR-8 Design fidelity | FR-CAL-07–09 | DESIGN §6, §7; DS-1, DS-3, DS-9, DS-11 | Same view | Satisfied; see §5 |
+| BR-9 Accessibility | FR-CAL-02, FR-CAL-04 | DS-15; DESIGN §6 | Handle hit area | Satisfied at 44 px; clipped at a frame edge (§7) |
 | BR-11 Recoverable jobs | FR-CAL-15, FR-CAL-20 | — | [facade.rs](../../core/adapters/api/tests/facade.rs) | Facade tests |
 | NFR-4 Data integrity | FR-CAL-14, FR-CAL-18, FR-CAL-22 | — | [court_calibration.dart](../../app/lib/src/features/calibration/domain/court_calibration.dart), storage | `match_catalog_test.dart`, facade tests |
 | Mapping correctness (BO-5 input) | FR-CAL-06, FR-CAL-23 | — | [court/src/lib.rs](../../core/entities/court/src/lib.rs), [homography.rs](../../core/entities/court/src/homography.rs) | 20 court tests |

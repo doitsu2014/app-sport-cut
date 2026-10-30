@@ -60,6 +60,7 @@ class ScTransport extends StatelessWidget {
     required this.onSeek,
     this.playLabel = 'Play',
     this.pauseLabel = 'Pause',
+    this.accent = true,
     this.width,
   });
 
@@ -92,6 +93,12 @@ class ScTransport extends StatelessWidget {
 
   /// The accessible label for the pause state.
   final String pauseLabel;
+
+  /// Whether the transport carries the signal accent.
+  ///
+  /// The calibration stage turns this off so the dragged court handle is the
+  /// only accent in the pane (DESIGN.md §2, DS-3). The controls stay enabled.
+  final bool accent;
 
   /// A fixed bar width, or null to fill the available width.
   final double? width;
@@ -132,7 +139,7 @@ class ScTransport extends StatelessWidget {
                 label: playing ? pauseLabel : playLabel,
                 icon: playing ? ScIcons.pause : ScIcons.play,
                 enabled: enabled,
-                accent: true,
+                accent: accent,
                 onPressed: onPlayPause,
               ),
               SizedBox(width: tokens.space1),
@@ -155,6 +162,7 @@ class ScTransport extends StatelessWidget {
                   position: position,
                   duration: duration,
                   enabled: enabled,
+                  accent: accent,
                   onSeek: onSeek,
                 ),
               ),
@@ -291,12 +299,14 @@ class _Scrubber extends StatefulWidget {
     required this.position,
     required this.duration,
     required this.enabled,
+    required this.accent,
     required this.onSeek,
   });
 
   final Duration position;
   final Duration duration;
   final bool enabled;
+  final bool accent;
   final ValueChanged<Duration> onSeek;
 
   @override
@@ -357,6 +367,7 @@ class _ScrubberState extends State<_Scrubber> {
     final tokens = SportcutTokens.of(context);
     const ink = ScOverlayColors.ink;
     final fraction = _fraction;
+    final signal = widget.accent ? ScOverlayColors.signal : ink;
 
     return Semantics(
       container: true,
@@ -432,7 +443,7 @@ class _ScrubberState extends State<_Scrubber> {
                         width: thumbLeft + thumb / 2,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: ScOverlayColors.signal,
+                            color: signal,
                             borderRadius: trackRadius,
                           ),
                         ),
@@ -442,9 +453,9 @@ class _ScrubberState extends State<_Scrubber> {
                         top: thumbTop,
                         width: thumb,
                         height: thumb,
-                        child: const DecoratedBox(
+                        child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: ScOverlayColors.signal,
+                            color: signal,
                             shape: BoxShape.circle,
                           ),
                         ),
