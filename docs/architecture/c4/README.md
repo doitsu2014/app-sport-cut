@@ -1,12 +1,9 @@
 # C4 model
 
-Sportcut's architecture drawn at the level you need, from who uses it down to
-the crates inside the service. Each level is a page with a diagram and the table
-of elements behind it.
-
-The diagrams are generated from [model/workspace.json](model/workspace.json) and
-committed as SVG. Nothing in them is drawn by hand, so a picture cannot quietly
-disagree with the manifests.
+Sportcut's architecture as a [Structurizr](https://structurizr.com) workspace:
+one model, four views, each answering a different question. Every diagram is
+rendered from the same `workspace.dsl`, so the pictures cannot disagree with
+each other.
 
 ## Read in this order
 
@@ -18,53 +15,72 @@ disagree with the manifests.
 | L3 | [03-components-client.md](03-components-client.md) | [l3-components-client.svg](generated/l3-components-client.svg) | How is the Flutter client organised, and where does it reach the engine? |
 | L4 | [04-code.md](04-code.md) | — (deliberately omitted) | Why there is no code-level C4 view here. |
 
-The SVG files open in any browser and render inline on GitHub. They are
-self-contained: no fonts, scripts, or images are fetched from a network.
+The SVGs open in any browser, render inline on GitHub, and need no network: the
+renderer embeds its fonts and styles.
 
 ## How to read a diagram
 
 | Notation | Meaning |
 | --- | --- |
-| Rounded box | A C4 element: person, software system, container, data store, or component. The second line names its type and technology. |
-| Group rectangle | A boundary: a layer, a folder, or a set of tools. It carries no behaviour. |
-| Solid dark arrow | A declared relationship. The label is the verb that crosses it. |
-| Solid grey arrow | A compile-time dependency read from `cargo metadata`. Only the service component view uses these. |
-| Dashed amber arrow | An interim relationship retired by ADR-0001 Phase 4. |
-| Dashed box | A note, not an element. |
+| Rounded box | A C4 element: person, software system, container, data store, or component. The bracket names its type and technology. |
+| Boundary box | A C4 group: a layer, a folder, or a set of tools. It carries no behaviour. |
+| Arrow | A declared relationship. The label is the verb that crosses it, and the technology is the mechanism. |
+| «Person», «External», «Database» | Structurizr tags. They shape the icon and colour; the text always wins. |
 
-One arrow is one direction. A relationship that carries traffic both ways is
-drawn as two arrows in the text where it matters; in the diagram the verb names
-the direction that matters.
+One arrow is one direction. The service component view is dense by design: its
+arrows are the compile-time dependencies between crates.
 
-## The model
+## The workspace
 
-[model/workspace.json](model/workspace.json) is the single source of truth for:
+[workspace.dsl](workspace.dsl) is the single source of truth for:
 
-- every element (id, name, C4 type, technology, one-sentence responsibility);
+- every element (name, C4 type, technology, one-sentence responsibility);
 - every declared relationship (from, to, verb, mechanism);
-- the layout of each view (which elements appear, where, in which group).
+- every view (which elements appear, in which group).
 
-It is not the place for protocol method tables, database schemas, or sequence
-flows. Those live in [protocol.md](../protocol.md),
+It does not hold protocol method tables, database schemas, or sequence flows.
+Those live in [protocol.md](../protocol.md),
 [background-service.md](../background-service.md), and the code.
 
-The model is reviewed like code. An element id is stable once used; a
-description stays to one sentence; `technology` names where the thing lives
-(crate or path) rather than repeating the description.
+Two properties bind the model to the repository:
+
+| Property | Meaning | Checked by |
+| --- | --- | --- |
+| `"crate"` | The service component's Cargo package | `tools/check-c4-model.sh` |
+| `"path"` | The client component's folder or file | `tools/check-c4-model.sh` |
+| `"excluded" "true"` | Shown in the model but kept out of the rendered views (the developer-only CLI) | The generator's view expression and the checker |
 
 ### Regenerate and check
 
 ```bash
+tools/generate-c4-diagrams.sh --pull    # once per machine: fetch the pinned images
 tools/generate-c4-diagrams.sh           # rewrite generated/*.svg
 tools/generate-c4-diagrams.sh --check   # fail if the committed SVGs are stale
-tools/check-c4-model.sh                 # fail if the model drifted from the code
+tools/check-c4-model.sh                 # fail if the workspace drifted from the code
 ```
 
-`check-c4-model.sh` verifies the model against the repository: every workspace
-crate appears exactly once, every named path exists, every feature folder is
-covered, every relationship endpoint exists, every view's diagram is committed,
-and every relative link in these pages resolves. Run both commands whenever the
-crate graph, a container, or a feature folder changes, and commit the SVGs.
+Rendering runs in two pinned Docker images:
+
+| Tool | Image | Licence |
+| --- | --- | --- |
+| Structurizr | `structurizr/structurizr:2026.10.26` | Apache-2.0 |
+| PlantUML (with the MIT C4-PlantUML stdlib) | `plantuml/plantuml:1.2026.9` | LGPL-3.0 |
+
+Both are dev-only and never ship. The tags are pinned because the SVGs are
+committed and `--check` compares bytes: a renderer upgrade is a reviewed change,
+not a silent drift. After the first `--pull`, generation is offline.
+
+`check-c4-model.sh` verifies the workspace against the repository:
+
+- every workspace crate is mapped exactly once, and every named path exists;
+- every feature folder under `app/lib/src/features/` is covered;
+- the component view's crate relationships match `cargo metadata` in both
+  directions — no missing dependency, no invented one;
+- every view has a committed diagram and no diagram matches a missing view;
+- every relative link in these pages resolves.
+
+Run both commands whenever the crate graph, a container, or a feature folder
+changes, and commit the regenerated SVGs.
 
 ## Why there is no L4
 
@@ -72,8 +88,8 @@ A code-level view already exists and is enforced:
 [layering.md](../layering.md) states the rule,
 [layering-diagram.html](../layering-diagram.html) is generated from `cargo
 metadata`, and `tools/check-layering.sh` fails the build on an outward
-dependency. A second L4 drawn here would either duplicate that or drift from it.
-[04-code.md](04-code.md) records the decision.
+dependency. A second L4 in the workspace would either duplicate that or drift
+from it. [04-code.md](04-code.md) records the decision.
 
 ## How this set relates to the others
 

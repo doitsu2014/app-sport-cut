@@ -61,8 +61,9 @@ migration, not all of it is done:
 - The **state root** (service-owned) is the target home for the catalog and the
   recording store.
 - The **client v5 catalog** still exists and still holds the app's rows and its
-  recording copy. Every edge touching it is drawn dashed, and no new durable
-  client-owned state may be added.
+  recording copy. It is modelled as an `Interim` data store, and every
+  relationship that touches it says so. No new durable client-owned state may
+  be added.
 - `library.calibration.save` is declared in the protocol but not yet served; the
   client still writes its own catalog row after `engine.calibration.save`.
 

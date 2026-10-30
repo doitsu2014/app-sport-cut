@@ -359,6 +359,9 @@ feature BRD may add a stricter local rule but may not weaken these.
 | Material Icons (Flutter SDK built-in icon font) | Studio, toolbar, and transport icons via `Icons.*_rounded` (ADR-0003 D7) | Apache-2.0; ships with the Flutter SDK, no new asset. The design system's Material Symbols Rounded is **not** used: that export loads it from Google Fonts, which the offline guardrail forbids |
 | `integration_test` (Flutter SDK) with its dev-only closure `flutter_driver` and `fuchsia_remote_debug_protocol` (Flutter SDK), plus hosted `process` 5.0.6, `sync_http` 0.3.1, and `webdriver` 3.2.0 | Dev-only automation: headless widget-test PNG capture and macOS-desktop integration tests. Never compiled into a shipped app | BSD-3-Clause (Flutter/Dart authors) and Apache-2.0 (`webdriver`); dev-only, not shipped. The SDK packages are vendored with Flutter; the hosted packages are pinned by `pubspec.lock`. Excluded from release builds because the dependency is a `dev_dependency`. No new font, codec, or model asset is introduced |
 
+| Structurizr (Docker image `structurizr/structurizr:2026.10.26`) | Dev-only docs tooling: exports `docs/architecture/c4/workspace.dsl` to C4-PlantUML for the committed architecture diagrams | Apache-2.0; dev-only, not shipped. Pinned by image tag and fetched by `tools/generate-c4-diagrams.sh --pull`; excluded from release builds |
+| PlantUML (Docker image `plantuml/plantuml:1.2026.9`, with the bundled MIT C4-PlantUML stdlib) | Dev-only docs tooling: renders the exported PlantUML to the SVGs under `docs/architecture/c4/generated/` | LGPL-3.0 (C4-PlantUML MIT); dev-only, not shipped, and never on a product path. Pinned by image tag |
+
 **History.** `flutter_rust_bridge` 2.13.0 and `libsportcut_api.dylib` were the
 FFI transport through baseline `1541c64`. ADR-0001 retires them; the Rust
 service executable, SQLite, and local IPC rows replace them. The retired FFI
