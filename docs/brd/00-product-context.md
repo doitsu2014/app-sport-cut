@@ -3,13 +3,13 @@
 | Field | Value |
 | --- | --- |
 | Document ID | BRD-SPORTCUT-000 |
-| Version | 1.0 |
+| Version | 1.1 |
 | Status | Draft — for approval |
-| Date | 2026-10-29 |
+| Date | 2026-10-30 |
 | Product | Sportcut — offline macOS badminton match analyzer |
 | Owner | Product owner |
 | Contributors | Product, Design, Engineering, QA, Security/Privacy, Legal/Licensing |
-| Source baseline | Commit `1541c64` (2026-10-29); design system v1.0 |
+| Source baseline | Commit `62a57c3` (2026-10-30); design system v1.0. Prior verification provenance remains baseline `1541c64` |
 
 This document is the product-level BRD and the shared contract for the nine
 feature BRDs in this folder. It does not restate feature-level functional
@@ -167,7 +167,7 @@ not rounded up.
 | # | Area | Status | Evidence and remaining gap |
 | --- | --- | --- | --- |
 | 1 | Workspace and Library | Partial | The v1 in-scope behavior is implemented in `app/lib/src/features/workspace/` and `app/lib/src/features/library/data/match_catalog.dart`: workspace home, v5 catalog migration, three-pane studio, video-rail search, missing-recording state, stage label in the status bar, and next-remaining selection after delete. Remaining, all by decision, so the area is not rounded up: FR-LIB-09 rename/reorder and a cross-workspace library are excluded by §2.2 / Q-8; FR-LIB-25/30 service-owned v6 catalog and custody are deferred to ADR-0001 Phase 4; no widget tests, and stale home tests still assert the removed "No matches yet" screen (project working agreement). |
-| 2 | Import and Media Preparation | Partial | `app/lib/src/features/library/presentation/import_controller.dart`; `core/use-cases/media/tests/media_pipeline.rs` (10 tests) and `offline.rs` (2); baseline `docs/verification/media-pipeline.md`. Gaps: import progress is indeterminate; the rebuild count ignores `not_rebuildable_kinds`; the analysis view uses Material components; no timing evidence for large copies. |
+| 2 | Import and Media Preparation | Partial | `app/lib/src/features/library/presentation/import_controller.dart`; `core/use-cases/media/tests/media_pipeline.rs` (10 tests) and `offline.rs` (2); baseline `docs/verification/media-pipeline.md`. The import copy reports a byte fraction and both import surfaces show a determinate bar; the rebuild count reads the engine's `not_rebuildable_kinds` and names what another stage must produce; the analysis view uses the design components and local READY / PARTIAL / MISSING artifact badges. Remaining gaps, so the area is not rounded up: no timing evidence for large copies; recording custody and cataloging remain app-owned until ADR-0001 Phase 3–4 moves them into the service. |
 | 3 | Court Calibration | Partial | `core/entities/court/` (20 unit tests), `core/adapters/api/tests/facade.rs`, `app/lib/src/features/calibration/`, `app/test/calibration_*_test.dart`; baseline `docs/verification/court-calibration.md`. Gaps: the overlay uses a solid amber net line, 40 px handles, and raw colours instead of the design tokens; no real-footage accuracy measurement. |
 | 4 | Player Tracking | Partial | Implemented in `core/use-cases/vision/` and `app/lib/src/features/tracking/`, macOS-gated with feature `macos-tflite-eval`. Gaps: no vision tests, no tracked reward beyond a manual c1 run, no measured count accuracy, no client tests. |
 | 5 | Rally Review | Partial | `core/entities/rally/src/lib.rs`, `app/lib/src/features/rally/`, `app/lib/src/features/editing/data/editing_store.dart`. Gaps: thresholds tuned on one clip, boundary accuracy unmeasured, audio branch unreachable (`SegmentationInput.audio = None`), no client test. |
@@ -508,6 +508,7 @@ rows map the affected shared requirements to the clauses that now define them.
 | QA lead |  | Approve / revise |  |
 | Security/privacy |  | Approve / revise |  |
 | Legal/licensing |  | Approve / revise |  |
+| Revision 1.1 — documentation reconciliation | Engineering lead | Recorded: status and evidence cells only; no Must acceptance text changed | 2026-10-30 |
 
 ---
 

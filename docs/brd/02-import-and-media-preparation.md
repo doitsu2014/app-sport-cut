@@ -3,13 +3,13 @@
 | Field | Value |
 | --- | --- |
 | Document ID | BRD-SPORTCUT-002 |
-| Version | 1.0 |
+| Version | 1.1 |
 | Status | Draft — for approval |
-| Date | 2026-10-29 |
+| Date | 2026-10-30 |
 | Feature | Import and Media Preparation (area ID `IMP`) |
 | Owner | Product owner |
 | Contributors | Design lead, Engineering lead, QA lead, Security/privacy |
-| Source baseline | Commit `1541c64` (2026-10-29); design system v1.0 |
+| Source baseline | Commit `62a57c3` (2026-10-30); design system v1.0. Prior verification provenance remains baseline `1541c64` |
 | Shared contract | [00-product-context.md](00-product-context.md) |
 
 ## Related documents
@@ -119,14 +119,14 @@ Status uses Done / Partial / Not started. Partial work is not rounded up.
 | --- | --- | --- |
 | File picking, cancel, picker failure | Done | [`video_file_picker.dart`](../../app/lib/src/features/library/data/video_file_picker.dart), [`import_controller.dart`](../../app/lib/src/features/library/presentation/import_controller.dart) |
 | Probe and input rejection | Done | [`probe.rs`](../../core/use-cases/media/src/probe.rs), `core/use-cases/media/tests/media_pipeline.rs` |
-| App-owned copy, atomic write, cancel cleanup | Done | [`recording_store.dart`](../../app/lib/src/features/library/data/recording_store.dart), `app/test/match_repository_test.dart` |
+| App-owned copy, atomic write, cancel cleanup | Done | [`recording_store.dart`](../../app/lib/src/features/library/data/recording_store.dart), `app/test/match_repository_test.dart`. Interim: this is the Phase 3 app-owned transport path; [ADR-0001](../adr/0001-rust-background-service.md) moves custody to the service (transport note above) |
 | Proxy, analysis audio, frames, manifest | Done | [`pipeline.rs`](../../core/use-cases/media/src/pipeline.rs), `core/use-cases/media/tests/media_pipeline.rs` |
 | Job admission, checkpoints, resume, cancel | Done | [`registry.rs`](../../core/use-cases/jobs/src/registry.rs), [`checkpoint.rs`](../../core/use-cases/jobs/src/checkpoint.rs), `core/use-cases/jobs/tests/job_lifecycle.rs` |
 | Regeneration of missing artifacts | Done | `pipeline.rs::regenerate_missing`, `core/adapters/api/tests/facade.rs` |
-| Import progress percentage | Not started | The bar is indeterminate and the copy reports no fraction ([`workspace_studio_screen.dart`](../../app/lib/src/features/workspace/presentation/workspace_studio_screen.dart)) |
-| Rebuild count excludes artifacts the engine cannot rebuild | Not started | The view counts every missing artifact; the facade exposes `not_rebuildable_kinds` but the client never reads it |
-| Analysis view against the design components | Partial | The view uses Material cards, a data table, and an ad-hoc chip rather than the design's pipeline row and progress job |
-| Progress on the UI isolate | Partial | The copy streams with async file I/O and no isolate; no timing evidence exists |
+| Import progress percentage | Done | The custody copy reports a clamped byte fraction ([`recording_store.dart`](../../app/lib/src/features/library/data/recording_store.dart), [`import_controller.dart`](../../app/lib/src/features/library/presentation/import_controller.dart)), and both import surfaces render a determinate bar with a whole-number percentage, stage label, and Cancel ([`workspace_screen.dart`](../../app/lib/src/features/workspace/presentation/workspace_screen.dart), [`workspace_studio_screen.dart`](../../app/lib/src/features/workspace/presentation/workspace_studio_screen.dart)) |
+| Rebuild count excludes artifacts the engine cannot rebuild | Done | [`analysis_providers.dart`](../../app/lib/src/features/analysis/presentation/analysis_providers.dart) partitions missing artifacts by the engine's `not_rebuildable_kinds`; [`analysis_panel.dart`](../../app/lib/src/features/analysis/presentation/analysis_panel.dart) counts only the rebuildable ones and names each remaining artifact with the stage that produces it |
+| Analysis view against the design components | Done | The view has used the design pipeline row and progress job since `757c748`; the remaining residue was the FR-IMP-30 label vocabulary, now landed in [`artifact_rows.dart`](../../app/lib/src/features/analysis/presentation/artifact_rows.dart) as a local READY / PARTIAL / MISSING badge that keeps the numbered row, decimal size, and path |
+| Progress on the UI isolate | Partial | The copy still streams with async file I/O on the UI isolate; no timing evidence exists for large copies, and the NFR-2 once-per-second cadence is not guaranteed because updates step per whole percentage point rather than per second (see [§7](#7-acceptance-and-verification-evidence)) |
 
 ## 3. Functional requirements
 
@@ -150,7 +150,7 @@ Priority is MoSCoW; a Must blocks release. Each row is one testable behavior.
 | FR-IMP-12 | Record origin and size as metadata only | Must | The stored match keeps the picked path as origin and the copy size in bytes, and neither is ever read to play or analyse the match |
 | FR-IMP-13 | Run one import at a time | Must | A second import request while one is in flight is declined and starts no second picker or copy |
 | FR-IMP-14 | Show the import phase and a cancel action | Must | While importing, the studio shows the current phase, an Importing label on the disabled Import button, and a Cancel action that stops the copy |
-| FR-IMP-15 | Show determinate import progress | Must | The import reports a fraction of bytes copied with a stage label and a percentage, and never shows an indeterminate bar for more than three seconds without a stage label (DESIGN.md §6). Not implemented at baseline |
+| FR-IMP-15 | Show determinate import progress | Must | The import reports a fraction of bytes copied with a stage label and a percentage, and never shows an indeterminate bar for more than three seconds without a stage label (DESIGN.md §6). |
 
 ### 3.2 Preparation job
 
@@ -174,7 +174,7 @@ Priority is MoSCoW; a Must blocks release. Each row is one testable behavior.
 | ID | Requirement | Priority | Acceptance criterion |
 | --- | --- | --- | --- |
 | FR-IMP-28 | Rebuild missing media without re-importing | Must | Regeneration reads the manifest, rebuilds only missing proxy, analysis audio, and frames from the recorded path, and leaves present artifacts untouched |
-| FR-IMP-29 | Report what cannot be rebuilt | Must | Artifacts the pipeline cannot produce, such as a missing calibration, tracks, or export, are reported as still missing with the stage that produces them, and are not counted as repaired. Not implemented at baseline |
+| FR-IMP-29 | Report what cannot be rebuilt | Must | Artifacts the pipeline cannot produce, such as a missing calibration, tracks, or export, are reported as still missing with the stage that produces them, and are not counted as repaired. |
 | FR-IMP-30 | List artifacts with a labelled state | Must | The analysis view lists each artifact with its kind, relative path, state as READY, PARTIAL, or MISSING, and size in decimal units |
 | FR-IMP-31 | Offer a start action on an unprepared match | Must | A match with no artifacts shows one sentence about what preparation produces and a Start preparing analysis action |
 | FR-IMP-32 | Report an unreadable manifest | Must | A manifest that cannot be read shows one message with the reason, and the rest of the studio stays usable |
@@ -187,10 +187,10 @@ Priority is MoSCoW; a Must blocks release. Each row is one testable behavior.
 | Surface | Default | Loading | Empty | Error | Success | Disabled | Cancellation |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Picker | Import action | "Choosing a recording…" | — | Message naming the picker cause | A file is returned | Second request declined | Nothing stored, no message |
-| Import in flight | — | Phase label, bar, Cancel | — | Message naming file and reason | Match appears and is selected | Import button disabled, labelled Importing | Copy removed, no record, silent |
+| Import in flight | — | Determinate bar with whole-number percentage, stage label, Cancel | — | Message naming file and reason | Match appears and is selected | Import button disabled, labelled Importing | Copy removed, no record, silent |
 | Prepare, first time | Explanation plus Start | Stage label and progress | No artifacts yet | Reason plus match title | Manifest lists READY artifacts | Start disabled while another job runs | Job cancelled, artifacts non-final |
-| Rebuild | Rebuild N missing files | Rebuild stage progress | "Nothing to rebuild" | Reason, artifacts unchanged | Missing media present again | Disabled with another job running | Nothing final added |
-| Analysis view | Artifact table | Progress indicator until the manifest loads | "This match has no analysis files yet" | Manifest message | Labelled states and sizes | Start or rebuild disabled, naming a running job | — |
+| Rebuild | Rebuild N missing files, N counting rebuildable files only | Rebuild stage progress | "Nothing to rebuild"; non-rebuildable artifacts named with their producing stage | Reason, artifacts unchanged | Missing media present again | Disabled with another job running | Nothing final added |
+| Analysis view | Artifact rows | Progress indicator until the manifest loads | "This match has no analysis files yet" | Manifest message | Labelled states and sizes | Start or rebuild disabled, naming a running job | — |
 
 ## 5. Design-contract specifics
 
@@ -200,11 +200,11 @@ requirements are DS-1 to DS-15 ([00 §7](00-product-context.md#7-shared-design-s
 | Point | Source | Binding requirement for this feature |
 | --- | --- | --- |
 | Progress job | DESIGN.md §6 | Stage name, determinate bar, percentage, cancel. An indeterminate bar is allowed only up to three seconds and only with a stage label |
-| Status labels | USAGE.md status mapping; DESIGN.md §6 | Ready is an accent dot and `READY`; running is a warning dot plus percentage and `ANALYZING 42%`; done is a success check and `DONE`; blocked is a danger icon and `BLOCKED`. A label always accompanies the colour |
-| Banner versus toast | DESIGN.md §6; USAGE.md checklist | A persistent banner holds a failure until resolved; a toast is one line, four seconds, and never the only route to recovery. Import and preparation failures currently reach the user only through a snack bar |
+| Status labels | USAGE.md status mapping; DESIGN.md §6 | Ready is an accent dot and `READY`; running is a warning dot plus percentage and `ANALYZING 42%`; done is a success check and `DONE`; blocked is a danger icon and `BLOCKED`. The studio pipeline keeps `READY`, `ANALYZING n%`, `DONE`, `BLOCKED`, and `NEEDS REVIEW` (BRD-09 untouched). The analysis artifact rows use a separate local vocabulary for the manifest's three states — `READY`, `PARTIAL`, `MISSING` — each with an icon and a semantic colour. A label always accompanies the colour |
+| Banner versus toast | DESIGN.md §6; USAGE.md checklist | A persistent banner holds a failure until resolved; a toast is one line, four seconds, and never the only route to recovery. An analysis or preparation failure uses the persistent `ScBanner`; an import failure uses a snack bar, with the Import action still offered as the recovery route |
 | Voice | DESIGN.md §8; DS-10 | Name the file and the next action: "The recording is no longer at its original path.", "Preparing analysis · Sampling frames 42%". No exclamation marks, no anthropomorphism |
 | Numbers | DESIGN.md §3, §8; DS-5, NFR-11 | Percentages read as whole numbers, sizes in decimal units (`1.4 GB`), durations as `0:42`, and all numerals are tabular in mono |
-| Type | DESIGN.md §3; DS-6 | Mono micro-labels 10–12 px, uppercase, 0.08–0.12em tracking; 9 px only in dense chrome. The analysis view's state chip is 11 px with 0.4 px tracking and is not mono |
+| Type | DESIGN.md §3; DS-6 | Mono micro-labels 10–12 px, uppercase, 0.08–0.12em tracking; 9 px only in dense chrome. The analysis artifact state badge uses the 9 px (`chrome9`) dense-chrome mono style, uppercase, with a semantic colour and a reinforcing icon |
 | Semantics | tokens.css | Warning `#8A5A00` light / `#E3B24E` dark while running; success `#157347` / `#57C98F` when done; danger `#B42318` / `#F27B70` for a failure; accent `#0E6E45` / `#46D08D` for the primary action only |
 | Component shape | DESIGN.md §6, §10 | Use the pipeline row and progress job rather than Material list cards and a data table; the studio inspector is a work surface, not a dashboard |
 | Accessibility | USAGE.md checklist; DS-15 | Cancel is a named control, the bar exposes a semantic value, the view survives 200% text scaling, and no critical text sits under window chrome |
@@ -225,8 +225,12 @@ requirements are DS-1 to DS-15 ([00 §7](00-product-context.md#7-shared-design-s
 
 ## 7. Acceptance and verification evidence
 
-Evidence is read at baseline `1541c64`. No suite was re-run on 2026-10-29: no
-Flutter or Dart toolchain and no `ffmpeg` are installed here.
+Engine and client evidence is read at baseline `1541c64` for the prior runs
+below; the two implementation rows are read at this branch's commits
+`4cb33db`, `c603d3c`, `7ca126a`, and `62a57c3` (HEAD `62a57c3`, 2026-10-30). No
+suite was run on 2026-10-30: per the project working agreement this intent
+writes and runs no test scaffolding unless asked, and that waives NFR-7's
+"new behavior ships with a test" clause for this revision.
 
 | Requirement group | Evidence | Result recorded |
 | --- | --- | --- |
@@ -240,12 +244,17 @@ Flutter or Dart toolchain and no `ffmpeg` are installed here.
 | Job lifecycle | `core/use-cases/jobs/tests/job_lifecycle.rs`: seven cases covering progress, completion, failure, resume, cancellation, same-match rejection, and heavy-slot release | Passing |
 | Client import path | `app/test/match_repository_test.dart`: custody, missing file, unreadable codec, denied access, cancelled copy, unwritable copy, full device | Passing at the `video-import` baseline |
 | Client analysis view | `app/test/analysis_screen_test.dart`: eleven cases including cancel, failure reason, unprepared match, and another job running | Passing at the `client-track` baseline |
-| Import progress percentage | No test and no implementation | Not verified |
-| Rebuild excludes non-rebuildable kinds | No test; the client ignores `not_rebuildable_kinds` | Not verified |
+| Baseline client widget tests | `app/test/analysis_screen_test.dart` (4 cases) and `app/test/library_screen_test.dart` already fail at baseline `d33d123` for unrelated UI drift — `ScSectionHeader` uppercases labels, `ScButton` is not a `FilledButton`, and the "No matches yet" home screen was removed — so neither can serve as regression evidence for this feature; they still compile | Red at baseline, not repaired |
+| Import progress percentage | Implemented in `recording_store.dart`, `import_controller.dart`, `workspace_screen.dart`, and `workspace_studio_screen.dart`; `flutter analyze` reports no issue in the changed files, `tools/check-no-rust-in-app.sh` passes, and the diff was code-reviewed. No suite was run (working agreement), so this is not a "Passed" record | Implemented; not suite-verified |
+| Rebuild excludes non-rebuildable kinds | Implemented in `analysis_providers.dart` and `analysis_panel.dart`; `flutter analyze` reports no issue in the changed files, `tools/check-no-rust-in-app.sh` passes, and the diff was code-reviewed. No suite was run (working agreement), so this is not a "Passed" record | Implemented; not suite-verified |
 
 Acceptance for this document means every Must row has a named automated test or
-a recorded manual run, and the two Not verified rows above gain one before the
-feature is called Done again.
+a recorded manual run. The remaining evidence gaps are a large-copy timing
+measurement (NFR-2, R-IMP-1), the once-per-second progress cadence that
+percentage stepping does not guarantee (NFR-2), and a repair and green run of
+the analysis widget suite, which is red at baseline for unrelated UI drift.
+NFR-7's test clause is waived for this revision by the project working
+agreement.
 
 ## 8. Dependencies, constraints, risks, and open questions
 
@@ -274,8 +283,8 @@ feature is called Done again.
 
 | ID | Risk | Likelihood | Impact | Mitigation | Owner |
 | --- | --- | --- | --- | --- | --- |
-| R-IMP-1 | A multi-gigabyte copy runs on the UI isolate without a progress fraction, so the app can appear frozen | Medium | High | Measure the copy against a large fixture; move chunking to a worker or add a byte counter and throttle the UI; add a determinate bar | Engineering lead |
-| R-IMP-2 | The rebuild action counts artifacts the pipeline cannot rebuild, so a repair appears to fail silently | High | Medium | Filter the count by rebuildable kinds and name the stage that must produce the rest | Engineering lead |
+| R-IMP-1 | A multi-gigabyte copy runs on the UI isolate without a progress fraction, so the app can appear frozen | Medium | High | Partially mitigated (U1–U2, commits `4cb33db`, `c603d3c`): a byte counter emits a clamped fraction and both import surfaces show a determinate bar; the large-copy timing measurement and any worker move remain open (NFR-2) | Engineering lead |
+| R-IMP-2 | The rebuild action counts artifacts the pipeline cannot rebuild, so a repair appears to fail silently | High | Medium | Mitigated (U3, commit `7ca126a`): the count filters by the engine's rebuildable kinds and the view names the stage that must produce each remaining artifact | Engineering lead |
 | R-IMP-3 | Analysis audio is produced but segmentation still passes `audio = None`, so the artifact earns no accuracy | Medium | Medium | Wire the artifact into segmentation or state motion-only analysis as the v1 claim (shared R-5) | Engineering lead |
 | R-IMP-4 | A job failure reaches the user only as a transient toast, with the view showing no persistent record | Medium | Medium | Add a banner in the analysis view that persists until acknowledged or retried | Design lead |
 | R-IMP-5 | Free space is detected only from a failed write, after part of a large copy is written | Medium | Medium | Keep the failed-write classification, remove the partial copy, and state the reason; consider a pre-check later | Engineering lead |
@@ -288,7 +297,7 @@ feature is called Done again.
 | Q-IMP-1 | Should import pre-check free space before copying? | Dart exposes no portable query, so a pre-check needs a platform call or a dependency | Engineering lead |
 | Q-IMP-2 | Should regeneration name which kinds it rebuilt, not only which remain missing? | The engine returns both; the facade currently discards the rebuilt list | Product owner |
 | Q-IMP-3 | Is one frame per second fixed for v1, or user-selectable? | The client always sends 1; the engine accepts up to 30 | Product owner |
-| Q-IMP-4 | Is import progress required to be byte-accurate or stage-accurate? | Decides whether FR-IMP-15 needs a byte counter or a fixed set of phases | Design lead |
+| Q-IMP-4 (answered) | Is import progress required to be byte-accurate or stage-accurate? | Answered: byte-accurate. FR-IMP-15 uses a clamped byte counter rather than a fixed set of phases | Design lead |
 
 ## 9. Traceability
 
@@ -296,7 +305,7 @@ feature is called Done again.
 | --- | --- | --- | --- | --- |
 | BR-1 Offline and private | FR-IMP-35 | — | [`pipeline.rs`](../../core/use-cases/media/src/pipeline.rs), [`offline.rs`](../../core/use-cases/media/tests/offline.rs) | `offline.rs` |
 | BR-2 Recording custody | FR-IMP-04 to FR-IMP-12 | DESIGN.md §6 | [`recording_store.dart`](../../app/lib/src/features/library/data/recording_store.dart), [`match_repository.dart`](../../app/lib/src/features/library/data/match_repository.dart) | `match_repository_test.dart` |
-| BR-8 Design fidelity | FR-IMP-14, FR-IMP-15, FR-IMP-30 | DESIGN.md §6, §8, §10; USAGE.md | [`analysis_view.dart`](../../app/lib/src/features/analysis/presentation/analysis_view.dart) | `analysis_screen_test.dart` covers behavior, not visual contract |
+| BR-8 Design fidelity | FR-IMP-14, FR-IMP-15, FR-IMP-30 | DESIGN.md §6, §8, §10; USAGE.md | [`analysis_panel.dart`](../../app/lib/src/features/analysis/presentation/analysis_panel.dart), [`artifact_rows.dart`](../../app/lib/src/features/analysis/presentation/artifact_rows.dart) | `analysis_screen_test.dart` covers behavior, not visual contract |
 | BR-9 Accessibility | FR-IMP-14, FR-IMP-30 | USAGE.md checklist | Analysis view and studio progress panel | Gap: no accessibility audit recorded |
 | BR-11 Recoverable jobs | FR-IMP-21 to FR-IMP-27 | DESIGN.md §6 | [`registry.rs`](../../core/use-cases/jobs/src/registry.rs), [`checkpoint.rs`](../../core/use-cases/jobs/src/checkpoint.rs), [`analysis_providers.dart`](../../app/lib/src/features/analysis/presentation/analysis_providers.dart) | `job_lifecycle.rs`, `analysis_screen_test.dart` |
 | NFR-1 Offline | FR-IMP-35 | — | [`toolchain.rs`](../../core/use-cases/media/src/toolchain.rs) | `offline.rs` |
@@ -312,6 +321,7 @@ feature is called Done again.
 | Engineering lead |  | Approve / revise |  |
 | QA lead |  | Approve / revise |  |
 | Security/privacy |  | Approve / revise |  |
+| Revision 1.1 — documentation reconciliation | Engineering lead | Recorded: status and evidence cells only; no Must acceptance text changed | 2026-10-30 |
 
 ---
 
