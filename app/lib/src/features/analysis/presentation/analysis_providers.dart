@@ -105,6 +105,28 @@ class AnalysisState {
           if (artifact.state == ArtifactStateDto.missing) artifact,
       ];
 
+  /// Missing artifacts that the media pipeline can rebuild (`proxy`,
+  /// `analysis_audio`, `frames`).
+  List<ArtifactDto> get rebuildableMissing {
+    final Set<String> notRebuildable =
+        (manifest?.notRebuildableKinds ?? const <String>[]).toSet();
+    return <ArtifactDto>[
+      for (final ArtifactDto artifact in missing)
+        if (!notRebuildable.contains(artifact.kind)) artifact,
+    ];
+  }
+
+  /// Missing artifacts that require another studio stage (`calibration`,
+  /// `tracks`, `rally_suggestions`, `export`).
+  List<ArtifactDto> get notRebuildableMissing {
+    final Set<String> notRebuildable =
+        (manifest?.notRebuildableKinds ?? const <String>[]).toSet();
+    return <ArtifactDto>[
+      for (final ArtifactDto artifact in missing)
+        if (notRebuildable.contains(artifact.kind)) artifact,
+    ];
+  }
+
   /// Whether the match has never had analysis files produced.
   bool get unprepared =>
       loaded && (manifest?.artifacts ?? const <ArtifactDto>[]).isEmpty;
