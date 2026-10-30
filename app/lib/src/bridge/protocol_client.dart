@@ -12,7 +12,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show InternetAddress, InternetAddressType, Socket, SocketOption;
+import 'dart:io' show InternetAddress, InternetAddressType, Socket;
 import 'dart:typed_data';
 
 /// A failure reported by the service, or by the connection to it.
@@ -114,7 +114,9 @@ class ServiceConnection {
   }) async {
     final address = InternetAddress(endpoint, type: InternetAddressType.unix);
     final socket = await Socket.connect(address, 0, timeout: timeout);
-    socket.setOption(SocketOption.tcpNoDelay, true);
+    // No `tcpNoDelay` here: the endpoint is an AF_UNIX socket, where Nagle does
+    // not exist. macOS rejects the TCP-only option with EOPNOTSUPP (errno 102),
+    // which would fail every connection at startup.
     final connection = ServiceConnection._(socket);
     try {
       connection.hello = await connection
