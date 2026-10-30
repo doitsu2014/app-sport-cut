@@ -98,7 +98,10 @@ class MatchRepository implements MatchLibrary {
   /// behind: no record without a recording, and no recording without a record.
   ///
   /// [onProgress], when given, receives the fraction of the copy completed in
-  /// `0.0..1.0`, starting at `0.0` and finishing at `1.0`.
+  /// `0.0..1.0`: `0.0` before the first chunk, updates as the copy advances,
+  /// and `1.0` once the copy is flushed. On cancellation or failure the
+  /// callback may stop early with no final value, and `1.0` means the bytes
+  /// were flushed — not that the match was saved.
   @override
   Future<MatchRecord> importVideo(
     PickedVideo video, {

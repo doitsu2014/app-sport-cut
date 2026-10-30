@@ -508,7 +508,7 @@ rows map the affected shared requirements to the clauses that now define them.
 | QA lead |  | Approve / revise |  |
 | Security/privacy |  | Approve / revise |  |
 | Legal/licensing |  | Approve / revise |  |
-| Revision 1.1 — documentation reconciliation | Engineering lead | Recorded: status and evidence cells only; no Must acceptance text changed | 2026-10-30 |
+| Revision 1.1 — documentation reconciliation | Engineering lead | Recorded: status, evidence, and explanation cells only; no Must acceptance text changed | 2026-10-30 |
 
 ---
 

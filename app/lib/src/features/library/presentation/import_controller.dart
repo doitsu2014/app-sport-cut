@@ -22,7 +22,11 @@ enum ImportPhase {
 /// The state of the current import.
 class ImportState {
   /// Describe the import.
-  const ImportState({this.phase = ImportPhase.idle, this.fraction, this.problem});
+  const ImportState({
+    this.phase = ImportPhase.idle,
+    this.fraction,
+    this.problem,
+  });
 
   /// What the import is doing.
   final ImportPhase phase;

@@ -289,6 +289,7 @@ agreement.
 | R-IMP-4 | A job failure reaches the user only as a transient toast, with the view showing no persistent record | Medium | Medium | Add a banner in the analysis view that persists until acknowledged or retried | Design lead |
 | R-IMP-5 | Free space is detected only from a failed write, after part of a large copy is written | Medium | Medium | Keep the failed-write classification, remove the partial copy, and state the reason; consider a pre-check later | Engineering lead |
 | R-IMP-6 | No media toolchain is present on the verification machine, so the engine media suites cannot be re-run from this tree | High | Medium | Run the suites in CI or on a machine with `ffmpeg`; record the transcript against the baseline | QA lead |
+| R-IMP-7 | The client derives missing artifacts from manifest state while the engine derives `missingKinds` from file absence, so a non-final artifact whose file is absent shows PARTIAL and is excluded from the rebuild count even though regeneration would rebuild it (pre-existing at baseline; recorded by the Feature 2 code review) | Low | Low | Engine-track follow-up: map any manifest entry whose path is absent to Missing in the API conversion, so state, count, and row badge agree with the engine's file-absence truth | Engineering lead |
 
 ### 8.4 Open questions
 
@@ -305,9 +306,9 @@ agreement.
 | --- | --- | --- | --- | --- |
 | BR-1 Offline and private | FR-IMP-35 | — | [`pipeline.rs`](../../core/use-cases/media/src/pipeline.rs), [`offline.rs`](../../core/use-cases/media/tests/offline.rs) | `offline.rs` |
 | BR-2 Recording custody | FR-IMP-04 to FR-IMP-12 | DESIGN.md §6 | [`recording_store.dart`](../../app/lib/src/features/library/data/recording_store.dart), [`match_repository.dart`](../../app/lib/src/features/library/data/match_repository.dart) | `match_repository_test.dart` |
-| BR-8 Design fidelity | FR-IMP-14, FR-IMP-15, FR-IMP-30 | DESIGN.md §6, §8, §10; USAGE.md | [`analysis_panel.dart`](../../app/lib/src/features/analysis/presentation/analysis_panel.dart), [`artifact_rows.dart`](../../app/lib/src/features/analysis/presentation/artifact_rows.dart) | `analysis_screen_test.dart` covers behavior, not visual contract |
+| BR-8 Design fidelity | FR-IMP-14, FR-IMP-15, FR-IMP-30 | DESIGN.md §6, §8, §10; USAGE.md | [`analysis_panel.dart`](../../app/lib/src/features/analysis/presentation/analysis_panel.dart), [`artifact_rows.dart`](../../app/lib/src/features/analysis/presentation/artifact_rows.dart) | `analysis_screen_test.dart` covers behavior, not visual contract; red at baseline, not regression evidence — see [§7](#7-acceptance-and-verification-evidence) |
 | BR-9 Accessibility | FR-IMP-14, FR-IMP-30 | USAGE.md checklist | Analysis view and studio progress panel | Gap: no accessibility audit recorded |
-| BR-11 Recoverable jobs | FR-IMP-21 to FR-IMP-27 | DESIGN.md §6 | [`registry.rs`](../../core/use-cases/jobs/src/registry.rs), [`checkpoint.rs`](../../core/use-cases/jobs/src/checkpoint.rs), [`analysis_providers.dart`](../../app/lib/src/features/analysis/presentation/analysis_providers.dart) | `job_lifecycle.rs`, `analysis_screen_test.dart` |
+| BR-11 Recoverable jobs | FR-IMP-21 to FR-IMP-27 | DESIGN.md §6 | [`registry.rs`](../../core/use-cases/jobs/src/registry.rs), [`checkpoint.rs`](../../core/use-cases/jobs/src/checkpoint.rs), [`analysis_providers.dart`](../../app/lib/src/features/analysis/presentation/analysis_providers.dart) | `job_lifecycle.rs`; `analysis_screen_test.dart` red at baseline — see [§7](#7-acceptance-and-verification-evidence) |
 | NFR-1 Offline | FR-IMP-35 | — | [`toolchain.rs`](../../core/use-cases/media/src/toolchain.rs) | `offline.rs` |
 | NFR-3 Crash safety | FR-IMP-08, FR-IMP-21, FR-IMP-22 | — | [`manifest.rs`](../../core/gateways/storage/src/manifest.rs), [`checkpoint.rs`](../../core/use-cases/jobs/src/checkpoint.rs) | `media_pipeline.rs`, `job_lifecycle.rs` |
 | NFR-4 Data integrity | FR-IMP-23, FR-IMP-26 | — | Manifest and checkpoint schemas | `media_pipeline.rs` |
@@ -321,7 +322,7 @@ agreement.
 | Engineering lead |  | Approve / revise |  |
 | QA lead |  | Approve / revise |  |
 | Security/privacy |  | Approve / revise |  |
-| Revision 1.1 — documentation reconciliation | Engineering lead | Recorded: status and evidence cells only; no Must acceptance text changed | 2026-10-30 |
+| Revision 1.1 — documentation reconciliation | Engineering lead | Recorded: status, evidence, and explanation cells only; no Must acceptance text changed | 2026-10-30 |
 
 ---
 

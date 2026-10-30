@@ -92,6 +92,8 @@ class FakeMatchLibrary implements MatchLibrary {
   @override
   Future<Map<String, ({int left, int right})>> scoreSummaries() async => scores;
 
+  /// [onProgress] is intentionally never invoked: the fake performs no copy,
+  /// and the widget tests do not assert progress values.
   @override
   Future<MatchRecord> importVideo(
     PickedVideo video, {

@@ -41,8 +41,8 @@ class ArtifactRows extends StatelessWidget {
   }
 }
 
-/// One artifact: kind and state badge on the numbered row, path and size
-/// beneath.
+/// One artifact: kind, state badge, and trailing size on the numbered row;
+/// path beneath.
 class _ArtifactRow extends StatelessWidget {
   const _ArtifactRow({required this.number, required this.artifact});
 

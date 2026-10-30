@@ -55,7 +55,10 @@ class RecordingStore {
   /// [expectedBytes] is the recording's known size, used as the denominator for
   /// progress; when null or non-positive the source file's length is used.
   /// [onProgress], when given, receives the fraction copied so far in
-  /// `0.0..1.0`, starting at `0.0` and finishing at `1.0`.
+  /// `0.0..1.0`: `0.0` before the first chunk, updates as the copy advances,
+  /// and `1.0` once the copy is flushed. On cancellation or failure the
+  /// callback may stop early with no final value, and `1.0` means the bytes
+  /// were flushed — not that the match was saved.
   Future<CustodiedRecording> takeCustody({
     required String matchId,
     required PickedVideo video,
@@ -154,14 +157,16 @@ class RecordingStore {
         if (totalBytes > 0 && onProgress != null) {
           final double fraction = (copiedBytes / totalBytes).clamp(0.0, 1.0);
           final int percent = (fraction * 100).round();
-          if (percent > lastPercent) {
+          // The in-loop steps stop at 99% so the post-flush value is always
+          // exactly 1.0; the rounded percent reaches 100 before the copy does.
+          if (percent > lastPercent && percent < 100) {
             onProgress(fraction);
             lastPercent = percent;
           }
         }
       }
       await sink.flush();
-      if (onProgress != null && lastPercent < 100) {
+      if (onProgress != null) {
         onProgress(1.0);
       }
     } finally {
