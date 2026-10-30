@@ -226,11 +226,12 @@ requirements are DS-1 to DS-15 ([00 §7](00-product-context.md#7-shared-design-s
 ## 7. Acceptance and verification evidence
 
 Engine and client evidence is read at baseline `1541c64` for the prior runs
-below; the two implementation rows are read at this branch's commits
-`4cb33db`, `c603d3c`, `7ca126a`, and `62a57c3` (HEAD `62a57c3`, 2026-10-30). No
-suite was run on 2026-10-30: per the project working agreement this intent
-writes and runs no test scaffolding unless asked, and that waives NFR-7's
-"new behavior ships with a test" clause for this revision.
+below; the implementation rows are read at this branch's commits `4cb33db`,
+`c603d3c`, `7ca126a`, `62a57c3`, and `34754d7` (2026-10-30). No new tests
+were written for this revision: per the project working agreement that waives
+NFR-7's "new behavior ships with a test" clause. Under the agreement's
+evidence exception, the existing client custody suite was re-run post-change
+at `34754d7` (row below); no other suite was run.
 
 | Requirement group | Evidence | Result recorded |
 | --- | --- | --- |
@@ -242,7 +243,7 @@ writes and runs no test scaffolding unless asked, and that waives NFR-7's
 | Offline | `core/use-cases/media/tests/offline.rs`: `pipeline_completes_with_network_access_unavailable`, `media_crate_contains_no_network_dependency_or_call` | Passing |
 | Facade import, repair, cancel, refusal | `core/adapters/api/tests/facade.rs`: `importing_through_the_facade_produces_the_contract_the_client_expects`, `a_match_missing_derived_artifacts_can_be_repaired_through_the_facade`, `a_source_without_audio_imports_and_reports_no_analysis_audio`, `an_unreadable_source_surfaces_an_error_instead_of_a_partial_match`, `a_cancelled_import_stops_and_leaves_nothing_final`, `a_conflicting_job_is_refused_by_name_and_the_slot_is_released` | Passing |
 | Job lifecycle | `core/use-cases/jobs/tests/job_lifecycle.rs`: seven cases covering progress, completion, failure, resume, cancellation, same-match rejection, and heavy-slot release | Passing |
-| Client import path | `app/test/match_repository_test.dart`: custody, missing file, unreadable codec, denied access, cancelled copy, unwritable copy, full device | Passing at the `video-import` baseline |
+| Client import path | `app/test/match_repository_test.dart`: custody, missing file, unreadable codec, denied access, cancelled copy, unwritable copy, full device | Passing post-change: 12/12 at `34754d7` (2026-10-30, branch `261030-implement-02-import`); previously passing at the `video-import` baseline |
 | Client analysis view | `app/test/analysis_screen_test.dart`: eleven cases including cancel, failure reason, unprepared match, and another job running | Passing at the `client-track` baseline |
 | Baseline client widget tests | `app/test/analysis_screen_test.dart` (4 cases) and `app/test/library_screen_test.dart` already fail at baseline `d33d123` for unrelated UI drift — `ScSectionHeader` uppercases labels, `ScButton` is not a `FilledButton`, and the "No matches yet" home screen was removed — so neither can serve as regression evidence for this feature; they still compile | Red at baseline, not repaired |
 | Import progress percentage | Implemented in `recording_store.dart`, `import_controller.dart`, `workspace_screen.dart`, and `workspace_studio_screen.dart`; `flutter analyze` reports no issue in the changed files, `tools/check-no-rust-in-app.sh` passes, and the diff was code-reviewed. No suite was run (working agreement), so this is not a "Passed" record | Implemented; not suite-verified |
