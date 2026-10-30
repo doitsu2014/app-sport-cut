@@ -1,0 +1,889 @@
+{
+  "schema": "sportcut-c4/1",
+  "title": "Sportcut",
+  "description": "The C4 model for Sportcut. Elements and declared relationships live here; every diagram under docs/architecture/c4/generated/ is rendered from this file by tools/generate-c4-diagrams.sh. Compile-time edges in the component view are derived from `cargo metadata`, not typed here.",
+  "elements": [
+    {
+      "id": "editor",
+      "name": "Editor",
+      "type": "person",
+      "technology": "Human",
+      "description": "Imports a recording, marks the court, confirms rallies and the score, exports a highlight."
+    },
+    {
+      "id": "sportcut",
+      "name": "Sportcut",
+      "type": "system",
+      "technology": "macOS desktop",
+      "description": "Turns one badminton recording into a highlight video on this Mac."
+    },
+    {
+      "id": "recordings",
+      "name": "Recording files",
+      "type": "external",
+      "technology": "User-owned files",
+      "description": "The recording the user picked. Sportcut copies it into custody and never modifies the original."
+    },
+    {
+      "id": "avfoundation",
+      "name": "AVFoundation",
+      "type": "external",
+      "technology": "macOS framework",
+      "description": "Plays the recording and its proxy in the client."
+    },
+    {
+      "id": "note-offline",
+      "name": "No network",
+      "type": "note",
+      "description": "There is no cloud service, telemetry endpoint, or online API on any path. Recordings and analysis stay on this Mac."
+    },
+    {
+      "id": "app",
+      "name": "Flutter client",
+      "type": "container",
+      "technology": "Dart 3 · Riverpod · app/",
+      "description": "Library, studio, playback, and the protocol client. Links no Rust."
+    },
+    {
+      "id": "service",
+      "name": "SportcutService",
+      "type": "container",
+      "technology": "Rust · core/adapters/service",
+      "description": "Background process. Owns media processing, analysis, jobs, the catalog, and export."
+    },
+    {
+      "id": "state",
+      "name": "State root",
+      "type": "dataStore",
+      "technology": "SQLite + files",
+      "description": "Catalog (schema v6 target), recordings, artifacts, run/ and logs/."
+    },
+    {
+      "id": "client-catalog",
+      "name": "Client v5 catalog",
+      "type": "dataStore",
+      "technology": "SQLite · interim",
+      "description": "The app's own catalog and recording copy until ADR-0001 Phase 4 retires them."
+    },
+    {
+      "id": "ffmpeg",
+      "name": "ffmpeg / ffprobe",
+      "type": "external",
+      "technology": "Media toolchain · required",
+      "description": "Probe, proxy, audio, frames, and export. Required at runtime."
+    },
+    {
+      "id": "tflite",
+      "name": "TFLite runtime + model",
+      "type": "external",
+      "technology": "EfficientDet-Lite0 · optional",
+      "description": "Player tracking only. Absent when the build omits macos-tflite-eval."
+    },
+    {
+      "id": "service-host",
+      "name": "Service host",
+      "type": "component",
+      "technology": "sportcut-service · core/adapters/service",
+      "description": "Process host: Unix socket, peer UID, single-instance lock, job loop, cancellation.",
+      "crate": "sportcut-service"
+    },
+    {
+      "id": "api",
+      "name": "Engine facade",
+      "type": "component",
+      "technology": "sportcut-api · core/adapters/api",
+      "description": "The library the host calls. Orchestrates the use cases.",
+      "crate": "sportcut-api"
+    },
+    {
+      "id": "protocol",
+      "name": "Wire contract",
+      "type": "component",
+      "technology": "sportcut-protocol · core/gateways/protocol",
+      "description": "Method names, DTOs, error codes, framing, version negotiation.",
+      "crate": "sportcut-protocol"
+    },
+    {
+      "id": "storage",
+      "name": "Storage adapter",
+      "type": "component",
+      "technology": "sportcut-storage · core/gateways/storage",
+      "description": "Catalog, artifacts, recording store. Implements ports declared by the use cases.",
+      "crate": "sportcut-storage"
+    },
+    {
+      "id": "jobs",
+      "name": "Jobs",
+      "type": "component",
+      "technology": "sportcut-jobs",
+      "description": "Job model, one heavy job at a time, checkpoints, resume.",
+      "crate": "sportcut-jobs"
+    },
+    {
+      "id": "media",
+      "name": "Media",
+      "type": "component",
+      "technology": "sportcut-media",
+      "description": "Probe, proxy, audio, frames through the media toolchain.",
+      "crate": "sportcut-media"
+    },
+    {
+      "id": "vision",
+      "name": "Vision",
+      "type": "component",
+      "technology": "sportcut-vision",
+      "description": "Court and player detection; TFLite is optional.",
+      "crate": "sportcut-vision"
+    },
+    {
+      "id": "export",
+      "name": "Export",
+      "type": "component",
+      "technology": "sportcut-export",
+      "description": "Edit list and render.",
+      "crate": "sportcut-export"
+    },
+    {
+      "id": "eval",
+      "name": "Evaluation",
+      "type": "component",
+      "technology": "sportcut-eval",
+      "description": "Segmentation and ranking evaluation.",
+      "crate": "sportcut-eval"
+    },
+    {
+      "id": "common",
+      "name": "Common",
+      "type": "component",
+      "technology": "sportcut-common",
+      "description": "Shared types. Every crate may use it.",
+      "crate": "sportcut-common"
+    },
+    {
+      "id": "court",
+      "name": "Court",
+      "type": "component",
+      "technology": "sportcut-court",
+      "description": "Homography, validation, net projection.",
+      "crate": "sportcut-court"
+    },
+    {
+      "id": "rally",
+      "name": "Rally",
+      "type": "component",
+      "technology": "sportcut-rally",
+      "description": "Rally segmentation.",
+      "crate": "sportcut-rally"
+    },
+    {
+      "id": "score",
+      "name": "Score",
+      "type": "component",
+      "technology": "sportcut-score",
+      "description": "Score and serving rules.",
+      "crate": "sportcut-score"
+    },
+    {
+      "id": "highlight",
+      "name": "Highlight",
+      "type": "component",
+      "technology": "sportcut-highlight",
+      "description": "Highlight ranking.",
+      "crate": "sportcut-highlight"
+    },
+    {
+      "id": "cli",
+      "name": "CLI driver",
+      "type": "component",
+      "technology": "sportcut-cli · core/drivers/cli",
+      "description": "Developer entry point. Not shipped in the app.",
+      "crate": "sportcut-cli"
+    },
+    {
+      "id": "shell",
+      "name": "App shell",
+      "type": "component",
+      "technology": "app/lib/src/app · di/router",
+      "description": "Startup, dependency injection, routing.",
+      "path": "app/lib/src/app/di.dart"
+    },
+    {
+      "id": "design",
+      "name": "Design system",
+      "type": "component",
+      "technology": "app/lib/src/app/design",
+      "description": "Tokens, metrics, typography, and shared components.",
+      "path": "app/lib/src/app/design"
+    },
+    {
+      "id": "sportcut_engine",
+      "name": "SportcutEngine",
+      "type": "component",
+      "technology": "app/lib/src/bridge/sportcut_engine.dart",
+      "description": "Typed engine API. The only place the app knows the service exists.",
+      "path": "app/lib/src/bridge/sportcut_engine.dart"
+    },
+    {
+      "id": "protocol_client",
+      "name": "ServiceConnection",
+      "type": "component",
+      "technology": "app/lib/src/bridge/protocol_client.dart",
+      "description": "Unix socket, framing, request correlation, handshake.",
+      "path": "app/lib/src/bridge/protocol_client.dart"
+    },
+    {
+      "id": "models",
+      "name": "Models",
+      "type": "component",
+      "technology": "app/lib/src/bridge/models.dart",
+      "description": "Typed DTOs mirrored from the protocol.",
+      "path": "app/lib/src/bridge/models.dart"
+    },
+    {
+      "id": "catalog",
+      "name": "Client catalog",
+      "type": "component",
+      "technology": "features/library/data/match_catalog.dart",
+      "description": "Interim v5 catalog. Service-owned from ADR-0001 Phase 4.",
+      "path": "app/lib/src/features/library/data/match_catalog.dart"
+    },
+    {
+      "id": "f-analysis",
+      "name": "analysis",
+      "type": "component",
+      "technology": "feature",
+      "description": "Artifact badges and rebuild state.",
+      "path": "app/lib/src/features/analysis"
+    },
+    {
+      "id": "f-calibration",
+      "name": "calibration",
+      "type": "component",
+      "technology": "feature",
+      "description": "Mark the court; render the engine's outline and net.",
+      "path": "app/lib/src/features/calibration"
+    },
+    {
+      "id": "f-editing",
+      "name": "editing",
+      "type": "component",
+      "technology": "feature",
+      "description": "Score timeline and edit-list data.",
+      "path": "app/lib/src/features/editing"
+    },
+    {
+      "id": "f-export",
+      "name": "export",
+      "type": "component",
+      "technology": "feature",
+      "description": "Export settings and start.",
+      "path": "app/lib/src/features/export"
+    },
+    {
+      "id": "f-highlights",
+      "name": "highlights",
+      "type": "component",
+      "technology": "feature",
+      "description": "Ranking and reel assembly.",
+      "path": "app/lib/src/features/highlights"
+    },
+    {
+      "id": "f-library",
+      "name": "library",
+      "type": "component",
+      "technology": "feature",
+      "description": "Match library, repository, import.",
+      "path": "app/lib/src/features/library"
+    },
+    {
+      "id": "f-rally",
+      "name": "rally",
+      "type": "component",
+      "technology": "feature",
+      "description": "Rally review and boundaries.",
+      "path": "app/lib/src/features/rally"
+    },
+    {
+      "id": "f-score",
+      "name": "score",
+      "type": "component",
+      "technology": "feature",
+      "description": "Score entry and serving sides.",
+      "path": "app/lib/src/features/score"
+    },
+    {
+      "id": "f-tracking",
+      "name": "tracking",
+      "type": "component",
+      "technology": "feature",
+      "description": "Player tracking overlay and panel.",
+      "path": "app/lib/src/features/tracking"
+    },
+    {
+      "id": "f-workspace",
+      "name": "workspace",
+      "type": "component",
+      "technology": "feature",
+      "description": "Studio shell, stage strip, playback.",
+      "path": "app/lib/src/features/workspace"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "editor",
+      "to": "sportcut",
+      "description": "imports, marks, exports",
+      "technology": "UI"
+    },
+    {
+      "from": "sportcut",
+      "to": "recordings",
+      "description": "copies into custody",
+      "technology": "filesystem"
+    },
+    {
+      "from": "sportcut",
+      "to": "avfoundation",
+      "description": "plays video",
+      "technology": "macOS framework"
+    },
+    {
+      "from": "editor",
+      "to": "app",
+      "description": "uses",
+      "technology": "UI"
+    },
+    {
+      "from": "app",
+      "to": "service",
+      "description": "JSON-RPC over a Unix socket",
+      "technology": "JSON-RPC · Sportcut Service Protocol v1"
+    },
+    {
+      "from": "app",
+      "to": "avfoundation",
+      "description": "plays video",
+      "technology": "macOS framework"
+    },
+    {
+      "from": "app",
+      "to": "client-catalog",
+      "description": "reads/writes v5 catalog",
+      "technology": "SQLite",
+      "interim": true
+    },
+    {
+      "from": "service",
+      "to": "state",
+      "description": "owns catalog + files",
+      "technology": "SQLite + filesystem"
+    },
+    {
+      "from": "service",
+      "to": "recordings",
+      "description": "copies into custody",
+      "technology": "filesystem"
+    },
+    {
+      "from": "service",
+      "to": "ffmpeg",
+      "description": "resolves binaries",
+      "technology": "CLI"
+    },
+    {
+      "from": "service",
+      "to": "tflite",
+      "description": "runs tracking",
+      "technology": "C API"
+    },
+    {
+      "from": "media",
+      "to": "ffmpeg",
+      "description": "probe, proxy, frames",
+      "technology": "CLI"
+    },
+    {
+      "from": "vision",
+      "to": "tflite",
+      "description": "loads model",
+      "technology": "C API"
+    },
+    {
+      "from": "shell",
+      "to": "group:features",
+      "description": "routes to screens",
+      "technology": "Riverpod + named routes"
+    },
+    {
+      "from": "group:features",
+      "to": "sportcut_engine",
+      "description": "engine API",
+      "technology": "Dart"
+    },
+    {
+      "from": "group:features",
+      "to": "design",
+      "description": "design system",
+      "technology": "Widgets + tokens"
+    },
+    {
+      "from": "sportcut_engine",
+      "to": "protocol_client",
+      "description": "sends methods",
+      "technology": "Dart"
+    },
+    {
+      "from": "sportcut_engine",
+      "to": "models",
+      "description": "decodes into models",
+      "technology": "Dart"
+    },
+    {
+      "from": "f-library",
+      "to": "catalog",
+      "description": "reads/writes v5",
+      "technology": "SQLite",
+      "interim": true
+    }
+  ],
+  "views": [
+    {
+      "id": "l1-system-context",
+      "level": "L1",
+      "title": "System context",
+      "summary": "Who uses Sportcut, and what it touches outside its own boundary.",
+      "width": 980,
+      "height": 470,
+      "groups": [],
+      "items": [
+        {
+          "id": "editor",
+          "x": 40,
+          "y": 180,
+          "w": 210
+        },
+        {
+          "id": "sportcut",
+          "x": 370,
+          "y": 170,
+          "w": 250
+        },
+        {
+          "id": "recordings",
+          "x": 740,
+          "y": 60,
+          "w": 210
+        },
+        {
+          "id": "avfoundation",
+          "x": 740,
+          "y": 190,
+          "w": 210
+        },
+        {
+          "id": "note-offline",
+          "x": 740,
+          "y": 320,
+          "w": 210
+        }
+      ],
+      "deriveCrateEdges": false
+    },
+    {
+      "id": "l2-containers",
+      "level": "L2",
+      "title": "Containers",
+      "summary": "The separately running pieces, the data they own, and the tools they invoke.",
+      "width": 1140,
+      "height": 700,
+      "groups": [],
+      "items": [
+        {
+          "id": "editor",
+          "x": 40,
+          "y": 60,
+          "w": 200
+        },
+        {
+          "id": "recordings",
+          "x": 40,
+          "y": 560,
+          "w": 200
+        },
+        {
+          "id": "app",
+          "x": 300,
+          "y": 60,
+          "w": 260
+        },
+        {
+          "id": "service",
+          "x": 300,
+          "y": 400,
+          "w": 260
+        },
+        {
+          "id": "state",
+          "x": 300,
+          "y": 560,
+          "w": 260
+        },
+        {
+          "id": "client-catalog",
+          "x": 620,
+          "y": 40,
+          "w": 230
+        },
+        {
+          "id": "ffmpeg",
+          "x": 620,
+          "y": 400,
+          "w": 230
+        },
+        {
+          "id": "tflite",
+          "x": 620,
+          "y": 540,
+          "w": 230
+        },
+        {
+          "id": "avfoundation",
+          "x": 920,
+          "y": 260,
+          "w": 200
+        },
+        {
+          "id": "note-offline",
+          "x": 920,
+          "y": 380,
+          "w": 200
+        }
+      ],
+      "deriveCrateEdges": false
+    },
+    {
+      "id": "l3-components-service",
+      "level": "L3",
+      "title": "Components — SportcutService",
+      "summary": "The Rust crates inside the service. Arrows between crates are compile-time dependencies read from cargo metadata.",
+      "width": 1240,
+      "height": 820,
+      "groups": [
+        {
+          "id": "adapters",
+          "label": "Adapters",
+          "x": 30,
+          "y": 40,
+          "w": 520,
+          "h": 190
+        },
+        {
+          "id": "contracts",
+          "label": "Gateways + contracts",
+          "x": 30,
+          "y": 250,
+          "w": 520,
+          "h": 180
+        },
+        {
+          "id": "use-cases",
+          "label": "Use cases",
+          "x": 600,
+          "y": 40,
+          "w": 620,
+          "h": 360
+        },
+        {
+          "id": "entities",
+          "label": "Entities",
+          "x": 600,
+          "y": 430,
+          "w": 620,
+          "h": 330
+        },
+        {
+          "id": "externals",
+          "label": "External tools",
+          "x": 30,
+          "y": 460,
+          "w": 520,
+          "h": 160
+        },
+        {
+          "id": "driver",
+          "label": "Developer entry point (not shipped)",
+          "x": 30,
+          "y": 650,
+          "w": 520,
+          "h": 140
+        }
+      ],
+      "items": [
+        {
+          "id": "service-host",
+          "x": 60,
+          "y": 80,
+          "w": 220
+        },
+        {
+          "id": "api",
+          "x": 310,
+          "y": 80,
+          "w": 220
+        },
+        {
+          "id": "protocol",
+          "x": 60,
+          "y": 290,
+          "w": 220
+        },
+        {
+          "id": "storage",
+          "x": 310,
+          "y": 290,
+          "w": 220
+        },
+        {
+          "id": "jobs",
+          "x": 630,
+          "y": 80,
+          "w": 180
+        },
+        {
+          "id": "media",
+          "x": 830,
+          "y": 80,
+          "w": 180
+        },
+        {
+          "id": "vision",
+          "x": 1030,
+          "y": 80,
+          "w": 180
+        },
+        {
+          "id": "export",
+          "x": 630,
+          "y": 200,
+          "w": 180
+        },
+        {
+          "id": "eval",
+          "x": 830,
+          "y": 200,
+          "w": 180
+        },
+        {
+          "id": "common",
+          "x": 630,
+          "y": 470,
+          "w": 180
+        },
+        {
+          "id": "court",
+          "x": 830,
+          "y": 470,
+          "w": 180
+        },
+        {
+          "id": "rally",
+          "x": 1030,
+          "y": 470,
+          "w": 180
+        },
+        {
+          "id": "score",
+          "x": 630,
+          "y": 590,
+          "w": 180
+        },
+        {
+          "id": "highlight",
+          "x": 830,
+          "y": 590,
+          "w": 180
+        },
+        {
+          "id": "ffmpeg",
+          "x": 60,
+          "y": 500,
+          "w": 220
+        },
+        {
+          "id": "tflite",
+          "x": 310,
+          "y": 500,
+          "w": 220
+        },
+        {
+          "id": "cli",
+          "x": 60,
+          "y": 690,
+          "w": 220
+        }
+      ],
+      "deriveCrateEdges": true,
+      "hideCrateEdgesTo": [
+        "sportcut-common"
+      ],
+      "hideCrateEdgesFrom": [
+        "sportcut-cli"
+      ]
+    },
+    {
+      "id": "l3-components-client",
+      "level": "L3",
+      "title": "Components — Flutter client",
+      "summary": "The feature folders and the bridge. Feature code never opens a socket; only the bridge does.",
+      "width": 1240,
+      "height": 700,
+      "groups": [
+        {
+          "id": "features",
+          "label": "Feature folders",
+          "x": 30,
+          "y": 40,
+          "w": 560,
+          "h": 580
+        },
+        {
+          "id": "bridge",
+          "label": "Bridge",
+          "x": 620,
+          "y": 40,
+          "w": 310,
+          "h": 400
+        },
+        {
+          "id": "design-group",
+          "label": "Design system",
+          "x": 620,
+          "y": 480,
+          "w": 310,
+          "h": 140
+        },
+        {
+          "id": "shell-group",
+          "label": "App shell",
+          "x": 960,
+          "y": 40,
+          "w": 280,
+          "h": 170
+        },
+        {
+          "id": "catalog-group",
+          "label": "Interim client data",
+          "x": 960,
+          "y": 250,
+          "w": 280,
+          "h": 150
+        }
+      ],
+      "items": [
+        {
+          "id": "f-analysis",
+          "x": 60,
+          "y": 80,
+          "w": 250
+        },
+        {
+          "id": "f-calibration",
+          "x": 60,
+          "y": 180,
+          "w": 250
+        },
+        {
+          "id": "f-editing",
+          "x": 60,
+          "y": 280,
+          "w": 250
+        },
+        {
+          "id": "f-export",
+          "x": 60,
+          "y": 380,
+          "w": 250
+        },
+        {
+          "id": "f-highlights",
+          "x": 60,
+          "y": 480,
+          "w": 250
+        },
+        {
+          "id": "f-library",
+          "x": 320,
+          "y": 80,
+          "w": 250
+        },
+        {
+          "id": "f-rally",
+          "x": 320,
+          "y": 180,
+          "w": 250
+        },
+        {
+          "id": "f-score",
+          "x": 320,
+          "y": 280,
+          "w": 250
+        },
+        {
+          "id": "f-tracking",
+          "x": 320,
+          "y": 380,
+          "w": 250
+        },
+        {
+          "id": "f-workspace",
+          "x": 320,
+          "y": 480,
+          "w": 250
+        },
+        {
+          "id": "sportcut_engine",
+          "x": 650,
+          "y": 80,
+          "w": 250
+        },
+        {
+          "id": "protocol_client",
+          "x": 650,
+          "y": 215,
+          "w": 250
+        },
+        {
+          "id": "models",
+          "x": 650,
+          "y": 345,
+          "w": 250
+        },
+        {
+          "id": "design",
+          "x": 650,
+          "y": 520,
+          "w": 250
+        },
+        {
+          "id": "shell",
+          "x": 990,
+          "y": 80,
+          "w": 220
+        },
+        {
+          "id": "catalog",
+          "x": 990,
+          "y": 290,
+          "w": 220
+        },
+        {
+          "id": "note-offline",
+          "x": 960,
+          "y": 440,
+          "w": 280
+        }
+      ],
+      "deriveCrateEdges": false
+    }
+  ]
+}

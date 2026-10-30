@@ -1,13 +1,14 @@
 # Architecture documentation
 
-The architecture set for Sportcut. Four documents, one decision record set, and
-one generated diagram. Each answers a different question; read the one that
-matches yours.
+The architecture set for Sportcut: the C4 model, four design documents, one
+decision record set, and the generated diagrams. Each answers a different
+question; read the one that matches yours.
 
 ## What to read for what question
 
 | Question | Document |
 | --- | --- |
+| What is the system made of, and what talks to what? | [c4/README.md](c4/README.md) — start here |
 | How is the Rust engine organised? What may depend on what? | [layering.md](layering.md) |
 | How does the background service run, and who owns the data? | [background-service.md](background-service.md) |
 | What exactly goes over the socket? | [protocol.md](protocol.md) |
@@ -17,6 +18,15 @@ matches yours.
 | Why are the crates layered this way? | [ADR-0002](../adr/0002-clean-architecture-engine.md) |
 
 ## The set
+
+### [c4/](c4/README.md) — the C4 model
+
+Four levels, each a page with a generated diagram: system context, containers,
+components of the service and of the client. The model is
+`c4/model/workspace.json`; the SVGs in `c4/generated/` are rendered from it by
+`tools/generate-c4-diagrams.sh`, and `tools/check-c4-model.sh` fails when the
+model and the code drift apart. Read this first if you are new to the codebase.
+The code level (L4) is deliberately omitted in favour of the layering set below.
 
 ### [layering.md](layering.md) — engine design
 
@@ -85,9 +95,14 @@ and [layering.md](layering.md) is its working description.
 
 - A change to the wire contract is a change to [protocol.md](protocol.md) and to
   `core/gateways/protocol` in the same change.
+- A new crate, a new container, or a new feature folder is a change to the
+  [C4 model](c4/model/workspace.json). Run `tools/generate-c4-diagrams.sh` and
+  `tools/check-c4-model.sh`, then commit the regenerated SVGs.
 - A new crate or a new dependency between crates is a change governed by
   [layering.md](layering.md); run `tools/check-layering.sh`.
 - A change to the service boundary requires a superseding ADR, not an edit to
   [background-service.md](background-service.md) alone.
 - [layering-diagram.html](layering-diagram.html) is generated from the manifests.
   Regenerate it when the crate graph changes; do not hand-edit it.
+- The SVGs under [c4/generated/](c4/generated/) are generated too. Edit the
+  model, never the picture.
