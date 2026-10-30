@@ -20,6 +20,7 @@ class StudioStatusBar extends StatelessWidget {
     required this.missingCount,
     required this.entry,
     required this.facts,
+    required this.stageLabel,
   });
 
   /// How many videos the workspace holds.
@@ -33,6 +34,9 @@ class StudioStatusBar extends StatelessWidget {
 
   /// Stage facts for the selected video, or null while loading.
   final VideoStageFacts? facts;
+
+  /// The selected stage's compact label, where Play is the shared preview.
+  final String stageLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -93,13 +97,23 @@ class StudioStatusBar extends StatelessWidget {
             ),
             SizedBox(width: tokens.space3),
           ],
-          if (entry != null)
+          if (entry != null) ...<Widget>[
             Text(
               readyLabel,
               style: style.copyWith(
                 color: ready == true ? palette.accent : palette.muted,
               ),
             ),
+            SizedBox(width: tokens.space1 + tokens.space1 / 2),
+            Flexible(
+              child: Text(
+                '· $stageLabel',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style.copyWith(color: palette.fg2),
+              ),
+            ),
+          ],
         ],
       ),
     );

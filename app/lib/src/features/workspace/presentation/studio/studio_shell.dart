@@ -327,6 +327,7 @@ class StudioShell extends StatelessWidget {
               missingCount: missing,
               entry: selected,
               facts: selected == null ? null : facts?[selected.match.id],
+              stageLabel: shortStageLabel(selectedStage),
             ),
           ],
         ),
