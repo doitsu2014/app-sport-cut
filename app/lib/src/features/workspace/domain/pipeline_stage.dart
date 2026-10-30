@@ -16,6 +16,21 @@ extension PipelineStageInfo on PipelineStage {
       };
 }
 
+/// A compact label for tight chrome: the stage strip and the status bar.
+///
+/// `null` is the Play stage — the shared preview rather than a pipeline output.
+/// The full [PipelineStageInfo.label] stays the accessible name.
+String shortStageLabel(PipelineStage? stage) => switch (stage) {
+      null => 'Play',
+      PipelineStage.import => 'Import',
+      PipelineStage.calibrate => 'Court',
+      PipelineStage.analyze => 'Analysis',
+      PipelineStage.track => 'Tracking',
+      PipelineStage.score => 'Score',
+      PipelineStage.highlight => 'Clips',
+      PipelineStage.export => 'Export',
+    };
+
 /// Whether a stage is done, can be done now, or is not set up yet.
 ///
 /// `idle` is guidance, not a gate: the stage that needs an earlier one stays

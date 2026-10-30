@@ -26,18 +26,6 @@ const List<PipelineStage?> stageStripOrder = <PipelineStage?>[
   PipelineStage.export,
 ];
 
-/// Shorter labels used when text is scaled up, so the strip does not clip
-/// (FR-SHL-35). The full label remains the accessible name and the tooltip.
-const Map<PipelineStage?, String> _shortStageLabels = <PipelineStage?, String>{
-  null: 'Play',
-  PipelineStage.calibrate: 'Court',
-  PipelineStage.analyze: 'Analysis',
-  PipelineStage.track: 'Tracking',
-  PipelineStage.score: 'Score',
-  PipelineStage.highlight: 'Clips',
-  PipelineStage.export: 'Export',
-};
-
 /// The 40 px stage navigation that replaces the old pipeline rail.
 ///
 /// Each tab carries its label and a state marker: a done check, an accent dot
@@ -103,7 +91,7 @@ class StageStrip extends StatelessWidget {
                 Expanded(
                   child: _StageTab(
                     label: shortened
-                        ? _shortStageLabels[stage] ?? fullLabelFor[stage]!
+                        ? shortStageLabel(stage)
                         : fullLabelFor[stage]!,
                     semanticLabel: fullLabelFor[stage]!,
                     status: _statusFor(stage),

@@ -94,15 +94,15 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   /// The list, or the loading, empty, and error state that replaces it.
   Widget _body(AsyncValue<List<WorkspaceSummary>> summaries) {
     return summaries.when(
-      loading: () => _centred(
-        const ScEmptyState(
-          message: 'Reading workspaces…',
-          icon: ScIcons.running,
+      loading: () => Center(
+        child: Semantics(
+          label: 'Reading workspaces',
+          child: const CircularProgressIndicator(),
         ),
       ),
       error: (Object error, StackTrace stackTrace) => _centred(
         ScEmptyState(
-          message: 'The workspaces could not be read.',
+          message: 'The workspaces could not be read. $error',
           actionLabel: 'Retry',
           onAction: () {
             ref.invalidate(workspaceListProvider);

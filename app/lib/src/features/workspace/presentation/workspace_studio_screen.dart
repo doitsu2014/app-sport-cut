@@ -583,13 +583,50 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
     if (choice == null) {
       return;
     }
+    // Keep the deleted video's place so the selection lands on the next
+    // remaining video rather than jumping to the first one (FR-LIB-24).
+    final before =
+        ref.read(workspaceVideosProvider(widget.workspace.id)).value ??
+            const <MatchListEntry>[];
+    final removedIndex =
+        before.indexWhere((entry) => entry.match.id == match.id);
+    final remaining = before
+        .where((entry) => entry.match.id != match.id)
+        .toList(growable: false);
+    final wasSelected = _selectedVideoId == match.id;
+
     final repository = await ref.read(matchRepositoryProvider.future);
     await repository.deleteMatch(
       match,
       deleteArtifacts: choice.deleteArtifacts,
       deleteRecording: choice.deleteRecording,
     );
+    if (!mounted) {
+      return;
+    }
     _refresh();
+
+    if (wasSelected) {
+      if (remaining.isEmpty) {
+        setState(() {
+          _selectedVideoId = null;
+          _selectedDuration = null;
+        });
+        _controller?.dispose();
+        _controller = null;
+      } else {
+        final int nextIndex;
+        if (removedIndex < 0) {
+          nextIndex = 0;
+        } else if (removedIndex >= remaining.length) {
+          nextIndex = remaining.length - 1;
+        } else {
+          nextIndex = removedIndex;
+        }
+        _selectVideo(remaining[nextIndex].match);
+      }
+    }
+
     messenger.showSnackBar(SnackBar(content: Text('Deleted ${match.title}')));
   }
 

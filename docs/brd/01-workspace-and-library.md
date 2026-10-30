@@ -111,10 +111,10 @@ Status uses Done / Partial / Not started. Partial work is not rounded up.
 | Capability | Status | Evidence and remaining gap |
 | --- | --- | --- |
 | Workspace home: list, create, open | Done | [`workspace_screen.dart`](../../app/lib/src/features/workspace/presentation/workspace_screen.dart), [`workspace_providers.dart`](../../app/lib/src/features/workspace/presentation/workspace_providers.dart) |
-| Studio video rail, selection, pipeline rail, status bar | Done | [`workspace_studio_screen.dart`](../../app/lib/src/features/workspace/presentation/workspace_studio_screen.dart) |
-| Missing-recording row | Partial | The rail shows the danger icon and "Recording missing"; there is no Locate action and the preview is not replaced |
-| Delete match and workspace | Done | Delete dialogs and `MatchRepository.deleteMatch` / `deleteWorkspace` |
-| Library search and filter | Not started | No search field or filter in the studio; DESIGN.md §10 requires one |
+| Studio video rail, selection, stage strip, status bar | Done | [`workspace_studio_screen.dart`](../../app/lib/src/features/workspace/presentation/workspace_studio_screen.dart), [`stage_strip.dart`](../../app/lib/src/features/workspace/presentation/studio/stage_strip.dart), [`studio_status_bar.dart`](../../app/lib/src/features/workspace/presentation/studio/studio_status_bar.dart) — the status bar names the selected stage (FR-LIB-20) |
+| Missing-recording row | Done | The rail shows the danger icon and "Recording missing", and the preview paints `ScMissingRecording`. ADR-0003 D8 deliberately offers no Locate action, superseding FR-LIB-15 |
+| Delete match and workspace | Done | Delete dialogs and `MatchRepository.deleteMatch` / `deleteWorkspace`; deleting the selected video selects the next remaining one (FR-LIB-24) |
+| Library search and filter | Done | [`video_rail.dart`](../../app/lib/src/features/workspace/presentation/studio/video_rail.dart) filters by title, counts matches, and offers Clear search on an empty result |
 | Catalog schema v5 and migrations (baseline) | Done | [`match_catalog.dart`](../../app/lib/src/features/library/data/match_catalog.dart), `app/test/match_catalog_test.dart`; ADR-0001 target is service-owned v6 adopting v5 |
 | Recording copy (baseline) | Done | [`recording_store.dart`](../../app/lib/src/features/library/data/recording_store.dart), `app/test/match_repository_test.dart`; ADR-0001 moves custody to the service |
 | Local playback | Done | [`player_view.dart`](../../app/lib/src/features/library/presentation/player_view.dart), `app/test/player_screen_test.dart` |
