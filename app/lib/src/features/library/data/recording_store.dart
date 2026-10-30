@@ -51,10 +51,17 @@ class RecordingStore {
   /// complete — an interrupted copy can therefore never be mistaken for a
   /// recording. Any failure or cancellation removes the match's recording
   /// directory, leaving nothing behind.
+  ///
+  /// [expectedBytes] is the recording's known size, used as the denominator for
+  /// progress; when null or non-positive the source file's length is used.
+  /// [onProgress], when given, receives the fraction copied so far in
+  /// `0.0..1.0`, starting at `0.0` and finishing at `1.0`.
   Future<CustodiedRecording> takeCustody({
     required String matchId,
     required PickedVideo video,
     ImportCancelToken? cancelToken,
+    int? expectedBytes,
+    void Function(double fraction)? onProgress,
   }) async {
     final name = _nameFor(video);
     final directory = Directory(_paths.recordingDir(matchId));
@@ -63,7 +70,13 @@ class RecordingStore {
 
     try {
       await directory.create(recursive: true);
-      await _copy(source: File(video.path), partial: partial, cancelToken: cancelToken);
+      await _copy(
+        source: File(video.path),
+        partial: partial,
+        cancelToken: cancelToken,
+        expectedBytes: expectedBytes,
+        onProgress: onProgress,
+      );
       await partial.rename(destination.path);
     } on MatchImportException {
       await remove(matchId);
@@ -71,6 +84,9 @@ class RecordingStore {
     } on FileSystemException catch (error) {
       await remove(matchId);
       throw _describe(error, video);
+    } on Object {
+      await remove(matchId);
+      rethrow;
     }
 
     return CustodiedRecording(
@@ -112,9 +128,20 @@ class RecordingStore {
     required File source,
     required File partial,
     ImportCancelToken? cancelToken,
+    int? expectedBytes,
+    void Function(double fraction)? onProgress,
   }) async {
+    final totalBytes = (expectedBytes != null && expectedBytes > 0)
+        ? expectedBytes
+        : source.lengthSync();
+    var copiedBytes = 0;
+    var lastPercent = 0;
     final sink = partial.openWrite();
     try {
+      if (onProgress != null) {
+        onProgress(0.0);
+        lastPercent = 0;
+      }
       await for (final chunk in source.openRead()) {
         if (cancelToken?.isCancelled ?? false) {
           throw MatchImportException(
@@ -123,8 +150,20 @@ class RecordingStore {
           );
         }
         sink.add(chunk);
+        copiedBytes += chunk.length;
+        if (totalBytes > 0 && onProgress != null) {
+          final double fraction = (copiedBytes / totalBytes).clamp(0.0, 1.0);
+          final int percent = (fraction * 100).round();
+          if (percent > lastPercent) {
+            onProgress(fraction);
+            lastPercent = percent;
+          }
+        }
       }
       await sink.flush();
+      if (onProgress != null && lastPercent < 100) {
+        onProgress(1.0);
+      }
     } finally {
       await sink.close();
     }

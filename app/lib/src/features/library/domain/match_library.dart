@@ -28,11 +28,15 @@ abstract interface class MatchLibrary {
   /// match records; the file the user selected is never modified. [workspaceId]
   /// is the workspace the match joins; when null, the repository ensures a
   /// workspace exists and uses it.
+  ///
+  /// [onProgress], when given, receives the fraction of the copy completed in
+  /// `0.0..1.0`, starting at `0.0` and finishing at `1.0`.
   Future<MatchRecord> importVideo(
     PickedVideo video, {
     String? title,
     String? workspaceId,
     ImportCancelToken? cancelToken,
+    void Function(double fraction)? onProgress,
   });
 
   /// Whether this match's stored recording can still be read.

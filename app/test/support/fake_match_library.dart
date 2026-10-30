@@ -98,6 +98,7 @@ class FakeMatchLibrary implements MatchLibrary {
     String? title,
     String? workspaceId,
     ImportCancelToken? cancelToken,
+    void Function(double fraction)? onProgress,
   }) async {
     importCalls += 1;
     final error = failure;
