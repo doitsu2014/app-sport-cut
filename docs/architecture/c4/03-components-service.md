@@ -3,9 +3,10 @@
 ![Service components](generated/l3-components-service.svg)
 
 The Rust crates inside the background service, grouped by the layer each one
-lives in. The arrows between crates are **compile-time dependencies read from
-`cargo metadata`**, not something typed into the model; the layout and the
-declared edges to the external tools are the only hand-written parts.
+lives in. The arrows between crates are the compile-time dependencies declared
+in `core/Cargo.toml`; `tools/check-c4-model.sh` compares the workspace with
+`cargo metadata` in both directions and fails on a missing or invented
+dependency.
 
 ## Components
 
@@ -34,8 +35,10 @@ shipped service. It is drawn at the bottom and its edges are omitted.
 - **Outer may depend on inner, never the reverse.** Adapters → gateways and use
   cases → entities. The rule and its enforcement are in
   [layering.md](../layering.md) and `tools/check-layering.sh`.
-- **Edges to `sportcut-common` are hidden.** Every crate may use it, so drawing
-  fourteen identical arrows would hide the structure that matters.
+- **Edges to `sportcut-common` are omitted.** Every crate may use it, so
+  fourteen identical arrows would hide the structure that matters. The checker
+  applies the same exclusion on both sides, so the omission is a stated rule,
+  not a blind spot.
 - **The storage arrows point outward on purpose.** `sportcut-storage` depends on
   `sportcut-jobs`, `sportcut-media`, and `sportcut-rally` because it implements
   ports those crates declare. A use case never depends on the gateway that

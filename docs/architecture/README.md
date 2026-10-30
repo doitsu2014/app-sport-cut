@@ -23,7 +23,8 @@ question; read the one that matches yours.
 
 Four levels, each a page with a generated diagram: system context, containers,
 components of the service and of the client. The model is
-`c4/model/workspace.json`; the SVGs in `c4/generated/` are rendered from it by
+`c4/workspace.dsl`, a Structurizr workspace; the SVGs in `c4/generated/` are
+rendered from it by Structurizr and PlantUML (pinned Docker images) through
 `tools/generate-c4-diagrams.sh`, and `tools/check-c4-model.sh` fails when the
 model and the code drift apart. Read this first if you are new to the codebase.
 The code level (L4) is deliberately omitted in favour of the layering set below.
@@ -96,7 +97,7 @@ and [layering.md](layering.md) is its working description.
 - A change to the wire contract is a change to [protocol.md](protocol.md) and to
   `core/gateways/protocol` in the same change.
 - A new crate, a new container, or a new feature folder is a change to the
-  [C4 model](c4/model/workspace.json). Run `tools/generate-c4-diagrams.sh` and
+  [C4 workspace](c4/workspace.dsl). Run `tools/generate-c4-diagrams.sh` and
   `tools/check-c4-model.sh`, then commit the regenerated SVGs.
 - A new crate or a new dependency between crates is a change governed by
   [layering.md](layering.md); run `tools/check-layering.sh`.

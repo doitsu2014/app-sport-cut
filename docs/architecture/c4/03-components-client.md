@@ -38,12 +38,14 @@ later phase lands inside its folder instead of spreading across the app.
 ## Rules the picture encodes
 
 - **Only the bridge talks to the engine.** Feature code never opens a socket and
-  never hard-codes a protocol method. The arrows from the feature group are
-  aggregated because they are the same edge nine times; `editing` works on
-  already-loaded data and does not reach the bridge.
+  never hard-codes a protocol method. Every feature that reaches the engine has
+  its own edge to `SportcutEngine`; `editing` works on already-loaded data and
+  has none.
 - **Everything renders through the design system.** Feature code takes its
   colours, spacing, type, and motion from tokens and shared components; it does
-  not carry raw hex values or ad-hoc pixel constants (DS-1).
+  not carry raw hex values or ad-hoc pixel constants (DS-1). The diagram draws
+  the design system once, reached from the app shell, rather than one edge per
+  feature.
 - **Riverpod is the wiring.** Shared state and dependencies are providers in
   `app/lib/src/app/di.dart`; a feature does not construct the engine itself.
 - **The client owns no durable state that belongs to the service.** The v5
