@@ -115,7 +115,7 @@ class FakeMediaEngine implements MediaEngine {
       matchId: lastMatchId ?? 'match-1',
       originalPath: 'original.mp4',
       artifacts: manifestArtifacts ??
-          <ArtifactDto>[
+          const <ArtifactDto>[
             ArtifactDto(
               kind: 'proxy',
               relativePath: 'proxy/proxy.mp4',
