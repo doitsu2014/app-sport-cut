@@ -96,12 +96,19 @@ class MatchRepository implements MatchLibrary {
   ///
   /// If the catalog write fails the copy is removed, so nothing partial is left
   /// behind: no record without a recording, and no recording without a record.
+  ///
+  /// [onProgress], when given, receives the fraction of the copy completed in
+  /// `0.0..1.0`: `0.0` before the first chunk, updates as the copy advances,
+  /// and `1.0` once the copy is flushed. On cancellation or failure the
+  /// callback may stop early with no final value, and `1.0` means the bytes
+  /// were flushed — not that the match was saved.
   @override
   Future<MatchRecord> importVideo(
     PickedVideo video, {
     String? title,
     String? workspaceId,
     ImportCancelToken? cancelToken,
+    void Function(double fraction)? onProgress,
   }) async {
     await _ensureReadable(video.path);
     final metadata = await _probe(video.path);
@@ -113,6 +120,8 @@ class MatchRepository implements MatchLibrary {
       matchId: id,
       video: video,
       cancelToken: cancelToken,
+      expectedBytes: metadata.sizeBytes,
+      onProgress: onProgress,
     );
 
     final match = MatchRecord(

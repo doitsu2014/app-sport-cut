@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/design/components/sc_panel.dart';
-import '../../../app/design/components/sc_pipeline_row.dart';
+import '../../../app/design/sc_icons.dart';
 import '../../../app/design/sc_metrics.dart';
-import '../../../app/design/sc_status.dart';
 import '../../../app/design/sc_typography.dart';
 import '../../../app/design/sportcut_tokens.dart';
 import '../../../bridge/sportcut_engine.dart';
@@ -11,11 +10,11 @@ import '../../library/presentation/formatters.dart';
 
 /// The artifacts the analysis job produced, as compact studio rows.
 ///
-/// Each row carries the artifact kind, its manifest state, the size the engine
-/// reported, and the path it lives at. The state is a [ScStatus] word plus
-/// icon, so the row never relies on colour alone. A [DataTable] is deliberately
-/// not used: the inspector is 320 px wide and the four facts read better as a
-/// stacked row than as columns.
+/// Each row carries the artifact kind, a local state badge, the size the engine
+/// reported, and the path it lives at. The badge is a READY / PARTIAL / MISSING
+/// word with an icon and a semantic colour, so the row never relies on colour
+/// alone. A [DataTable] is deliberately not used: the inspector is 320 px wide
+/// and the four facts read better as a stacked row than as columns.
 class ArtifactRows extends StatelessWidget {
   /// Build rows for [artifacts], in manifest order.
   const ArtifactRows({super.key, required this.artifacts});
@@ -42,7 +41,8 @@ class ArtifactRows extends StatelessWidget {
   }
 }
 
-/// One artifact: kind and state on the pipeline row, path and size beneath.
+/// One artifact: kind, state badge, and trailing size on the numbered row;
+/// path beneath.
 class _ArtifactRow extends StatelessWidget {
   const _ArtifactRow({required this.number, required this.artifact});
 
@@ -55,17 +55,61 @@ class _ArtifactRow extends StatelessWidget {
     final SportcutTokens tokens = SportcutTokens.of(context);
     final SportcutTypography typography = SportcutTypography.of(context);
     final int? bytes = artifact.sizeBytes;
+    final _ArtifactBadge badge = _ArtifactBadge.of(artifact.state, palette);
+    final bool isMissing = artifact.state == ArtifactStateDto.missing;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        ScPipelineRow(
-          number: number,
-          name: artifact.kind,
-          status: _status(artifact.state),
-          trailing: Text(
-            bytes == null ? '—' : formatBytes(bytes),
-            style: typography.timecode11.copyWith(color: palette.muted),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: tokens.space2),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: ScMetrics.rowCompact),
+            child: Row(
+              children: <Widget>[
+                SizedBox(
+                  width: ScMetrics.courtHandleVisual,
+                  child: Text(
+                    number.toString().padLeft(2, '0'),
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
+                    style: typography.timecode11.copyWith(color: palette.muted),
+                  ),
+                ),
+                SizedBox(width: tokens.space3),
+                Expanded(
+                  child: Text(
+                    artifact.kind,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: typography.sm14.copyWith(
+                      color: isMissing ? palette.danger : palette.fg,
+                    ),
+                  ),
+                ),
+                SizedBox(width: tokens.space2),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      badge.icon,
+                      size: tokens.space3,
+                      color: badge.color,
+                    ),
+                    SizedBox(width: tokens.space1),
+                    Text(
+                      badge.word,
+                      style: typography.chrome9.copyWith(color: badge.color),
+                    ),
+                  ],
+                ),
+                SizedBox(width: tokens.space2),
+                Text(
+                  bytes == null ? '—' : formatBytes(bytes),
+                  style: typography.timecode11.copyWith(color: palette.muted),
+                ),
+              ],
+            ),
           ),
         ),
         Padding(
@@ -84,11 +128,50 @@ class _ArtifactRow extends StatelessWidget {
       ],
     );
   }
+}
 
-  /// Map a manifest state onto the shell's status vocabulary.
-  ScStatus _status(ArtifactStateDto state) => switch (state) {
-        ArtifactStateDto.final_ => ScStatus.done,
-        ArtifactStateDto.nonFinal => ScStatus.needsReview,
-        ArtifactStateDto.missing => ScStatus.blocked,
-      };
+/// The analysis inspector's local state vocabulary for one artifact.
+///
+/// An artifact has exactly three manifest states, so the inspector uses its
+/// own READY / PARTIAL / MISSING words rather than the studio's larger status
+/// set. The word, icon, and colour always travel together.
+class _ArtifactBadge {
+  const _ArtifactBadge({
+    required this.word,
+    required this.icon,
+    required this.color,
+  });
+
+  /// Resolve the badge for [state] against [palette].
+  factory _ArtifactBadge.of(
+    ArtifactStateDto state,
+    SportcutPalette palette,
+  ) {
+    return switch (state) {
+      ArtifactStateDto.final_ => _ArtifactBadge(
+          word: 'READY',
+          icon: ScIcons.checkCircle,
+          color: palette.success,
+        ),
+      ArtifactStateDto.nonFinal => _ArtifactBadge(
+          word: 'PARTIAL',
+          icon: ScIcons.warning,
+          color: palette.warn,
+        ),
+      ArtifactStateDto.missing => _ArtifactBadge(
+          word: 'MISSING',
+          icon: ScIcons.blocked,
+          color: palette.danger,
+        ),
+    };
+  }
+
+  /// The state word, already uppercase.
+  final String word;
+
+  /// The icon that reinforces the word.
+  final IconData icon;
+
+  /// The semantic state colour.
+  final Color color;
 }

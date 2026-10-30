@@ -54,7 +54,8 @@ class AnalysisPanel extends ConsumerWidget {
     final bool busyElsewhere = state.busyElsewhere(match.id);
     final List<ArtifactDto> artifacts =
         state.manifest?.artifacts ?? const <ArtifactDto>[];
-    final List<ArtifactDto> missing = state.missing;
+    final List<ArtifactDto> rebuildable = state.rebuildableMissing;
+    final List<ArtifactDto> notRebuildable = state.notRebuildableMissing;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -112,15 +113,15 @@ class AnalysisPanel extends ConsumerWidget {
           )
         else ...<Widget>[
           ScButton(
-            label: missing.isEmpty
+            label: rebuildable.isEmpty
                 ? 'Nothing to rebuild'
-                : 'Rebuild ${missing.length} missing '
-                    '${missing.length == 1 ? 'file' : 'files'}',
+                : 'Rebuild ${rebuildable.length} missing '
+                    '${rebuildable.length == 1 ? 'file' : 'files'}',
             icon: ScIcons.running,
             variant: ScButtonVariant.secondary,
             expanded: true,
-            enabled: missing.isNotEmpty && !busyElsewhere,
-            onPressed: missing.isEmpty || busyElsewhere
+            enabled: rebuildable.isNotEmpty && !busyElsewhere,
+            onPressed: rebuildable.isEmpty || busyElsewhere
                 ? null
                 : () => unawaited(controller.repair(match)),
           ),
@@ -130,6 +131,13 @@ class AnalysisPanel extends ConsumerWidget {
               'Another video is being prepared'
               '${state.runningTitle == null ? '' : ' (${state.runningTitle})'}. '
               'This one can start when it finishes.',
+              style: typography.xs12.copyWith(color: palette.muted),
+            ),
+          ],
+          if (notRebuildable.isNotEmpty) ...<Widget>[
+            SizedBox(height: tokens.space2),
+            Text(
+              _notRebuildableNote(notRebuildable),
               style: typography.xs12.copyWith(color: palette.muted),
             ),
           ],
@@ -191,6 +199,34 @@ class AnalysisPanel extends ConsumerWidget {
       'regenerate' => 'Working out what to rebuild…',
       _ => 'Starting…',
     };
+  }
+
+  /// How each artifact kind is named to the user, and the studio stage that
+  /// produces it. The engine's list may grow; unknown kinds fall back to the
+  /// raw kind string with generic wording and no stage named.
+  static const Map<String, (String, String)> _kindStages =
+      <String, (String, String)>{
+    'calibration': ('court calibration', 'Mark court'),
+    'tracks': ('player tracks', 'Player analysis'),
+    'rally_suggestions': ('rally suggestions', 'Review & score'),
+    'export': ('export video', 'Export'),
+  };
+
+  /// One plain-language sentence naming the missing files another stage makes.
+  static String _notRebuildableNote(List<ArtifactDto> artifacts) {
+    final List<String> parts = <String>[
+      for (final ArtifactDto artifact in artifacts) _describeKind(artifact.kind),
+    ];
+    return 'Still missing, made by another stage: ${parts.join(', ')}.';
+  }
+
+  /// A kind's display name and producing stage, or a safe generic fallback.
+  static String _describeKind(String kind) {
+    final (String, String)? known = _kindStages[kind];
+    if (known == null) {
+      return '$kind (the stage that produces it)';
+    }
+    return '${known.$1} (${known.$2})';
   }
 }
 

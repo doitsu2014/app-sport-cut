@@ -22,10 +22,19 @@ enum ImportPhase {
 /// The state of the current import.
 class ImportState {
   /// Describe the import.
-  const ImportState({this.phase = ImportPhase.idle, this.problem});
+  const ImportState({
+    this.phase = ImportPhase.idle,
+    this.fraction,
+    this.problem,
+  });
 
   /// What the import is doing.
   final ImportPhase phase;
+
+  /// How much of the copy is done, in `0.0..1.0`.
+  ///
+  /// Only set while [phase] is [ImportPhase.importing]; null otherwise.
+  final double? fraction;
 
   /// Why the last import failed, when it did.
   final MatchImportException? problem;
@@ -102,12 +111,21 @@ class ImportController extends Notifier<ImportState> {
         return const ImportDeclined();
       }
 
-      state = const ImportState(phase: ImportPhase.importing);
+      state = const ImportState(phase: ImportPhase.importing, fraction: 0.0);
       final repository = await ref.read(matchRepositoryProvider.future);
       final match = await repository.importVideo(
         picked,
         workspaceId: workspaceId,
         cancelToken: token,
+        onProgress: (double fraction) {
+          if (identical(_token, token) &&
+              state.phase == ImportPhase.importing) {
+            state = ImportState(
+              phase: ImportPhase.importing,
+              fraction: fraction,
+            );
+          }
+        },
       );
       _invalidateAfterImport(match);
       return ImportSucceeded(match);
