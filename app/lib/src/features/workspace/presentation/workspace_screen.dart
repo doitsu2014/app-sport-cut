@@ -74,7 +74,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               ),
               child: ScProgressJob(
                 stageLabel: import.description,
-                fraction: null,
+                fraction: import.fraction,
                 detail: 'Sportcut copies the recording into its own store.',
                 onCancel: () =>
                     ref.read(importControllerProvider.notifier).cancel(),

@@ -190,6 +190,7 @@ class _WorkspaceStudioScreenState extends ConsumerState<WorkspaceStudioScreen> {
           controller: _controller,
           importRunning: import.isRunning,
           importDescription: import.description,
+          importFraction: import.fraction,
           searchController: _searchController,
           searchFocusNode: _searchFocusNode,
           exportFocusNode: _exportFocusNode,
