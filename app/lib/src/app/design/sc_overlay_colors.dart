@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 /// These do not follow the theme: the preview is always dark because it is a
 /// video bed (ADR-0003 D13 and D16).
 abstract final class ScOverlayColors {
-  /// The stage bed.
+  /// The stage bed. ADR-0003 D16 fixes this value and supersedes the
+  /// `#0A0F0C` wording in earlier design/BRD text.
   static const Color bed = Color(0xFF050806);
 
   /// Chalk on footage.
@@ -22,4 +23,9 @@ abstract final class ScOverlayColors {
 
   /// The scrim over the bed.
   static Color get scrim => bed.withValues(alpha: 0.44);
+
+  /// The calibration scrim: dark enough that chalk markings hold 3:1 over
+  /// footage, inside the design contract's 32-56 % range. It uses the fixed
+  /// stage bed from ADR-0003 D16, not the superseded `#0A0F0C` value.
+  static Color get calibrationScrim => bed.withValues(alpha: 0.52);
 }

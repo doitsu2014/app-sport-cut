@@ -131,7 +131,7 @@ void main() {
     expect(find.text('Away from you'), findsWidgets);
     expect(find.text('Corners'), findsOneWidget);
     expect(find.text('4 of 4'), findsOneWidget);
-    expect(find.text('Marking the court…'), findsOneWidget);
+    expect(find.text('Drag a handle to project the net.'), findsOneWidget);
     expect(find.text('Which way does the court run?'), findsOneWidget);
     expect(find.text('Across the view'), findsOneWidget);
     expect(find.text('Save court'), findsOneWidget);

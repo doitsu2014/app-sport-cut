@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/design/components/sc_calibration_overlay.dart';
 import '../../../../app/design/sc_metrics.dart';
 import '../../../../app/design/sc_typography.dart';
 import '../../../../app/design/sportcut_tokens.dart';
@@ -105,6 +106,8 @@ class PreviewPane extends StatelessWidget {
         return VideoPreview(
           entry: entry,
           controller: controller,
+          transportAccent: false,
+          underlay: const ScCalibrationScrim(),
           overlay: CalibrationOverlayHost(match: entry.match),
         );
       case PipelineStage.track:

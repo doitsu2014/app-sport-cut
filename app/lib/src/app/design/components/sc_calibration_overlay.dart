@@ -1,29 +1,89 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../sc_elevation.dart';
-import '../sc_icons.dart';
 import '../sc_metrics.dart';
+import '../sc_motion.dart';
+import '../sc_overlay_colors.dart';
 import '../sc_typography.dart';
 import '../sportcut_tokens.dart';
 
-/// Hairline width for the net and control outlines.
-const double _hairline = 1;
+/// Engine court geometry, normalized to the displayed frame.
+///
+/// The host builds this from the engine's returned outline and net. The overlay
+/// paints it and never derives a court of its own.
+@immutable
+class ScCourtGeometry {
+  /// Build a geometry value.
+  const ScCourtGeometry({required this.outline, required this.net});
 
-/// Border width of a corner handle, from the calibration overlay contract.
-const double _handleBorderWidth = 2;
+  /// The four court corners, in the order they were marked.
+  final List<Offset> outline;
+
+  /// The two net endpoints.
+  final List<Offset> net;
+
+  /// Whether the payload can be painted: four finite outline points and two
+  /// finite net points, each inside the normalized frame.
+  bool get isValid =>
+      outline.length == 4 &&
+      net.length == 2 &&
+      outline.every(_isInsideFrame) &&
+      net.every(_isInsideFrame);
+
+  static bool _isInsideFrame(Offset point) =>
+      point.dx.isFinite &&
+      point.dy.isFinite &&
+      point.dx >= 0 &&
+      point.dx <= 1 &&
+      point.dy >= 0 &&
+      point.dy <= 1;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ScCourtGeometry &&
+      listEquals(other.outline, outline) &&
+      listEquals(other.net, net);
+
+  @override
+  int get hashCode => Object.hash(Object.hashAll(outline), Object.hashAll(net));
+}
+
+/// How the corner order reads to the user, in handle order.
+const List<String> _cornerNames = <String>[
+  'nearest left',
+  'nearest right',
+  'farthest right',
+  'farthest left',
+];
+
+/// The fixed scrim the calibration surface draws beneath the stage transport.
+///
+/// It is a separate widget so the studio can paint it below the floating
+/// transport while the court markings stay above it. Drawing the scrim inside
+/// [ScCalibrationOverlay] would dim the transport's timecodes and scrubber.
+class ScCalibrationScrim extends StatelessWidget {
+  /// Build the scrim.
+  const ScCalibrationScrim({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(color: ScOverlayColors.calibrationScrim);
+  }
+}
 
 /// The court calibration overlay.
 ///
 /// The overlay is a pure presentation surface: it paints the four normalised
-/// corners of [corners] inside [box], the dashed net between the two side
-/// lines, and one instruction line. It never reads a controller or provider.
+/// corners of [corners] inside [box], the engine's court outline and dashed net
+/// from [geometry], and one instruction line. It never reads a controller or
+/// provider and never derives a court of its own.
 ///
 /// Corner order follows the calibration contract: 0 is the near-left corner,
-/// 1 the near-right, 2 the far-right, and 3 the far-left. The net is drawn
-/// between the midpoints of the two side lines (0–3 and 1–2). Coordinates are
+/// 1 the near-right, 2 the far-right, and 3 the far-left. Coordinates are
 /// normalised to 0..1 and clamped into the box before painting.
 ///
 /// A handle draws at [ScMetrics.courtHandleVisual] inside a
@@ -39,7 +99,9 @@ class ScCalibrationOverlay extends StatefulWidget {
     required this.activeIndex,
     required this.onSelect,
     required this.onDrag,
-    this.instruction = 'Drag each corner to the court boundary.',
+    this.geometry,
+    this.instruction = 'Drag a handle; the dashed line is the net the engine '
+        'projects.',
   });
 
   /// The aspect-fit box the normalised corners are mapped into.
@@ -58,6 +120,10 @@ class ScCalibrationOverlay extends StatefulWidget {
   /// clamped normalised position inside [box].
   final void Function(int index, Offset normalizedPosition) onDrag;
 
+  /// The engine's projected outline and net, or null when nothing has been
+  /// projected yet (an uncalibrated match or a rejected court).
+  final ScCourtGeometry? geometry;
+
   /// The one instruction line above the court.
   final String instruction;
 
@@ -68,10 +134,9 @@ class ScCalibrationOverlay extends StatefulWidget {
 class _ScCalibrationOverlayState extends State<ScCalibrationOverlay> {
   @override
   Widget build(BuildContext context) {
-    final palette = SportcutPalette.of(context);
     final tokens = SportcutTokens.of(context);
     final type = SportcutTypography.of(context);
-    final net = _netEndpoints(widget.corners);
+    final geometry = widget.geometry?.isValid ?? false ? widget.geometry : null;
 
     return SizedBox(
       width: widget.box.width,
@@ -79,15 +144,53 @@ class _ScCalibrationOverlayState extends State<ScCalibrationOverlay> {
       child: Stack(
         clipBehavior: Clip.none,
         children: <Widget>[
+          // A flat, full-width band, not a floating pill or card. The opaque
+          // bed keeps the 12 px line at body-text contrast over any footage.
+          // It is painted below the court and handles so neither is hidden.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: ColoredBox(
+                color: ScOverlayColors.bed,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: tokens.space3,
+                    vertical: tokens.space1,
+                  ),
+                  child: Text(
+                    widget.instruction,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: type.xs12.copyWith(color: ScOverlayColors.ink),
+                  ),
+                ),
+              ),
+            ),
+          ),
           Positioned.fill(
             child: IgnorePointer(
-              child: CustomPaint(
-                painter: _NetPainter(
-                  endpoints: net,
-                  color: palette.muted,
-                  dash: tokens.radiusSm,
-                  gap: tokens.radiusSm + _hairline,
-                ),
+              child: AnimatedSwitcher(
+                duration: ScMotion.duration(context, tokens.motionBase),
+                reverseDuration:
+                    ScMotion.duration(context, tokens.motionBase * 0.7),
+                switchInCurve: SportcutTokens.easeStandard,
+                switchOutCurve: Curves.easeIn,
+                child: geometry == null
+                    ? const SizedBox.shrink(key: ValueKey<String>('no-court'))
+                    : SizedBox.expand(
+                        key: ValueKey<ScCourtGeometry>(geometry),
+                        child: CustomPaint(
+                          painter: _CourtPainter(
+                            geometry: geometry,
+                            color: ScOverlayColors.ink,
+                            dash: tokens.radiusSm,
+                            gap: tokens.radiusSm + ScMetrics.hairline,
+                          ),
+                        ),
+                      ),
               ),
             ),
           ),
@@ -100,50 +203,6 @@ class _ScCalibrationOverlayState extends State<ScCalibrationOverlay> {
               onSelect: widget.onSelect,
               onDrag: widget.onDrag,
             ),
-          Positioned(
-            top: tokens.space2,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              child: Center(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: palette.surface,
-                    border: Border.all(
-                      color: palette.controlBorder,
-                      width: _hairline,
-                    ),
-                    borderRadius: BorderRadius.circular(tokens.radiusPill),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: tokens.space3,
-                      vertical: tokens.space1,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Icon(
-                          ScIcons.cropFree,
-                          size: ScIcons.toolbarSize,
-                          color: palette.fg2,
-                        ),
-                        SizedBox(width: tokens.space2),
-                        Flexible(
-                          child: Text(
-                            widget.instruction,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: type.micro10.copyWith(color: palette.fg2),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -155,8 +214,9 @@ class _ScCalibrationOverlayState extends State<ScCalibrationOverlay> {
 /// [point] is the normalised corner position inside [box]. The
 /// [ScMetrics.courtHandleHit] square is the gesture surface, so the whole hit
 /// region receives the pan; the [ScMetrics.courtHandleVisual] circle is
-/// centred inside it. [active] draws a neutral ring, while the accent fill
-/// appears only while the pointer is down.
+/// centred inside it. It takes the accent fill only while a confirmed drag is
+/// under way (`onPanStart` to `onPanEnd`/`onPanCancel`); the caller-supplied
+/// [activeIndex] gets a neutral ring instead. Every other handle is neutral.
 class ScCourtHandle extends StatefulWidget {
   /// Build a corner handle.
   const ScCourtHandle({
@@ -194,6 +254,7 @@ class ScCourtHandle extends StatefulWidget {
 
 class _ScCourtHandleState extends State<ScCourtHandle> {
   bool _pressed = false;
+  bool _dragging = false;
   bool _hovered = false;
   bool _focused = false;
 
@@ -219,10 +280,16 @@ class _ScCourtHandleState extends State<ScCourtHandle> {
   @override
   Widget build(BuildContext context) {
     final palette = SportcutPalette.of(context);
+    final tokens = SportcutTokens.of(context);
     final type = SportcutTypography.of(context);
-    final borderColor = _pressed
-        ? palette.accent
-        : (widget.active || _hovered ? palette.fg : palette.fg2);
+    final dragging = _dragging;
+    final emphasized = dragging || widget.active || _hovered || _focused;
+    final borderColor = dragging
+        ? ScOverlayColors.signal
+        : ScOverlayColors.ink.withValues(alpha: emphasized ? 1 : 0.82);
+    final cornerName = widget.index < _cornerNames.length
+        ? _cornerNames[widget.index]
+        : 'corner ${widget.index + 1}';
 
     return Positioned(
       left: _origin.dx,
@@ -230,7 +297,12 @@ class _ScCourtHandleState extends State<ScCourtHandle> {
       width: ScMetrics.courtHandleHit,
       height: ScMetrics.courtHandleHit,
       child: FocusableActionDetector(
-        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        onShowFocusHighlight: (value) {
+          setState(() => _focused = value);
+          if (!value) {
+            widget.onSelect(-1);
+          }
+        },
         shortcuts: const <ShortcutActivator, Intent>{
           SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
           SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
@@ -262,29 +334,38 @@ class _ScCourtHandleState extends State<ScCourtHandle> {
               onPointerCancel: (_) => setState(() => _pressed = false),
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onPanStart: (_) => setState(() => _dragging = true),
                 onPanUpdate: _handlePanUpdate,
+                onPanEnd: (_) => setState(() => _dragging = false),
+                onPanCancel: () => setState(() => _dragging = false),
                 child: Semantics(
                   button: true,
-                  label: 'Corner ${widget.index + 1}',
+                  label: 'Corner ${widget.index + 1}: $cornerName',
                   hint: 'Drag to the court boundary',
                   onTap: () => widget.onSelect(widget.index),
                   child: Center(
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: ScMotion.duration(context, tokens.motionFast),
+                      curve: SportcutTokens.easeStandard,
                       width: ScMetrics.courtHandleVisual,
                       height: ScMetrics.courtHandleVisual,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _pressed ? palette.accent : palette.surface,
+                        color: dragging
+                            ? ScOverlayColors.signal
+                            : ScOverlayColors.bed,
                         border: Border.all(
                           color: borderColor,
-                          width: _handleBorderWidth,
+                          width: ScMetrics.handleBorder,
                         ),
                       ),
                       child: Text(
                         '${widget.index + 1}',
                         style: type.micro10.copyWith(
-                          color: _pressed ? palette.accentOn : palette.fg2,
+                          color: dragging
+                              ? ScOverlayColors.bed
+                              : ScOverlayColors.ink,
                         ),
                       ),
                     ),
@@ -299,17 +380,17 @@ class _ScCourtHandleState extends State<ScCourtHandle> {
   }
 }
 
-/// Draws the dashed net between two normalised endpoints.
-class _NetPainter extends CustomPainter {
-  const _NetPainter({
-    required this.endpoints,
+/// Draws the engine's court outline and its dashed net.
+class _CourtPainter extends CustomPainter {
+  const _CourtPainter({
+    required this.geometry,
     required this.color,
     required this.dash,
     required this.gap,
   });
 
-  /// The two normalised net endpoints.
-  final List<Offset> endpoints;
+  /// The engine geometry to draw.
+  final ScCourtGeometry geometry;
 
   /// The stroke colour.
   final Color color;
@@ -322,19 +403,28 @@ class _NetPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (endpoints.length != 2) {
+    if (!geometry.isValid || size.isEmpty) {
       return;
     }
     final paint = Paint()
       ..color = color
-      ..strokeWidth = _hairline
+      ..strokeWidth = ScMetrics.courtOutline
       ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.butt;
+
+    final outline = <Offset>[
+      for (final point in geometry.outline) _scale(_clampPoint(point), size),
+    ];
+    canvas.drawPath(Path()..addPolygon(outline, true), paint);
+
+    paint.strokeWidth = ScMetrics.hairline;
     _drawDashed(
       canvas,
-      _scale(endpoints[0], size),
-      _scale(endpoints[1], size),
+      _scale(_clampPoint(geometry.net[0]), size),
+      _scale(_clampPoint(geometry.net[1]), size),
       paint,
+      size.longestSide * 4,
     );
   }
 
@@ -342,10 +432,18 @@ class _NetPainter extends CustomPainter {
     return Offset(point.dx * size.width, point.dy * size.height);
   }
 
-  void _drawDashed(Canvas canvas, Offset start, Offset end, Paint paint) {
+  void _drawDashed(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+    double limit,
+  ) {
     final delta = end - start;
     final length = delta.distance;
-    if (length <= 0 || dash <= 0) {
+    // A clamped payload can never exceed the diagonal, but the guard keeps a
+    // pathological value from spinning this loop on the UI thread.
+    if (length <= 0 || dash <= 0 || length > limit) {
       return;
     }
     final direction = delta / length;
@@ -362,23 +460,11 @@ class _NetPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_NetPainter oldDelegate) {
-    return !_sameEndpoints(oldDelegate.endpoints, endpoints) ||
+  bool shouldRepaint(_CourtPainter oldDelegate) {
+    return oldDelegate.geometry != geometry ||
         oldDelegate.color != color ||
         oldDelegate.dash != dash ||
         oldDelegate.gap != gap;
-  }
-
-  static bool _sameEndpoints(List<Offset> a, List<Offset> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var index = 0; index < a.length; index++) {
-      if (a[index] != b[index]) {
-        return false;
-      }
-    }
-    return true;
   }
 }
 
@@ -388,16 +474,4 @@ Offset _clampPoint(Offset point) {
     math.min(math.max(point.dx, 0.0), 1.0),
     math.min(math.max(point.dy, 0.0), 1.0),
   );
-}
-
-/// The net endpoints for [corners], or an empty list when the court is not
-/// complete.
-List<Offset> _netEndpoints(List<Offset> corners) {
-  if (corners.length != 4) {
-    return const <Offset>[];
-  }
-  return <Offset>[
-    _clampPoint((corners[0] + corners[3]) / 2),
-    _clampPoint((corners[1] + corners[2]) / 2),
-  ];
 }

@@ -44,6 +44,8 @@ class VideoPreview extends StatelessWidget {
     required this.entry,
     required this.controller,
     this.showScoreBug = false,
+    this.transportAccent = true,
+    this.underlay,
     this.overlay,
   });
 
@@ -55,6 +57,17 @@ class VideoPreview extends StatelessWidget {
 
   /// Whether the score bug is drawn over the frame.
   final bool showScoreBug;
+
+  /// Whether the floating transport keeps the signal accent.
+  ///
+  /// The calibration stage turns this off so its dragged handle is the pane's
+  /// only accent (DESIGN.md §2, DS-3).
+  final bool transportAccent;
+
+  /// A layer drawn above the footage and below the floating transport, such as
+  /// the calibration scrim. Keeping it below the transport preserves the
+  /// transport's contrast.
+  final Widget? underlay;
 
   /// A stage-specific overlay drawn inside the aspect-fit box.
   ///
@@ -85,6 +98,8 @@ class VideoPreview extends StatelessWidget {
     return _StageFrame(
       controller: player,
       showScoreBug: showScoreBug,
+      transportAccent: transportAccent,
+      underlay: underlay,
       fileName: fileName,
       overlay: overlay,
     );
@@ -113,8 +128,10 @@ class _StageFrame extends StatefulWidget {
   const _StageFrame({
     required this.controller,
     required this.showScoreBug,
+    required this.transportAccent,
     required this.fileName,
-    required this.overlay,
+    this.underlay,
+    this.overlay,
   });
 
   /// The shared player, owned by the studio screen.
@@ -122,6 +139,12 @@ class _StageFrame extends StatefulWidget {
 
   /// Whether the score bug is drawn over the frame.
   final bool showScoreBug;
+
+  /// Whether the floating transport keeps the signal accent.
+  final bool transportAccent;
+
+  /// A layer below the transport.
+  final Widget? underlay;
 
   /// The recording's file name, named by the error state.
   final String fileName;
@@ -196,6 +219,8 @@ class _StageFrameState extends State<_StageFrame> {
           ? _StageOverlay(
               controller: _controller,
               showScoreBug: widget.showScoreBug,
+              transportAccent: widget.transportAccent,
+              underlay: widget.underlay,
               overlay: widget.overlay,
             )
           : null,
@@ -208,6 +233,8 @@ class _StageOverlay extends StatelessWidget {
   const _StageOverlay({
     required this.controller,
     required this.showScoreBug,
+    required this.transportAccent,
+    this.underlay,
     this.overlay,
   });
 
@@ -216,6 +243,12 @@ class _StageOverlay extends StatelessWidget {
 
   /// Whether the score bug is drawn over the frame.
   final bool showScoreBug;
+
+  /// Whether the floating transport keeps the signal accent.
+  final bool transportAccent;
+
+  /// A layer below the floating transport.
+  final Widget? underlay;
 
   /// A stage-specific overlay, such as the calibration or tracking overlay.
   final Widget? overlay;
@@ -227,6 +260,10 @@ class _StageOverlay extends StatelessWidget {
     final inset = tokens.space3 + tokens.space1 / 2;
     return Stack(
       children: <Widget>[
+        if (underlay != null)
+          Positioned.fill(
+            child: IgnorePointer(child: underlay!),
+          ),
         if (showScoreBug)
           Positioned(
             top: 0,
@@ -245,7 +282,10 @@ class _StageOverlay extends StatelessWidget {
               ),
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: tokens.space5),
-                child: _StageTransport(controller: controller),
+                child: _StageTransport(
+                  controller: controller,
+                  accent: transportAccent,
+                ),
               ),
             ),
           ),
@@ -258,10 +298,13 @@ class _StageOverlay extends StatelessWidget {
 
 /// The floating transport, wired to the shared player.
 class _StageTransport extends StatelessWidget {
-  const _StageTransport({required this.controller});
+  const _StageTransport({required this.controller, required this.accent});
 
   /// The shared player.
   final PlaybackController controller;
+
+  /// Whether the transport keeps the signal accent.
+  final bool accent;
 
   @override
   Widget build(BuildContext context) {
@@ -272,6 +315,7 @@ class _StageTransport extends StatelessWidget {
         return ScTransport(
           playing: state.isPlaying,
           enabled: enabled,
+          accent: accent,
           position: state.position,
           duration: state.duration,
           onPlayPause: () =>

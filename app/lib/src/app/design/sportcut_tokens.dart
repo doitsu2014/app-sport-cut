@@ -276,6 +276,9 @@ class SportcutTokens extends ThemeExtension<SportcutTokens> {
   /// 180ms.
   final Duration motionBase;
 
+  /// The standard easing curve: `cubic-bezier(0.2, 0, 0, 1)`.
+  static const Cubic easeStandard = Cubic(0.2, 0.0, 0.0, 1.0);
+
   /// Tokens for the light theme.
   static const SportcutTokens light = SportcutTokens(
     overlayBed: Color(0xFF050806),

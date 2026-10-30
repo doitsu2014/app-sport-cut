@@ -136,8 +136,8 @@ class CalibrationController extends Notifier<CalibrationState> {
   /// An offset rather than a position: a drag can deliver several updates
   /// between two rebuilds, and each one has to move the corner as this
   /// controller currently holds it rather than as the last frame drew it.
-  /// Geometry is left stale until [project] is called, because a drag draws the
-  /// quadrilateral from the corners alone.
+  /// Geometry is left stale until [project] is called: the overlay keeps the
+  /// last projection while the handles move, and re-projects on release.
   void nudgeCorner(int index, double dx, double dy) {
     if (index < 0 || index >= state.corners.length) {
       return;
@@ -173,6 +173,13 @@ class CalibrationController extends Notifier<CalibrationState> {
       final geometry = await ref.read(mediaEngineProvider).courtGeometry(
             toSegmentDto(_segmentInProgress()),
           );
+      if (!_isDrawable(geometry)) {
+        state = state.copyWith(
+          clearGeometry: true,
+          problem: 'The engine returned a court that cannot be drawn.',
+        );
+        return;
+      }
       state = state.copyWith(geometry: geometry, clearProblem: true);
     } on SportcutEngineException catch (error) {
       state = state.copyWith(clearGeometry: true, problem: error.message);
@@ -226,3 +233,24 @@ final calibrationControllerProvider =
     NotifierProvider<CalibrationController, CalibrationState>(
   CalibrationController.new,
 );
+
+/// Whether an engine payload can be drawn: four corners and two net points,
+/// all finite and within a hair of the normalized frame. A tiny overshoot from
+/// the projection arithmetic (for example 1.0000000000000002) is accepted and
+/// clamped at the draw boundary; a grossly out-of-frame value is rejected.
+bool _isDrawable(CourtGeometryDto geometry) {
+  bool nearFrame(CourtCornerDto point) =>
+      point.x.isFinite &&
+      point.y.isFinite &&
+      point.x >= -_frameEpsilon &&
+      point.x <= 1 + _frameEpsilon &&
+      point.y >= -_frameEpsilon &&
+      point.y <= 1 + _frameEpsilon;
+  return geometry.corners.length == 4 &&
+      geometry.net.length == 2 &&
+      geometry.corners.every(nearFrame) &&
+      geometry.net.every(nearFrame);
+}
+
+/// The tolerance for floating-point overshoot at the frame edge.
+const double _frameEpsilon = 0.001;

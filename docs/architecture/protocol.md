@@ -163,7 +163,7 @@ correlates them. Notifications may interleave with responses.
       "version": "0.1.0",
       "build": "20261029.1"
     },
-    "token": "b7f0c2a4e5d64f0a9c1e2d3b4a5c6d7e",
+    "token": "<per-launch-token>",
     "capabilities": [
       "engine.v1",
       "catalog.v1",
@@ -415,9 +415,11 @@ Notes:
   message stating the service-owned rule. A build without the
   `macos-tflite-eval` feature returns `unsupported` naming the feature; use
   `service.health` `vision` for the current availability and paths.
-- `engine.calibration.save` writes the artifact and the catalog copy in the
-  service; the client no longer writes a second copy. The result still names
-  `changed`, `invalidatedKinds`, and `geometry` in the same order.
+- `engine.calibration.save` writes the artifact and the manifest entry in the
+  service. Until ADR-0001 Phase 4 lands, the application still writes its own
+  v5 catalog copy afterwards; `library.calibration.save` is the composite that
+  will replace that step. The result names `changed`, `invalidatedKinds`, and
+  `geometry` in the same order.
 - `engine.export.start` resolves `sourcePath` from the catalog. Overlay and
   title images are paths inside
   `<state-root>/render-inputs/<uuid>/`; the service deletes the directory when
@@ -727,11 +729,12 @@ required and the remaining fields optional per the update-in-place rule.
 | `library.calibration.save` | `matchId`, `calibration` | `{ "match": Match, "engine": CalibrationSave }` |
 | `library.calibration.get` | `matchId` | `{ "calibration": CourtCalibration, "source": "catalog" }` or `null` |
 
-`library.calibration.save` writes the artifact first and the catalog second, so
-a catalog calibration always has an artifact behind it. A failure leaves the
-previous calibration in place. `engine.calibration.save` is the lower-level
-call used for parity and engine-only operations; in the service product path it
-performs the same two steps.
+`library.calibration.save` will write the artifact first and the catalog second
+when it is implemented (ADR-0001 Phase 4), so a catalog calibration always has
+an artifact behind it. A failure leaves the previous calibration in place.
+`engine.calibration.save` is the lower-level call the client uses today: it
+writes the artifact and manifest, and the application writes its own v5 catalog
+row afterwards. The library composite is declared but not yet served.
 
 ### 8.4 Legacy adoption
 
