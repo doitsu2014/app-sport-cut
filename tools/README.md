@@ -10,8 +10,8 @@ otherwise.
 | `verify-engine.sh` | The single engine verification command: layering check, format check, lint, and test across the Rust workspace. | Rust toolchain, media toolchain, `jq` |
 | `check-layering.sh` | Enforces the Clean Architecture dependency rule, deriving each crate's layer from its directory. | `cargo`, `jq` |
 | `generate-layering-diagram.sh` | Regenerates `docs/architecture/layering-diagram.html` from `cargo metadata`. | `cargo`, `python3` |
-| `generate-c4-diagrams.sh` | Renders `docs/architecture/c4/model/workspace.json` to the committed SVGs under `docs/architecture/c4/generated/`. Compile-time edges come from `cargo metadata`; `--check` fails when the SVGs are stale. | `cargo`, `python3` |
-| `check-c4-model.sh` | Cross-checks the C4 model against the repository: every workspace crate mapped once, every path and feature folder present, every view diagram committed, every relative link resolves. | `cargo`, `python3` |
+| `generate-c4-diagrams.sh` | Exports `docs/architecture/c4/workspace.dsl` with Structurizr and renders the committed SVGs with PlantUML, both in pinned Docker images. `--check` fails when the SVGs are stale; `--pull` fetches the pinned images. | Docker (daemon running), `python3` |
+| `check-c4-model.sh` | Cross-checks the C4 workspace against the repository: every workspace crate mapped once, every crate dependency present in both directions, every path and feature folder covered, every view diagram committed, every relative link resolves. | `cargo`, `python3` |
 | `run-macos.sh` | Development run of the Flutter client on macOS with `flutter run -d macos`. The client connects to a service started separately. | Flutter SDK, Xcode, CocoaPods |
 | `capture-app-screenshots.sh` | Runs the screenshot suites and captures the app as PNGs: the headless widget-test suite by default, or `--integration` for the macOS desktop suite. Writes to `app/build/screenshots` unless `--output` names another directory; prints the absolute output path and PNG count. | Flutter SDK; macOS runtime with a GUI session for `--integration` |
 

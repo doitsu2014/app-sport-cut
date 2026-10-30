@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# Check that the C4 model still describes this repository.
+# Check that the C4 workspace still describes this repository.
 #
-# The model is hand-reviewed, so it can drift in two directions: it can name a
-# crate, file, or feature folder that no longer exists, and the code can grow a
-# crate or feature the model never learned about. Both fail this check. It also
-# verifies that the committed diagrams exist and that the pages link to files
-# that are really there.
+# The workspace DSL is hand-reviewed, so it can drift in two directions: it can
+# name a crate, file, or feature folder that no longer exists, and the code can
+# grow a crate, dependency, or feature the model never learned about. Both fail
+# this check. It also verifies that every view has a committed diagram and that
+# the pages link to files that are really there.
 #
 # Usage:
 #   tools/check-c4-model.sh
@@ -18,7 +18,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 CORE_DIR="${REPO_ROOT}/core"
-MODEL="${REPO_ROOT}/docs/architecture/c4/model/workspace.json"
+DSL="${REPO_ROOT}/docs/architecture/c4/workspace.dsl"
 C4_DIR="${REPO_ROOT}/docs/architecture/c4"
 
 if ! command -v cargo >/dev/null 2>&1; then
@@ -31,8 +31,8 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ! -f "${MODEL}" ]; then
-  echo "check-c4-model: no model at ${MODEL}" >&2
+if [ ! -f "${DSL}" ]; then
+  echo "check-c4-model: no workspace DSL at ${DSL}" >&2
   exit 1
 fi
 
@@ -40,18 +40,18 @@ METADATA=$(mktemp)
 trap 'rm -f "${METADATA}"' EXIT
 (cd "${CORE_DIR}" && cargo metadata --no-deps --format-version 1) >"${METADATA}"
 
-python3 - "${REPO_ROOT}" "${MODEL}" "${METADATA}" "${C4_DIR}" <<'PY'
-"""Cross-check the C4 model against the repository."""
+python3 - "${REPO_ROOT}" "${DSL}" "${METADATA}" "${C4_DIR}" <<'PY'
+"""Cross-check the C4 workspace against the repository."""
 
 import json
 import os
 import re
 import sys
 
-repo_root, model_path, metadata_path, c4_dir = sys.argv[1:5]
+repo_root, dsl_path, metadata_path, c4_dir = sys.argv[1:5]
 
-with open(model_path, encoding="utf-8") as handle:
-    model = json.load(handle)
+with open(dsl_path, encoding="utf-8") as handle:
+    text = handle.read()
 with open(metadata_path, encoding="utf-8") as handle:
     metadata = json.load(handle)
 
@@ -62,93 +62,166 @@ def fail(message):
     problems.append(message)
 
 
-TYPES = {"person", "system", "container", "dataStore", "component", "external", "note"}
-elements = model.get("elements", [])
-views = model.get("views", [])
-ids = {}
-for element in elements:
-    element_id = element.get("id")
-    if not element_id:
-        fail("an element has no id")
-        continue
-    if element_id in ids:
-        fail(f"duplicate element id '{element_id}'")
-    ids[element_id] = element
-    if element.get("type") not in TYPES:
-        fail(f"element '{element_id}' has unknown type '{element.get('type')}'")
-    if not element.get("name") or not element.get("description"):
-        fail(f"element '{element_id}' needs a name and a description")
-    if element.get("type") != "note" and not element.get("technology"):
-        fail(f"element '{element_id}' needs a technology")
+# Only the declarations that bind an identifier are elements. Views use the
+# same `container`/`component` keywords but never assign, so the `=` keeps the
+# two apart.
+element_pattern = re.compile(
+    r'^\s*([A-Za-z_]\w*)\s*=\s*(person|softwareSystem|container|component)\s+(.*)$'
+)
+relationship_pattern = re.compile(
+    r'^\s*([A-Za-z_]\w*)\s*->\s*([A-Za-z_]\w*)\s+"([^"]*)"'
+)
+view_pattern = re.compile(
+    r'^\s*(?:systemContext|container|component)\s+[A-Za-z_]\w*\s+"([^"]+)"',
+    re.MULTILINE,
+)
+property_pattern = re.compile(r'^\s*"([^"]+)"\s+"([^"]+)"\s*$')
 
-group_ids = {group["id"] for view in views for group in view.get("groups", [])}
-for relationship in model.get("relationships", []):
-    for end in ("from", "to"):
-        value = relationship.get(end, "")
-        if value.startswith("group:"):
-            if value.split(":", 1)[1] not in group_ids:
-                fail(f"relationship endpoint '{value}' names no group")
-        elif value not in ids:
-            fail(f"relationship endpoint '{value}' names no element")
-    if not relationship.get("description"):
-        fail(f"relationship {relationship.get('from')} -> {relationship.get('to')} has no description")
+elements = {}
+properties = {}
+current = None
+in_properties = False
+
+for raw in text.splitlines():
+    line = raw.split("#", 1)[0].rstrip()
+    if not line.strip():
+        continue
+    if in_properties:
+        match = property_pattern.match(line)
+        if match:
+            properties[current][match.group(1)] = match.group(2)
+            continue
+        in_properties = False
+    match = element_pattern.match(line)
+    if match:
+        identifier, kind, rest = match.group(1), match.group(2), match.group(3)
+        strings = re.findall(r'"([^"]*)"', rest)
+        if identifier in elements:
+            fail(f"duplicate element id '{identifier}'")
+        elements[identifier] = {
+            "kind": kind,
+            "name": strings[0] if strings else "",
+            "description": strings[1] if len(strings) > 1 else "",
+            "strings": strings,
+        }
+        properties[identifier] = {}
+        current = identifier
+        if "properties" in line:
+            in_properties = True
+        continue
+    if line.strip() == "properties {":
+        in_properties = True
+
+for identifier, element in elements.items():
+    if not element["name"] or not element["description"]:
+        fail(f"element '{identifier}' needs a name and a description")
+    if element["kind"] in ("container", "component") and len(element["strings"]) < 3:
+        fail(f"{element['kind']} '{identifier}' needs a technology")
+
+relationships = []
+for raw in text.splitlines():
+    line = raw.split("#", 1)[0]
+    match = relationship_pattern.match(line)
+    if not match:
+        continue
+    source, target = match.group(1), match.group(2)
+    if source not in elements:
+        fail(f"relationship endpoint '{source}' names no element")
+    if target not in elements:
+        fail(f"relationship endpoint '{target}' names no element")
+    relationships.append((source, target))
+
+views = view_pattern.findall(text)
+if not views:
+    fail("the workspace declares no views")
 
 crates = {package["name"] for package in metadata["packages"]}
-mapped = {}
-for element in elements:
-    crate = element.get("crate")
-    if crate is None:
+crate_to_element = {}
+for identifier, values in properties.items():
+    crate = values.get("crate")
+    if not crate:
         continue
     if crate not in crates:
-        fail(f"element '{element['id']}' names missing crate '{crate}'")
-    if crate in mapped:
-        fail(f"crate '{crate}' is mapped twice ('{mapped[crate]}' and '{element['id']}')")
-    mapped[crate] = element["id"]
-for crate in sorted(crates - set(mapped)):
-    fail(f"workspace crate '{crate}' is not in the model")
+        fail(f"element '{identifier}' names missing crate '{crate}'")
+    if crate in crate_to_element:
+        fail(f"crate '{crate}' is mapped twice ('{crate_to_element[crate]}' and '{identifier}')")
+    crate_to_element[crate] = identifier
+for crate in sorted(crates - set(crate_to_element)):
+    fail(f"workspace crate '{crate}' is not in the C4 workspace")
 
-for element in elements:
-    path = element.get("path")
+for identifier, values in properties.items():
+    path = values.get("path")
     if path and not os.path.exists(os.path.join(repo_root, path)):
-        fail(f"element '{element['id']}' names missing path '{path}'")
+        fail(f"element '{identifier}' names missing path '{path}'")
 
 features_dir = os.path.join(repo_root, "app/lib/src/features")
 if os.path.isdir(features_dir):
     covered = {
-        element["path"].rstrip("/")
-        for element in elements
-        if element.get("path") and "app/lib/src/features/" in element["path"]
+        values["path"].rstrip("/")
+        for values in properties.values()
+        if values.get("path") and "app/lib/src/features/" in values["path"]
     }
     for name in sorted(os.listdir(features_dir)):
-        directory = os.path.join(features_dir, name)
-        if not os.path.isdir(directory):
+        if not os.path.isdir(os.path.join(features_dir, name)):
             continue
         relative = "app/lib/src/features/" + name
         if relative not in covered:
-            fail(f"feature folder '{relative}' is not in the model")
+            fail(f"feature folder '{relative}' is not in the C4 workspace")
 
-in_views = set()
+generated = sorted(
+    name[:-4]
+    for name in os.listdir(os.path.join(c4_dir, "generated"))
+    if name.endswith(".svg")
+) if os.path.isdir(os.path.join(c4_dir, "generated")) else []
 for view in views:
-    view_id = view.get("id")
-    if not view_id:
-        fail("a view has no id")
-        continue
-    diagram = os.path.join(c4_dir, "generated", view_id + ".svg")
-    if not os.path.isfile(diagram):
-        fail(f"view '{view_id}' has no generated diagram (run tools/generate-c4-diagrams.sh)")
-    for item in view.get("items", []):
-        item_id = item.get("id")
-        if item_id not in ids:
-            fail(f"view '{view_id}' places unknown element '{item_id}'")
-        in_views.add(item_id)
-    for group in view.get("groups", []):
-        for key in ("x", "y", "w", "h"):
-            if key not in group:
-                fail(f"view '{view_id}' group '{group.get('id')}' misses '{key}'")
+    if view not in generated:
+        fail(f"view '{view}' has no generated diagram (run tools/generate-c4-diagrams.sh)")
+for diagram in generated:
+    if diagram not in views:
+        fail(f"generated diagram '{diagram}.svg' matches no view")
 
-for element in elements:
-    if element.get("crate") and element["id"] not in in_views:
-        fail(f"crate element '{element['id']}' is in no view")
+# The service component view models the path dependencies among the crates,
+# except the two documented exclusions: edges to sportcut-common (every crate
+# may use it) and everything from the developer-only CLI.
+hidden_crates = {"sportcut-common"}
+excluded_elements = {
+    identifier for identifier, values in properties.items() if values.get("excluded") == "true"
+}
+excluded_crates = {
+    properties[identifier]["crate"]
+    for identifier in excluded_elements
+    if properties[identifier].get("crate")
+}
+
+cargo_edges = set()
+for package in metadata["packages"]:
+    source = package["name"]
+    if source in hidden_crates or source in excluded_crates:
+        continue
+    for dependency in package.get("dependencies", []):
+        if dependency.get("path") is None:
+            continue
+        if (dependency.get("kind") or "normal") != "normal":
+            continue
+        target = dependency["name"]
+        if target not in crates or target in hidden_crates or target in excluded_crates:
+            continue
+        cargo_edges.add((source, target))
+
+modelled_edges = set()
+element_crates = {
+    identifier: properties[identifier]["crate"]
+    for identifier in properties
+    if properties[identifier].get("crate")
+}
+for source, target in relationships:
+    if source in element_crates and target in element_crates:
+        modelled_edges.add((element_crates[source], element_crates[target]))
+
+for source, target in sorted(cargo_edges - modelled_edges):
+    fail(f"compile-time dependency {source} -> {target} is missing from the C4 workspace")
+for source, target in sorted(modelled_edges - cargo_edges):
+    fail(f"C4 workspace declares {source} -> {target}, which is not a dependency")
 
 link_pattern = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 for name in sorted(os.listdir(c4_dir)):
@@ -165,13 +238,13 @@ for name in sorted(os.listdir(c4_dir)):
                     fail(f"{name}:{line_number} links to missing '{target}'")
 
 if problems:
-    print(f"check-c4-model: {len(problems)} problem(s) in the C4 model:", file=sys.stderr)
+    print(f"check-c4-model: {len(problems)} problem(s) in the C4 workspace:", file=sys.stderr)
     for problem in problems:
         print("  - " + problem, file=sys.stderr)
     sys.exit(1)
 
 print(
     f"check-c4-model: OK ({len(elements)} elements, {len(views)} views, "
-    f"{len(crates)} crates)"
+    f"{len(crates)} crates, {len(modelled_edges)} compile-time edges)"
 )
 PY
