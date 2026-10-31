@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
 import '../../../bridge/sportcut_engine.dart';
 
 /// What the library needs from the engine.
@@ -6,6 +10,12 @@ import '../../../bridge/sportcut_engine.dart';
 /// [SportcutEngine] directly, so widget and repository tests can run without
 /// loading the native library.
 abstract interface class MediaEngine {
+  /// The service state root, or null when the engine does not own one.
+  ///
+  /// The import path uses it to stage a picked recording in the service inbox
+  /// before probing; the service refuses to read arbitrary user paths.
+  String? get stateRoot;
+
   /// Read metadata from a recording.
   Future<MediaMetadataDto> probe(String path);
 
@@ -62,6 +72,9 @@ class EngineMediaEngine implements MediaEngine {
   final SportcutEngine _engine;
 
   @override
+  String? get stateRoot => _engine.serviceStateRoot;
+
+  @override
   Future<MediaMetadataDto> probe(String path) => _engine.probe(path);
 
   @override
@@ -70,13 +83,15 @@ class EngineMediaEngine implements MediaEngine {
     required String originalPath,
     required String matchDir,
     required double samplingRate,
-  }) =>
-      _engine.startImport(
-        matchId: matchId,
-        originalPath: originalPath,
-        matchDir: matchDir,
-        samplingRate: samplingRate,
-      );
+  }) async {
+    final original = await _stageOriginal(originalPath, matchId);
+    return _engine.startImport(
+      matchId: matchId,
+      originalPath: original,
+      matchDir: matchDir,
+      samplingRate: samplingRate,
+    );
+  }
 
   @override
   Future<ArtifactManifestDto> manifest(String matchDir) =>
@@ -113,4 +128,29 @@ class EngineMediaEngine implements MediaEngine {
   @override
   Future<JobHandleDto> startExport(ExportRequestDto request) =>
       _engine.startExport(request);
+
+  /// Give the service a readable copy of [originalPath], when it has none.
+  ///
+  /// `engine.import.start` accepts a recording only under the service's
+  /// `recordings/` or `inbox/` roots. The development client owns the playback
+  /// copy (ADR-0001 Phase 3), so a copy is placed in
+  /// `<state-root>/recordings/<matchId>/` and kept: the manifest records it as
+  /// the original, and regeneration reads it later. The file the user picked is
+  /// never modified, and `deleteMatch(deleteRecording: true)` removes this copy.
+  Future<String> _stageOriginal(String originalPath, String matchId) async {
+    final root = stateRoot;
+    if (root == null ||
+        p.isWithin(p.join(root, 'inbox'), originalPath) ||
+        p.isWithin(p.join(root, 'recordings'), originalPath)) {
+      return originalPath;
+    }
+    final directory = Directory(p.join(root, 'recordings', matchId));
+    await directory.create(recursive: true);
+    final staged = p.join(directory.path, p.basename(originalPath));
+    if (await File(staged).exists()) {
+      return staged;
+    }
+    await File(originalPath).copy(staged);
+    return staged;
+  }
 }

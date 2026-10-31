@@ -34,6 +34,7 @@ target
 # Build output
 app/build/
 **/build/
+dist/
 **/.flutter-plugins
 **/.flutter-plugins-dependencies
 **/.flutter-devtools/

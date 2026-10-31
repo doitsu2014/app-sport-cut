@@ -14,10 +14,14 @@ import 'package:sportcut/src/features/library/presentation/playback_controller.d
 /// Engine double returning canned metadata, or throwing a chosen error.
 class FakeMediaEngine implements MediaEngine {
   /// Build the double.
-  FakeMediaEngine({this.failure, this.durationSeconds = 90.5});
+  FakeMediaEngine({this.failure, this.durationSeconds = 90.5, this.stateRoot});
 
   /// Error thrown by every call, when set.
   Object? failure;
+
+  /// Service state root the fake advertises, or null for no inbox handoff.
+  @override
+  String? stateRoot;
 
   /// Duration reported by [probe].
   final double durationSeconds;

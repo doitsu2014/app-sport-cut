@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../../../bridge/sportcut_engine.dart';
 import '../../calibration/data/calibration_bridge.dart';
 import '../../calibration/domain/court_calibration.dart';
@@ -111,46 +113,53 @@ class MatchRepository implements MatchLibrary {
     void Function(double fraction)? onProgress,
   }) async {
     await _ensureReadable(video.path);
-    final metadata = await _probe(video.path);
-
-    final id = _idGenerator();
-    final resolvedWorkspaceId = await _ensureWorkspaceId(workspaceId);
-    _throwIfCancelled(cancelToken);
-    final stored = await _recordings.takeCustody(
-      matchId: id,
-      video: video,
-      cancelToken: cancelToken,
-      expectedBytes: metadata.sizeBytes,
-      onProgress: onProgress,
-    );
-
-    final match = MatchRecord(
-      id: id,
-      title: _titleFor(title, video),
-      videoPath: stored.path,
-      durationSeconds: metadata.durationSeconds,
-      createdAt: _clock(),
-      matchDir: _paths.matchDir(id),
-      workspaceId: resolvedWorkspaceId,
-      videoWidth: metadata.width,
-      videoHeight: metadata.height,
-      frameRate: metadata.frameRate,
-      hasAudio: metadata.hasAudio,
-      originalPath: video.path,
-      sourceBytes: stored.bytes,
-    );
-
+    final staged = await _stageForProbe(video.path);
     try {
-      await _catalog.insertMatch(match);
-    } on Exception catch (error) {
-      await _recordings.remove(id);
-      throw MatchImportException(
-        'The match could not be saved to the library: $error',
-        kind: MatchImportKind.catalog,
-        cause: error,
+      final metadata = await _probe(staged ?? video.path);
+
+      final id = _idGenerator();
+      final resolvedWorkspaceId = await _ensureWorkspaceId(workspaceId);
+      _throwIfCancelled(cancelToken);
+      final stored = await _recordings.takeCustody(
+        matchId: id,
+        video: staged == null
+            ? video
+            : PickedVideo(path: staged, displayName: video.displayName),
+        cancelToken: cancelToken,
+        expectedBytes: metadata.sizeBytes,
+        onProgress: onProgress,
       );
+
+      final match = MatchRecord(
+        id: id,
+        title: _titleFor(title, video),
+        videoPath: stored.path,
+        durationSeconds: metadata.durationSeconds,
+        createdAt: _clock(),
+        matchDir: _paths.matchDir(id),
+        workspaceId: resolvedWorkspaceId,
+        videoWidth: metadata.width,
+        videoHeight: metadata.height,
+        frameRate: metadata.frameRate,
+        hasAudio: metadata.hasAudio,
+        originalPath: video.path,
+        sourceBytes: stored.bytes,
+      );
+
+      try {
+        await _catalog.insertMatch(match);
+      } on Exception catch (error) {
+        await _recordings.remove(id);
+        throw MatchImportException(
+          'The match could not be saved to the library: $error',
+          kind: MatchImportKind.catalog,
+          cause: error,
+        );
+      }
+      return match;
+    } finally {
+      await _discardStaged(staged);
     }
-    return match;
   }
 
   /// Whether this match's stored recording can still be read.
@@ -331,6 +340,19 @@ class MatchRepository implements MatchLibrary {
 
     if (deleteRecording) {
       await _recordings.remove(match.id);
+      final stateRoot = _engine.stateRoot;
+      if (stateRoot != null) {
+        final serviceCopy = Directory(
+          p.join(stateRoot, 'recordings', match.id),
+        );
+        if (serviceCopy.existsSync()) {
+          try {
+            await serviceCopy.delete(recursive: true);
+          } on FileSystemException {
+            // Best effort: the service copy is a development handoff.
+          }
+        }
+      }
     }
 
     if (!deleteArtifacts) {
@@ -387,6 +409,44 @@ class MatchRepository implements MatchLibrary {
         kind: MatchImportKind.unsupported,
         cause: error,
       );
+    }
+  }
+
+  /// Copy [sourcePath] into the service inbox so `engine.probe` may read it.
+  ///
+  /// The service only accepts recordings under its own `recordings/` or
+  /// `inbox/` roots. The development client still owns custody (ADR-0001
+  /// Phase 3), so it stages one copy here, probes it, takes the app-owned copy,
+  /// and deletes the staged file. The file the user picked is never modified.
+  ///
+  /// Returns null when the engine does not advertise a state root (tests, or an
+  /// engine that does not enforce the handoff).
+  Future<String?> _stageForProbe(String sourcePath) async {
+    final stateRoot = _engine.stateRoot;
+    if (stateRoot == null) {
+      return null;
+    }
+    final inbox = Directory(p.join(stateRoot, 'inbox'));
+    await inbox.create(recursive: true);
+    final extension = p.extension(sourcePath);
+    final name = '${_idGenerator()}${extension.isEmpty ? '.mp4' : extension}';
+    final partial = File(p.join(inbox.path, '$name.part'));
+    final ready = File(p.join(inbox.path, '$name.ready'));
+    await File(sourcePath).copy(partial.path);
+    await partial.rename(ready.path);
+    return ready.path;
+  }
+
+  /// Remove a staged inbox copy; the service also sweeps orphans, so a failed
+  /// cleanup is not fatal.
+  Future<void> _discardStaged(String? path) async {
+    if (path == null) {
+      return;
+    }
+    try {
+      await File(path).delete();
+    } on FileSystemException {
+      // Best effort.
     }
   }
 

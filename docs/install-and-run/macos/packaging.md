@@ -1,94 +1,204 @@
-# macOS — packaging a signed app
+# macOS — production packaging and install (DMG)
 
-Turning a checkout into a distributable `sportcut.app`: embedding the engine
-library, the inference assets, and — for the target architecture — the
-background service helper.
+This is the deployment path for installing Sportcut on a Mac: build a release
+bundle with the background service, model, and TFLite runtime embedded, sign it,
+and write a DMG.
 
-Read [background-service.md §9](../../architecture/background-service.md#9-sandbox-packaging-signing-and-notarization)
-first. This page is the command sequence; that section is the reason each piece
-is where it is.
+It produces a **personal build**, not a distributable release. The limitations
+are listed at the end; the architecture behind the helper is in
+[background-service.md §9](../../architecture/background-service.md#9-sandbox-packaging-signing-and-notarization).
 
-## Before you package
-
-```bash
-tools/preflight.sh --profile macos --strict-license
-```
-
-`--strict-license` fails on a GPL ffmpeg build. GPL FFmpeg is not shippable, and
-a package built against one cannot be released. An LGPL build is required.
-
-## Step 1 — build the pieces
+## 1. Before you package
 
 ```bash
-tools/build-service.sh            # core/target/release/sportcut-service
-tools/fetch-inference-assets.sh   # TFLite runtime + person model, SHA-256 verified
+tools/preflight.sh --profile macos
 ```
 
-`fetch-inference-assets.sh` runs at build time only and places assets in
-`third_party/inference/` (override with `SPORTCUT_INFERENCE_DIR`). Nothing in
-the running app downloads anything.
+Required:
 
-## Step 2 — build the app
+- Xcode (a full installation, not Command Line Tools).
+- Rust 1.80+ with `cargo`.
+- Flutter with Dart 3.
+- `ffmpeg` and `ffprobe` installed on the Mac. They are **runtime**
+  requirements: the packaged app does not bundle them.
+- Inference assets in `third_party/inference/`
+  (`libtensorflowlite_c.dylib`, `model.tflite`). Fetch them with
+  `tools/fetch-inference-assets.sh`; without them the build still works but
+  player tracking is unavailable.
+
+If Flutter is not on `PATH`, set `SPORTCUT_FLUTTER_BIN` to the directory that
+contains the `flutter` executable.
+
+## 2. Build the DMG
 
 ```bash
-cd app
-flutter build macos --release
+tools/package-macos.sh
+# → dist/Sportcut.dmg
 ```
 
-The bundle is `app/build/macos/Build/Products/Release/sportcut.app`.
+The script runs these steps:
 
-## Step 3 — embed
+1. `tools/build-service.sh` — release `sportcut-service`, with
+   `macos-tflite-eval` enabled by default on macOS.
+2. `flutter build macos --release` — the client bundle.
+3. `tools/embed-service.sh` — the helper at
+   `Contents/Helpers/SportcutService`.
+4. `tools/embed-inference-assets.sh` — the runtime at
+   `Contents/Frameworks/libtensorflowlite_c.dylib`, the model at
+   `Contents/Resources/model.tflite`.
+5. Codesign, then `hdiutil` to write `dist/Sportcut.dmg`.
 
-Run these against the built bundle, in this order:
+`dist/` is build output and is git-ignored.
+
+### Signing
+
+By default the build is **ad-hoc signed**:
 
 ```bash
-tools/embed-inference-assets.sh    app/build/macos/Build/Products/Release/sportcut.app
-tools/embed-service.sh             app/build/macos/Build/Products/Release/sportcut.app
+tools/package-macos.sh
 ```
 
-| Script | Puts | Where |
-| --- | --- | --- |
-| `embed-inference-assets.sh` | `libtensorflowlite_c.dylib` | `Contents/Frameworks` |
-| | `model.tflite` | `Contents/Resources` |
-| `embed-service.sh` | `sportcut-service` | `Contents/Helpers/SportcutService` |
+The app carries `app/macos/Runner/Release.entitlements` (file-picker access; the
+sandbox is off for this personal build), the helper and inference dylib are
+signed, then the outer app is signed. Ad-hoc signing deliberately omits the
+hardened runtime so the helper can load the ad-hoc dylib.
 
-The inference dylib goes in `Contents/Frameworks` rather than `Contents/MacOS`
-so that dynamic loading by the service stays signing-safe. The service goes in
-`Contents/Helpers` because it is a separately signed executable, not a library.
-
-**No engine library is embedded.** The app does not link Rust; it connects to
-the helper over the service protocol. A `libsportcut_api.dylib` in
-`Contents/Frameworks` is a defect, and `tools/check-no-rust-in-app.sh` fails on
-one.
-
-## Step 4 — sign
-
-`embed-service.sh` signs the helper when a signing identity is available:
+With a Developer ID identity, all three are signed with a real identity:
 
 ```bash
 CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-  tools/embed-service.sh app/build/macos/Build/Products/Release/sportcut.app
+  tools/package-macos.sh
 ```
 
-Without `CODESIGN_IDENTITY` the script copies the helper, prints the exact
-`codesign` command, and exits 0 — so packaging can proceed in CI without a
-identity, and the signature step is explicit rather than silently skipped.
+That is a prerequisite for notarisation, but notarisation is not implemented in
+this build.
 
-Sign the helper before the outer app is signed and notarized; a nested executable
-signed after its container invalidates the container's seal.
+### If the release build fails on Xcode modules
 
-## Checklist
+A stale module cache can produce errors such as:
 
-- [ ] `preflight --strict-license` passes; ffmpeg is LGPL
-- [ ] `tools/verify-engine.sh` passes
-- [ ] the service and the inference assets are built
-- [ ] both embed steps ran against the release bundle
-- [ ] the bundle contains no Rust library
-- [ ] the helper is signed, then the app is signed, then notarized
-- [ ] the app launches on a clean Mac with no developer tools installed
-- [ ] no Rust archive, `dylib`, or generated binding is copied into the Flutter
-      framework without being accounted for in the signing plan
+```
+Could not build module 'Darwin'
+cannot open .../MacOSX27.0.sdk/usr/include/mach/exception.h
+```
 
-The distribution matrix — Developer ID versus Mac App Store, and which packaging
-each uses — is in
+The SDK symlink may have moved (for example 27.0 → 27.2) while the cache still
+names the old path. Clear the shared caches and rebuild:
+
+```bash
+rm -rf ~/Library/Developer/Xcode/DerivedData/{ModuleCache.noindex,CompilationCache.noindex,Runner-*}
+cd app && flutter clean && flutter build macos --release
+```
+
+The debug build is unaffected because it can reuse already-compiled pods.
+
+## 3. Install
+
+1. Open `dist/Sportcut.dmg`.
+2. Drag `sportcut.app` to **Applications**.
+3. First launch: right-click the app → **Open**. The build is ad-hoc signed, so
+   Gatekeeper will not accept a double-click the first time.
+
+## 4. What the installed app does
+
+On launch, if neither `SPORTCUT_ENDPOINT` nor `SPORTCUT_STATE_ROOT` is set, the
+app starts the embedded helper itself
+(`app/lib/src/bridge/service_supervisor.dart`):
+
+```
+Contents/Helpers/SportcutService
+  --state-root  ~/Library/Application Support/com.sportcut.sportcut/state
+  --endpoint    …/state/run/s.sock
+  --token-file  …/state/run/token
+  --ffmpeg      /opt/homebrew/bin/ffmpeg      (or /usr/local/bin, then PATH)
+  --ffprobe     /opt/homebrew/bin/ffprobe
+  --tflite-library Contents/Frameworks/libtensorflowlite_c.dylib
+  --person-model   Contents/Resources/model.tflite
+```
+
+A running helper is reused on the next launch; a normal quit asks it to stop.
+The helper also has a hard 20-second start deadline and reports failure with the
+log path.
+
+### Data layout
+
+| Path | Contents |
+| --- | --- |
+| `~/Library/Application Support/com.sportcut.sportcut/state/matches/<id>/` | manifest, checkpoints, proxy, audio, frames, calibration, tracks, export |
+| `…/state/recordings/<id>/` | the service-readable copy of the recording |
+| `…/state/inbox/` | hand-off staging for probe and import |
+| `…/state/render-inputs/` | export overlay/title inputs |
+| `…/state/logs/service.log` | helper log |
+| `…/state/run/{s.sock,token}` | the Unix socket and per-launch token |
+| `~/Library/Application Support/com.sportcut.sportcut/sportcut.db` | the catalog |
+
+The state root is local to the app and is never inside a synced Documents
+folder, so macOS does not ask for OneDrive/Documents access.
+
+### Release protocol behaviour
+
+The release client sends `matchId` only. A release service rejects a
+client-supplied `matchDir`; it resolves `<state-root>/matches/<id>` itself. The
+client's match paths are aligned to that layout, and its recordings root is
+`<state-root>/recordings`, which the service may read directly.
+
+## 5. Verify the install
+
+- `flutter analyze` is clean and `tools/verify-engine.sh` passes on the source
+  you packaged.
+- The app launches and shows the library without a service error banner.
+- `pgrep -fl 'Contents/Helpers/SportcutService'` shows the helper with the state
+  root and ffmpeg arguments above.
+- `~/Library/Application Support/com.sportcut.sportcut/state/run/token` exists.
+- Import a short `.mov` or `.mp4`, then run **Prepare analysis** and confirm
+  `proxy/`, `audio/`, and `frames/` appear under the match directory.
+- `service.health` (through the socket or the app’s status surface) reports
+  `status: ok` and `toolchain.available: true`.
+
+For a protocol-level check without the UI, ask the running service for
+`service.health` and `engine.probe` over `state/run/s.sock` with the token; the
+framing is the length-prefixed JSON-RPC in
+[protocol.md](../../architecture/protocol.md).
+
+## 6. Upgrade, rollback, uninstall
+
+**Upgrade.** Quit the app, replace it in Applications with the new build, and
+relaunch. Matches and artifacts remain under Application Support.
+
+**Rollback.** Keep the previous `sportcut.app`; replace the new one. The catalog
+schema has not changed in this build, so older and newer builds read the same
+data. No migration is performed.
+
+**Uninstall.** Quit the app and move it to the Trash. Remove data only if you
+mean to:
+
+```bash
+rm -rf ~/Library/Application\ Support/com.sportcut.sportcut
+```
+
+That removes the catalog, match artifacts, service recordings, and logs.
+
+## 7. Limits of this build
+
+This is a **personal, local build**:
+
+- Ad-hoc signed unless `CODESIGN_IDENTITY` was set; no notarisation.
+- The app is **unsandboxed** so it can launch the helper and read the
+  service-owned recording store.
+- It uses the Mac's installed ffmpeg/ffprobe. The Homebrew ffmpeg is GPL
+  (`--enable-gpl`), fine locally but **not shippable**.
+- It does not supervise the helper as a launchd-managed process; a force-quit
+  can leave the helper running, and the next launch reuses it.
+- It has no updater, installer package, or App Store packaging.
+
+A distributable release needs ADR-0001 Phase 6 work: a supervised helper
+(launchd or XPC), a sandbox and entitlement design, a licensed media toolchain,
+Developer ID signing plus notarisation, and an update path. The distribution
+matrix is in
 [background-service.md §9.5](../../architecture/background-service.md#95-distribution-matrix).
+
+## See also
+
+- Run the pieces from a checkout: [desktop-app.md](desktop-app.md)
+- Engine and service details: [engine-and-service.md](engine-and-service.md)
+- Failures: [troubleshooting.md](troubleshooting.md)
