@@ -26,6 +26,7 @@ library;
 
 import 'dart:io' show File, Platform;
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:path/path.dart' as p;
 
 import 'models.dart';
@@ -47,6 +48,9 @@ class SportcutEngineException implements Exception {
   @override
   String toString() => 'SportcutEngineException: $message';
 }
+
+/// An endpoint and the token the service expects on it.
+typedef ServiceTarget = ({String endpoint, String token});
 
 /// The engine, as the rest of the application sees it.
 class SportcutEngine {
@@ -73,6 +77,16 @@ class SportcutEngine {
   /// Whether [initialize] has completed.
   static bool get isInitialized => _instance != null;
 
+  /// The service state root advertised at handshake, when connected.
+  ///
+  /// The development inbox handoff copies a picked recording under
+  /// `<stateRoot>/inbox` so the service may probe it; the service refuses to
+  /// read arbitrary user paths.
+  String? get serviceStateRoot {
+    final value = _connection.hello?['stateRoot'];
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
   /// Connect to the engine service.
   ///
   /// Call once during startup, after `WidgetsFlutterBinding.ensureInitialized()`.
@@ -80,20 +94,26 @@ class SportcutEngine {
   /// supply them by launching the service helper, which is ADR-0001 Phase 6.
   /// For development, start the service with `tools/run-service.sh` and export
   /// the endpoint and token it prints.
-  static Future<SportcutEngine> initialize() async {
+  static Future<SportcutEngine> initialize({ServiceTarget? target}) async {
     final existing = _instance;
     if (existing != null) {
       return existing;
     }
-    final target = await _resolveTarget();
+    final resolved = target ?? await _resolveTarget();
     final connection = await ServiceConnection.open(
-      endpoint: target.endpoint,
-      token: target.token,
+      endpoint: resolved.endpoint,
+      token: resolved.token,
     );
     final engine = SportcutEngine._(connection);
     _instance = engine;
     return engine;
   }
+
+  /// Resolve the endpoint and token from the environment.
+  ///
+  /// Exposed so the packaged supervisor can reuse the development contract
+  /// when `SPORTCUT_ENDPOINT` or `SPORTCUT_STATE_ROOT` is set.
+  static Future<ServiceTarget> resolveTarget() => _resolveTarget();
 
   /// Where and how to reach the service.
   ///
@@ -423,11 +443,12 @@ class SportcutEngine {
         return JobHandleDto.fromJson(_requireObject(result, 'engine.export.start'));
       });
 
-  /// The service resolves a match from its identifier; the directory is a
-  /// development affordance, so it is sent alongside the identifier.
+  /// The service resolves a match from its identifier. A development build may
+  /// also pass the directory as an affordance; a release service rejects it
+  /// outright, so it is omitted there.
   static Map<String, dynamic> _matchParams(String matchDir) => <String, dynamic>{
         'matchId': p.basename(matchDir),
-        'matchDir': matchDir,
+        if (!kReleaseMode) 'matchDir': matchDir,
       };
 
   static Map<String, dynamic> _requireObject(

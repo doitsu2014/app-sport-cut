@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../../app/di.dart';
@@ -33,8 +36,18 @@ final mediaEngineProvider = Provider<MediaEngine>(
 );
 
 /// The application's catalog database.
+///
+/// A packaged build keeps the catalog beside its service state under
+/// Application Support: local to the app, and never inside a folder the system
+/// may sync or ask about. Development keeps the existing sqflite location so a
+/// workstation's test library survives.
 final matchCatalogProvider = FutureProvider<MatchCatalog>((ref) async {
-  final path = '${await getDatabasesPath()}/sportcut.db';
+  final path = kReleaseMode
+      ? p.join(
+          (await getApplicationSupportDirectory()).path,
+          'sportcut.db',
+        )
+      : '${await getDatabasesPath()}/sportcut.db';
   return MatchCatalog.open(factory: databaseFactory, path: path);
 });
 
@@ -42,10 +55,14 @@ final matchCatalogProvider = FutureProvider<MatchCatalog>((ref) async {
 final matchRepositoryProvider = FutureProvider<MatchLibrary>((ref) async {
   final catalog = await ref.watch(matchCatalogProvider.future);
   final engine = ref.watch(mediaEngineProvider);
+  final stateRoot = engine.stateRoot;
+  final paths = stateRoot == null
+      ? await MatchPathsHolder.paths
+      : MatchPaths.forServiceRoot(stateRoot);
   return MatchRepository(
     catalog: catalog,
     engine: engine,
-    paths: await MatchPathsHolder.paths,
+    paths: paths,
   );
 });
 

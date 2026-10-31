@@ -24,6 +24,18 @@ class MatchPaths {
   /// App-owned recording directory for one match.
   String recordingDir(String matchId) => p.join(recordingsRoot, matchId);
 
+  /// The roots a packaged build uses inside the service state root.
+  ///
+  /// The service owns `matches/` and `recordings/`; the client writes into
+  /// those subdirectories so a release service can resolve a match from its id
+  /// without a client-supplied directory.
+  static MatchPaths forServiceRoot(String stateRoot) {
+    return MatchPaths(
+      artifactRoot: p.join(stateRoot, 'matches'),
+      recordingsRoot: p.join(stateRoot, 'recordings'),
+    );
+  }
+
   /// The default roots inside the application documents directory:
   /// `SportcutMatches` for the engine's artifacts and `SportcutRecordings` for
   /// the recordings the application owns.

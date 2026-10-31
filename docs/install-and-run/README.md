@@ -23,12 +23,17 @@ There are two different things, and they have different instructions:
 ## Current state
 
 The client reaches the engine over the service protocol. It links no Rust and
-carries no generated bindings; the FFI path is gone. The client still owns its
-local catalog and does not yet launch the service itself, so the service is
-started separately in development — see
-[macos/engine-and-service.md](macos/engine-and-service.md) and
-[macos/desktop-app.md](macos/desktop-app.md).
+carries no generated bindings; the FFI path is gone.
 
-What remains of the migration — catalog ownership, recording custody, and
-packaged supervision — is in the
-[migration plan](../architecture/migration-from-ffi.md).
+- **Installed app:** the release bundle contains the helper and inference
+  assets, and the app starts and supervises the helper itself against a state
+  root under Application Support. `tools/package-macos.sh` produces a personal
+  DMG; see [macos/packaging.md](macos/packaging.md).
+- **From a checkout:** the service is started separately with
+  `tools/run-service.sh`, and the client connects over the Unix socket; see
+  [macos/desktop-app.md](macos/desktop-app.md).
+
+What remains of the migration — catalog ownership, recording custody, and a
+supervised/sandboxed packaged helper — is in the
+[migration plan](../architecture/migration-from-ffi.md). The packaged build is
+a personal install, not a distributable release.
