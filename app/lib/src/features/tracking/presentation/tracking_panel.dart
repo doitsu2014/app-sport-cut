@@ -137,8 +137,16 @@ class TrackingPanel extends ConsumerWidget {
           ScMetaList(
             items: <(String, String)>[
               ('Detections', _countLabel(tracks.count)),
-              ('Coverage', '${(tracks.countQuality * 100).round()}%'),
+              ('Count quality', '${(tracks.countQuality * 100).round()}%'),
               ('Gaps', '${tracks.gaps.length}'),
+              if (tracks.count == ObservedPlayerCountDto.unknown) ...[
+                ('Supporting frames', '${tracks.countSupportingFrames}'),
+                (
+                  'Count evidence',
+                  '${formatDuration(tracks.countEvidence.startSeconds)} – '
+                      '${formatDuration(tracks.countEvidence.endSeconds)}',
+                ),
+              ],
               if (windowReady)
                 (
                   'Window',

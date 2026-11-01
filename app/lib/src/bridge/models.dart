@@ -1053,6 +1053,53 @@ class PlayerTrackFrameDto {
       };
 }
 
+/// Identity fragmentation reported with one track generation.
+class TrackQualityDto {
+  /// Creates a fragmentation summary.
+  const TrackQualityDto({
+    required this.rawDetections,
+    required this.onCourtDetections,
+    required this.distinctTracks,
+    required this.topFourObservations,
+    required this.topFourShare,
+  });
+
+  /// Reads a fragmentation summary from its camelCase wire shape.
+  factory TrackQualityDto.fromJson(Map<String, dynamic> json) {
+    return TrackQualityDto(
+      rawDetections: (json['rawDetections'] as num).toInt(),
+      onCourtDetections: (json['onCourtDetections'] as num).toInt(),
+      distinctTracks: (json['distinctTracks'] as num).toInt(),
+      topFourObservations: (json['topFourObservations'] as num).toInt(),
+      topFourShare: (json['topFourShare'] as num).toDouble(),
+    );
+  }
+
+  /// Person boxes at or above the minimum confidence, before court selection.
+  final int rawDetections;
+
+  /// Every on-court detection, including ones with no track identity.
+  final int onCourtDetections;
+
+  /// Distinct non-null track identities.
+  final int distinctTracks;
+
+  /// Sum of the four largest per-identity observation counts.
+  final int topFourObservations;
+
+  /// Fraction of on-court detections covered by the four largest identities.
+  final double topFourShare;
+
+  /// Writes the camelCase wire shape.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'rawDetections': rawDetections,
+        'onCourtDetections': onCourtDetections,
+        'distinctTracks': distinctTracks,
+        'topFourObservations': topFourObservations,
+        'topFourShare': topFourShare,
+      };
+}
+
 /// Read-only review evidence for one completed track generation.
 class PlayerTracksDto {
   /// Creates a player tracks result.
@@ -1066,6 +1113,8 @@ class PlayerTracksDto {
     required this.usableCoverage,
     required this.gaps,
     required this.frames,
+    this.countSupportingFrames = 0,
+    this.trackQuality,
   });
 
   /// Reads a player tracks result from its camelCase wire shape.
@@ -1075,6 +1124,8 @@ class PlayerTracksDto {
       modelId: json['modelId'] as String,
       count: ObservedPlayerCountDto.fromWire(json['count'] as String),
       countQuality: (json['countQuality'] as num).toDouble(),
+      countSupportingFrames:
+          (json['countSupportingFrames'] as num?)?.toInt() ?? 0,
       countEvidence: TrackIntervalDto.fromJson(
         json['countEvidence'] as Map<String, dynamic>,
       ),
@@ -1098,6 +1149,11 @@ class PlayerTracksDto {
                 e as Map<String, dynamic>,
               ))
           .toList(),
+      trackQuality: json['trackQuality'] == null
+          ? null
+          : TrackQualityDto.fromJson(
+              json['trackQuality'] as Map<String, dynamic>,
+            ),
     );
   }
 
@@ -1112,6 +1168,9 @@ class PlayerTracksDto {
 
   /// Fraction of sampled frames supporting the count.
   final double countQuality;
+
+  /// Number of sampled frames supporting the reported count.
+  final int countSupportingFrames;
 
   /// Interval evaluated for the count.
   final TrackIntervalDto countEvidence;
@@ -1128,18 +1187,23 @@ class PlayerTracksDto {
   /// Sampled observations within the requested playback window.
   final List<PlayerTrackFrameDto> frames;
 
+  /// Identity fragmentation for this generation, when recorded.
+  final TrackQualityDto? trackQuality;
+
   /// Writes the camelCase wire shape.
   Map<String, dynamic> toJson() => <String, dynamic>{
         'schemaVersion': schemaVersion,
         'modelId': modelId,
         'count': count.toWire(),
         'countQuality': countQuality,
+        'countSupportingFrames': countSupportingFrames,
         'countEvidence': countEvidence.toJson(),
         'coverage': coverage.map((e) => e.toJson()).toList(),
         'usableCoverage':
             usableCoverage.map((e) => e.toJson()).toList(),
         'gaps': gaps.map((e) => e.toJson()).toList(),
         'frames': frames.map((e) => e.toJson()).toList(),
+        if (trackQuality != null) 'trackQuality': trackQuality!.toJson(),
       };
 }
 

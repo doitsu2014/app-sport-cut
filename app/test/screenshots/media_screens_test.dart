@@ -214,7 +214,7 @@ void main() {
     expect(find.text('QUALITY'), findsOneWidget);
     expect(find.text('Detections'), findsOneWidget);
     expect(find.text('Two players observed'), findsOneWidget);
-    expect(find.text('Coverage'), findsOneWidget);
+    expect(find.text('Count quality'), findsOneWidget);
     expect(find.text('92%'), findsOneWidget);
     expect(find.text('Gaps'), findsOneWidget);
     expect(find.text('Window'), findsOneWidget);

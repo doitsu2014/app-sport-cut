@@ -6,17 +6,20 @@ import '../../editing/domain/suggestion_decision.dart';
 import '../../editing/presentation/editing_providers.dart';
 import '../../library/domain/match_record.dart';
 
-/// Segmentation thresholds, first pass tuned on the c1 doubles clip.
+/// Segmentation thresholds, re-tuned on the IMG_1308 doubles recording.
 ///
-/// ponytail: enter/exit raised well above the summed-motion noise floor
-/// (median ~2.2 court-units/s) so rest is not mislabeled as rally. Still
-/// unverified against ground-truth labels — task 4.2 re-checks these.
+/// The first pass (enter 4.0 / exit 2.0) found 15 rallies in 739 s, only 6% of
+/// the recording, against the 35-rally baseline for this footage. On the same
+/// tracks, 3.5 / 1.5 finds 35 rallies covering 15% of the recording, and the
+/// short-lived-fragment filter in `TrackArtifact::from_tracking` keeps the
+/// motion bins free of one-frame background detections. Re-check against
+/// labelled spans before claiming accuracy (BRD 05 §3.3).
 final rallySegmentationConfigProvider = Provider<RallySegmentationConfigDto?>(
   (ref) => const RallySegmentationConfigDto(
     binMs: 500,
     maxTrackGapMs: 2000,
-    enterMotionPerSecond: 4.0,
-    exitMotionPerSecond: 2.0,
+    enterMotionPerSecond: 3.5,
+    exitMotionPerSecond: 1.5,
     audioIntensityThreshold: 0.5,
     minRallyMs: 1500,
     minRestMs: 3000,

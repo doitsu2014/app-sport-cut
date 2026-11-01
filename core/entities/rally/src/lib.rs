@@ -451,3 +451,198 @@ fn unit(value: f64) -> bool {
 fn invalid(message: impl Into<String>) -> SportcutError {
     SportcutError::InvalidInput(format!("rally segmentation: {}", message.into()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config() -> SegmentationConfig {
+        SegmentationConfig {
+            bin_ms: 500,
+            max_track_gap_ms: 2_000,
+            enter_motion_per_second: 1.0,
+            exit_motion_per_second: 0.5,
+            audio_intensity_threshold: 0.5,
+            min_rally_ms: 1_500,
+            min_rest_ms: 3_000,
+            min_usable_coverage: 0.0,
+        }
+    }
+
+    fn input(duration_ms: i64, positions: Vec<TrackPosition>) -> SegmentationInput {
+        SegmentationInput {
+            duration_ms,
+            calibration_id: "calibration".to_string(),
+            coverage: vec![TimeSpan {
+                start_ms: 0,
+                end_ms: duration_ms,
+            }],
+            positions,
+            audio: None,
+        }
+    }
+
+    #[test]
+    fn short_rest_between_rallies_is_joined() {
+        // Move, stand still for one bin, then move again. The short rest is
+        // flanked by rallies, so the public segmenter must join them.
+        let positions = vec![
+            TrackPosition {
+                timestamp_ms: 0,
+                track_id: 1,
+                u: 0.1,
+                v: 0.5,
+            },
+            TrackPosition {
+                timestamp_ms: 500,
+                track_id: 1,
+                u: 0.9,
+                v: 0.5,
+            },
+            TrackPosition {
+                timestamp_ms: 1_000,
+                track_id: 1,
+                u: 0.9,
+                v: 0.5,
+            },
+            TrackPosition {
+                timestamp_ms: 1_500,
+                track_id: 1,
+                u: 0.9,
+                v: 0.5,
+            },
+            TrackPosition {
+                timestamp_ms: 2_000,
+                track_id: 1,
+                u: 0.1,
+                v: 0.5,
+            },
+        ];
+        let result = segment(&input(2_500, positions), config()).expect("segments");
+        assert_eq!(result.rallies.len(), 1, "the short rest is joined");
+        assert_eq!(
+            result.rallies[0].time,
+            TimeSpan {
+                start_ms: 0,
+                end_ms: 2_000
+            }
+        );
+    }
+
+    #[test]
+    fn short_rally_is_demoted_to_rest() {
+        // One moving bin (500 ms) is below the 1,500 ms rally minimum.
+        let positions = vec![
+            TrackPosition {
+                timestamp_ms: 0,
+                track_id: 1,
+                u: 0.1,
+                v: 0.5,
+            },
+            TrackPosition {
+                timestamp_ms: 500,
+                track_id: 1,
+                u: 0.9,
+                v: 0.5,
+            },
+            TrackPosition {
+                timestamp_ms: 1_000,
+                track_id: 1,
+                u: 0.9,
+                v: 0.5,
+            },
+        ];
+        let result = segment(&input(1_500, positions), config()).expect("segments");
+        assert!(result.rallies.is_empty(), "a short rally is demoted");
+        assert_eq!(
+            result
+                .timeline
+                .last()
+                .expect("a non-empty timeline")
+                .time
+                .end_ms,
+            1_500
+        );
+    }
+
+    #[test]
+    fn spans_partition_the_recording_without_gaps() {
+        let positions = vec![
+            TrackPosition {
+                timestamp_ms: 0,
+                track_id: 1,
+                u: 0.5,
+                v: 0.5,
+            },
+            TrackPosition {
+                timestamp_ms: 500,
+                track_id: 1,
+                u: 0.5,
+                v: 0.5,
+            },
+        ];
+        let result = segment(&input(1_000, positions), config()).expect("segments");
+        let mut next_start = 0;
+        for span in &result.timeline {
+            assert_eq!(span.time.start_ms, next_start, "the timeline has no gaps");
+            next_start = span.time.end_ms;
+        }
+        assert_eq!(next_start, 1_000, "the timeline covers the recording");
+    }
+
+    #[test]
+    fn insufficient_coverage_is_an_error_not_an_empty_result() {
+        let mut config = config();
+        config.min_usable_coverage = 0.9;
+        let positions = vec![TrackPosition {
+            timestamp_ms: 0,
+            track_id: 1,
+            u: 0.5,
+            v: 0.5,
+        }];
+        let error = segment(&input(1_000, positions), config).expect_err("no usable pairs");
+        assert!(
+            error.to_string().contains("insufficient usable coverage"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn grid_over_the_limit_is_rejected_before_allocation() {
+        let mut config = config();
+        config.bin_ms = 1;
+        let positions = vec![TrackPosition {
+            timestamp_ms: 0,
+            track_id: 1,
+            u: 0.5,
+            v: 0.5,
+        }];
+        let error = segment(&input(1_000_001, positions), config).expect_err("grid too large");
+        assert!(
+            error.to_string().contains("analysis grid is too large"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn segmentation_is_deterministic_for_identical_input() {
+        let positions = vec![
+            TrackPosition {
+                timestamp_ms: 0,
+                track_id: 1,
+                u: 0.5,
+                v: 0.5,
+            },
+            TrackPosition {
+                timestamp_ms: 500,
+                track_id: 1,
+                u: 0.5,
+                v: 0.5,
+            },
+        ];
+        let input = input(1_000, positions);
+        let first = segment(&input, config()).expect("segments");
+        let second = segment(&input, config()).expect("segments again");
+        assert_eq!(first, second);
+    }
+}

@@ -1232,6 +1232,12 @@ Then either wait for `job.state` or poll:
   `library.catalog.status`; the service runs migrations before readiness.
 - **Artifact schemas are independent** and keep their existing versions:
   manifest 3, checkpoint 1, calibration 1, tracks 1, rally suggestions 1.
+- **Player tracking additions (documentation-only, no version bump).**
+  `engine.tracks.window` may include optional `countSupportingFrames` and a
+  `trackQuality` summary; the tracks artifact's `review` may include an
+  optional `fragmentation` summary. All are optional, unknown fields are
+  ignored, and tracks schema stays 1. Their absence is valid for an older
+  producer, so neither `PROTOCOL_MINOR` nor the client minor changes.
 - **Bundled versioning.** In v1 the app and service ship together. The service
   version must be the app version plus a build identifier. A version mismatch
   inside one bundle is a release error.

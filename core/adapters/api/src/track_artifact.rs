@@ -1,5 +1,6 @@
 //! Adapter between vision's reviewable tracks and rally's compact input contract.
 
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 
@@ -159,6 +160,28 @@ impl TrackArtifact {
         if positions.is_empty() {
             return Err(invalid("tracks have no reliable court positions"));
         }
+        // A track seen fewer times than the count minimum is detection noise,
+        // not a player. Keeping those one-frame fragments would add their
+        // jitter to every rally motion bin and let a background box inflate a
+        // rest interval into a rally. The review evidence still carries them;
+        // only the compact segmentation input is filtered.
+        let mut observations = HashMap::<u64, usize>::new();
+        for frame in &result.frames {
+            for person in &frame.people {
+                if let Some(track_id) = person.track_id {
+                    *observations.entry(track_id).or_default() += 1;
+                }
+            }
+        }
+        let minimum = provenance.tracking.min_track_observations;
+        positions.retain(|position| {
+            observations.get(&position.track_id).copied().unwrap_or(0) >= minimum
+        });
+        if positions.is_empty() {
+            return Err(invalid(
+                "tracks have no reliable court positions after removing short-lived fragments",
+            ));
+        }
         let coverage = result
             .coverage
             .iter()
@@ -310,4 +333,170 @@ fn fnv_byte(hash: u64, byte: u8) -> u64 {
 
 fn invalid(message: &str) -> SportcutError {
     SportcutError::InvalidInput(format!("player tracks: {message}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sportcut_court::{CourtPoint, ImagePoint};
+    use sportcut_vision::{
+        BoundingBox, ClassifiedDetection, CountAssessment, Detection, FrameTracking, ObservedCount,
+        TrackedDetection, TrackingConfig, TrackingResult,
+    };
+
+    fn tracking_config() -> TrackingConfig {
+        TrackingConfig {
+            court: sportcut_vision::CourtCandidateConfig {
+                min_confidence: 0.2,
+                court_margin: 0.04,
+                net_margin: 0.05,
+            },
+            max_track_gap_ms: 1_200,
+            max_frame_gap_ms: 500,
+            max_ground_speed_per_second: 0.8,
+            ambiguity_margin: 0.03,
+            min_track_observations: 3,
+            min_count_frames: 5,
+            min_count_fraction: 0.7,
+        }
+    }
+
+    fn provenance() -> TrackProvenance {
+        TrackProvenance {
+            frames_fingerprint: "fnv1a64:1".to_string(),
+            proxy_fingerprint: "fnv1a64:2".to_string(),
+            calibration_id: "fnv1a64:3".to_string(),
+            runtime_id: "runtime".to_string(),
+            model_id: "model".to_string(),
+            model_fingerprint: "fnv1a64:4".to_string(),
+            sampling_rate: 5.0,
+            tracking: tracking_config(),
+        }
+    }
+
+    fn person(track_id: u64) -> TrackedDetection {
+        TrackedDetection {
+            candidate: ClassifiedDetection {
+                detection: Detection {
+                    bbox: BoundingBox {
+                        x: 10.0,
+                        y: 10.0,
+                        width: 20.0,
+                        height: 40.0,
+                    },
+                    confidence: 0.9,
+                },
+                ground_point: Some(ImagePoint::new(0.5, 0.5)),
+                court_point: Some(CourtPoint::new(0.5, 0.5)),
+                side: None,
+                decision: CandidateDecision::OnCourt,
+            },
+            track_id: Some(track_id),
+            association_ambiguous: false,
+        }
+    }
+
+    fn frame(timestamp_ms: i64, people: Vec<TrackedDetection>) -> FrameTracking {
+        FrameTracking {
+            timestamp_ms,
+            width: 100,
+            height: 100,
+            people,
+        }
+    }
+
+    fn result_with(frames: Vec<FrameTracking>) -> TrackingResult {
+        TrackingResult {
+            frames,
+            coverage: vec![sportcut_vision::TimeSpan {
+                start_ms: 0,
+                end_ms: 600,
+            }],
+            usable_coverage: vec![sportcut_vision::TimeSpan {
+                start_ms: 0,
+                end_ms: 600,
+            }],
+            gaps: Vec::new(),
+            count: CountAssessment {
+                count: ObservedCount::Unknown,
+                evidence: sportcut_vision::TimeSpan {
+                    start_ms: 0,
+                    end_ms: 600,
+                },
+                quality: 0.0,
+                supporting_frames: 0,
+            },
+            fragmentation: None,
+        }
+    }
+
+    #[test]
+    fn a_generation_with_only_short_tracks_is_rejected() {
+        let frames = vec![frame(0, vec![person(1)])];
+        let error = TrackArtifact::from_tracking(600, result_with(frames), provenance())
+            .expect_err("every position is filtered out");
+        assert!(
+            error
+                .to_string()
+                .contains("after removing short-lived fragments"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_review_without_fragmentation_still_deserializes() {
+        let json = r#"{"frames":[],"coverage":[],"usable_coverage":[],"gaps":[],"count":{"count":"unknown","evidence":{"start_ms":0,"end_ms":0},"quality":0.0,"supporting_frames":0}}"#;
+        let result: TrackingResult =
+            serde_json::from_str(json).expect("an old review deserializes");
+        assert!(result.fragmentation.is_none());
+    }
+
+    #[test]
+    fn short_lived_tracks_are_excluded_from_the_compact_input() {
+        let frames = vec![
+            frame(0, vec![person(1), person(2)]),
+            frame(200, vec![person(2)]),
+            frame(400, vec![person(2)]),
+        ];
+        let result = TrackingResult {
+            frames,
+            coverage: vec![sportcut_vision::TimeSpan {
+                start_ms: 0,
+                end_ms: 600,
+            }],
+            usable_coverage: vec![sportcut_vision::TimeSpan {
+                start_ms: 0,
+                end_ms: 600,
+            }],
+            gaps: Vec::new(),
+            count: CountAssessment {
+                count: ObservedCount::Unknown,
+                evidence: sportcut_vision::TimeSpan {
+                    start_ms: 0,
+                    end_ms: 600,
+                },
+                quality: 0.0,
+                supporting_frames: 0,
+            },
+            fragmentation: None,
+        };
+        let artifact =
+            TrackArtifact::from_tracking(600, result, provenance()).expect("track artifact");
+        assert!(
+            artifact
+                .input
+                .positions
+                .iter()
+                .all(|position| position.track_id == 2),
+            "the one-observation track must not enter the compact input"
+        );
+        let review = artifact.review.expect("review evidence");
+        assert!(
+            review
+                .frames
+                .iter()
+                .any(|frame| frame.people.iter().any(|person| person.track_id == Some(1))),
+            "the review evidence must retain the short-lived track"
+        );
+    }
 }
