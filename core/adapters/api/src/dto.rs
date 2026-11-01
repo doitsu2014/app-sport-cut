@@ -303,6 +303,21 @@ pub struct PlayerTrackFrameDto {
     pub people: Vec<PlayerObservationDto>,
 }
 
+/// Identity fragmentation reported with one track generation.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TrackQualityDto {
+    /// Person boxes at or above the minimum confidence, before court selection.
+    pub raw_detections: usize,
+    /// Every on-court detection, including ones with no track identity.
+    pub on_court_detections: usize,
+    /// Distinct non-null track identities.
+    pub distinct_tracks: usize,
+    /// Sum of the four largest per-identity observation counts.
+    pub top_four_observations: usize,
+    /// Fraction of on-court detections covered by the four largest identities.
+    pub top_four_share: f64,
+}
+
 /// Read-only review evidence for one completed track generation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlayerTracksDto {
@@ -314,6 +329,11 @@ pub struct PlayerTracksDto {
     pub count: ObservedPlayerCountDto,
     /// Fraction of sampled frames supporting the count.
     pub count_quality: f64,
+    /// Number of sampled frames supporting the reported count.
+    ///
+    /// Optional on the wire so an older service response still parses.
+    #[serde(default)]
+    pub count_supporting_frames: usize,
     /// Interval evaluated for the count.
     pub count_evidence: TrackIntervalDto,
     /// Intervals where calibrated frames attempted to observe the court.
@@ -324,6 +344,9 @@ pub struct PlayerTracksDto {
     pub gaps: Vec<PlayerGapDto>,
     /// Sampled observations within the requested playback window.
     pub frames: Vec<PlayerTrackFrameDto>,
+    /// Identity fragmentation for this generation, when the producer recorded it.
+    #[serde(default)]
+    pub track_quality: Option<TrackQualityDto>,
 }
 
 /// Lifecycle state of a job, mirrored for the client.

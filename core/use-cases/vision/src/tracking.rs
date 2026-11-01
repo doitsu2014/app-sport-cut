@@ -79,15 +79,21 @@ impl TrackingConfig {
                 "association ambiguity margin must be between zero and one",
             ));
         }
-        if self.min_track_observations < 2 || self.min_count_frames < 2 {
-            return Err(invalid(
-                "count observation minimums must be at least two frames",
-            ));
+        if self.min_count_frames < 2 {
+            return Err(invalid("minimum count frames must be at least two"));
+        }
+        // Acceptance floors are product-owned: a client cannot lower the
+        // observation minimum or the count agreement below these values.
+        if self.min_track_observations < 3 {
+            return Err(invalid("min_track_observations must be at least 3"));
         }
         if !self.min_count_fraction.is_finite() || !(0.0..=1.0).contains(&self.min_count_fraction) {
             return Err(invalid(
                 "count agreement fraction must be between zero and one",
             ));
+        }
+        if self.min_count_fraction < 0.60 {
+            return Err(invalid("min_count_fraction must be at least 0.6"));
         }
         Ok(())
     }
@@ -142,6 +148,26 @@ pub struct CountAssessment {
     pub supporting_frames: usize,
 }
 
+/// Generation-level identity fragmentation under the pinned RQ-01 definition.
+///
+/// The denominator is every on-court detection, including boxes that were left
+/// unassociated because the match was ambiguous. Excluding those would hide the
+/// very case FR-TRK-08 protects and would let a classifier or association change
+/// improve the ratio by shrinking the population.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct FragmentationSummary {
+    /// Person boxes at or above the minimum confidence, before court selection.
+    pub raw_detections: usize,
+    /// Every on-court detection, including ones with no track identity.
+    pub on_court_detections: usize,
+    /// Distinct non-null track identities.
+    pub distinct_tracks: usize,
+    /// Sum of the four largest per-identity observation counts.
+    pub top_four_observations: usize,
+    /// Fraction of on-court detections covered by the four largest identities.
+    pub top_four_share: f64,
+}
+
 /// Reviewable result of one track generation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TrackingResult {
@@ -155,6 +181,12 @@ pub struct TrackingResult {
     pub gaps: Vec<PlayerGap>,
     /// Sustained player-count assessment.
     pub count: CountAssessment,
+    /// Identity fragmentation for this generation.
+    ///
+    /// Optional so a track artifact written before this measurement existed
+    /// still deserializes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fragmentation: Option<FragmentationSummary>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -319,13 +351,54 @@ pub fn track_detections(
     }
     let (coverage, usable_coverage) = coverage_intervals(&result_frames, calibrations, config);
     let count = assess_count(&result_frames, duration_ms, config);
+    let fragmentation = Some(fragmentation_summary(&result_frames, config));
     Ok(TrackingResult {
         frames: result_frames,
         coverage,
         usable_coverage,
         gaps,
         count,
+        fragmentation,
     })
+}
+
+/// Summarize identity fragmentation for one generation.
+///
+/// Selecting the four largest identities sorts by count descending and then by
+/// ID ascending, so the result never depends on hash-map iteration order.
+fn fragmentation_summary(frames: &[FrameTracking], config: TrackingConfig) -> FragmentationSummary {
+    let mut raw_detections = 0_usize;
+    let mut on_court_detections = 0_usize;
+    let mut observations = HashMap::<u64, usize>::new();
+    for frame in frames {
+        for person in &frame.people {
+            if person.candidate.detection.confidence >= config.court.min_confidence {
+                raw_detections += 1;
+            }
+            if person.candidate.decision == CandidateDecision::OnCourt {
+                on_court_detections += 1;
+                if let Some(track_id) = person.track_id {
+                    *observations.entry(track_id).or_default() += 1;
+                }
+            }
+        }
+    }
+    let mut counts: Vec<(u64, usize)> = observations.into_iter().collect();
+    counts.sort_by(|left, right| right.1.cmp(&left.1).then(left.0.cmp(&right.0)));
+    let top_four_observations = counts.iter().take(4).map(|(_, count)| count).sum();
+    let distinct_tracks = counts.len();
+    let top_four_share = if on_court_detections == 0 {
+        0.0
+    } else {
+        top_four_observations as f64 / on_court_detections as f64
+    };
+    FragmentationSummary {
+        raw_detections,
+        on_court_detections,
+        distinct_tracks,
+        top_four_observations,
+        top_four_share,
+    }
 }
 
 fn validate_inputs(
@@ -371,6 +444,11 @@ fn calibration_at(
         .and_then(|index| calibrations.get(index))
 }
 
+/// Cost of joining a detection to an active track.
+///
+/// The ground point must fit inside the distance the track could have travelled
+/// in the elapsed time. The cost normalizes that distance by the allowed
+/// radius, so a track with a wider capture window is not automatically cheaper.
 fn association_cost(
     track: &ActiveTrack,
     person: &ClassifiedDetection,
@@ -536,4 +614,274 @@ fn assess_count(
 
 fn invalid(message: &str) -> SportcutError {
     SportcutError::InvalidInput(format!("player tracking: {message}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn person(
+        confidence: f32,
+        decision: CandidateDecision,
+        track_id: Option<u64>,
+    ) -> TrackedDetection {
+        TrackedDetection {
+            candidate: ClassifiedDetection {
+                detection: Detection {
+                    bbox: BoundingBox {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 10.0,
+                        height: 20.0,
+                    },
+                    confidence,
+                },
+                ground_point: None,
+                court_point: None,
+                side: None,
+                decision,
+            },
+            track_id,
+            association_ambiguous: false,
+        }
+    }
+
+    fn frame(timestamp_ms: i64, people: Vec<TrackedDetection>) -> FrameTracking {
+        FrameTracking {
+            timestamp_ms,
+            width: 100,
+            height: 100,
+            people,
+        }
+    }
+
+    fn config() -> TrackingConfig {
+        TrackingConfig {
+            court: CourtCandidateConfig {
+                min_confidence: 0.2,
+                court_margin: 0.04,
+                net_margin: 0.05,
+            },
+            max_track_gap_ms: 1_200,
+            max_frame_gap_ms: 500,
+            max_ground_speed_per_second: 0.8,
+            ambiguity_margin: 0.1,
+            min_track_observations: 3,
+            min_count_frames: 5,
+            min_count_fraction: 0.7,
+        }
+    }
+
+    #[test]
+    fn fragmentation_denominator_includes_unassociated_on_court_boxes() {
+        let frames = vec![
+            frame(
+                0,
+                vec![
+                    person(0.9, CandidateDecision::OnCourt, Some(1)),
+                    person(0.8, CandidateDecision::OnCourt, Some(1)),
+                    person(0.7, CandidateDecision::OnCourt, None),
+                    person(0.6, CandidateDecision::OffCourt, None),
+                ],
+            ),
+            frame(
+                200,
+                vec![
+                    person(0.9, CandidateDecision::OnCourt, Some(1)),
+                    person(0.9, CandidateDecision::OnCourt, Some(2)),
+                    person(0.1, CandidateDecision::LowConfidence, None),
+                ],
+            ),
+        ];
+        let summary = fragmentation_summary(&frames, config());
+        assert_eq!(summary.raw_detections, 6);
+        assert_eq!(summary.on_court_detections, 5);
+        assert_eq!(summary.distinct_tracks, 2);
+        assert_eq!(summary.top_four_observations, 4);
+        assert!((summary.top_four_share - 0.8).abs() < 1e-12);
+    }
+
+    #[test]
+    fn fragmentation_share_is_zero_without_on_court_detections() {
+        let frames = vec![frame(
+            0,
+            vec![person(0.9, CandidateDecision::OffCourt, None)],
+        )];
+        let summary = fragmentation_summary(&frames, config());
+        assert_eq!(summary.on_court_detections, 0);
+        assert_eq!(summary.top_four_share, 0.0);
+    }
+
+    #[test]
+    fn fragmentation_top_four_sums_the_four_largest_counts() {
+        let mut people = Vec::new();
+        for id in 1..=5_u64 {
+            for _ in 0..(6 - id) {
+                people.push(person(0.9, CandidateDecision::OnCourt, Some(id)));
+            }
+        }
+        let frames = vec![frame(0, people)];
+        let summary = fragmentation_summary(&frames, config());
+        assert_eq!(summary.distinct_tracks, 5);
+        assert_eq!(summary.on_court_detections, 15);
+        assert_eq!(summary.top_four_observations, 5 + 4 + 3 + 2);
+    }
+
+    fn test_calibration() -> CalibrationSegment {
+        use sportcut_court::CourtOrientation;
+
+        CalibrationSegment {
+            from_ms: 0,
+            corners: [
+                ImagePoint::new(0.1, 0.9),
+                ImagePoint::new(0.9, 0.9),
+                ImagePoint::new(0.9, 0.1),
+                ImagePoint::new(0.1, 0.1),
+            ],
+            orientation: CourtOrientation::Away,
+        }
+    }
+
+    fn test_detection(x: f32, y: f32) -> Detection {
+        Detection {
+            bbox: BoundingBox {
+                x,
+                y,
+                width: 10.0,
+                height: 20.0,
+            },
+            confidence: 0.9,
+        }
+    }
+
+    #[test]
+    fn ambiguous_association_leaves_the_track_id_unset() {
+        let frames = vec![
+            FrameDetections {
+                timestamp_ms: 0,
+                width: 100,
+                height: 100,
+                detections: vec![test_detection(35.0, 30.0), test_detection(55.0, 30.0)],
+            },
+            FrameDetections {
+                timestamp_ms: 200,
+                width: 100,
+                height: 100,
+                detections: vec![test_detection(45.0, 30.0)],
+            },
+        ];
+        let result =
+            track_detections(&frames, &[test_calibration()], 1_000, config()).expect("tracks");
+        let last = &result.frames[1].people[0];
+        assert!(
+            last.association_ambiguous,
+            "two equally plausible tracks must stay ambiguous"
+        );
+        assert_eq!(last.track_id, None, "FR-TRK-08 leaves the ID unset");
+    }
+
+    #[test]
+    fn coverage_skips_a_gap_wider_than_the_frame_limit() {
+        let frames = vec![
+            FrameDetections {
+                timestamp_ms: 0,
+                width: 100,
+                height: 100,
+                detections: vec![test_detection(35.0, 30.0), test_detection(55.0, 30.0)],
+            },
+            FrameDetections {
+                timestamp_ms: 1_000,
+                width: 100,
+                height: 100,
+                detections: vec![test_detection(35.0, 30.0), test_detection(55.0, 30.0)],
+            },
+        ];
+        let result =
+            track_detections(&frames, &[test_calibration()], 2_000, config()).expect("tracks");
+        assert!(
+            result.coverage.is_empty(),
+            "a gap wider than the frame limit is not coverage"
+        );
+    }
+
+    #[test]
+    fn track_detections_is_deterministic() {
+        let frames = vec![
+            FrameDetections {
+                timestamp_ms: 0,
+                width: 100,
+                height: 100,
+                detections: vec![test_detection(35.0, 30.0), test_detection(55.0, 30.0)],
+            },
+            FrameDetections {
+                timestamp_ms: 200,
+                width: 100,
+                height: 100,
+                detections: vec![test_detection(45.0, 30.0)],
+            },
+        ];
+        let first =
+            track_detections(&frames, &[test_calibration()], 1_000, config()).expect("tracks");
+        let second = track_detections(&frames, &[test_calibration()], 1_000, config())
+            .expect("tracks again");
+        assert_eq!(first, second);
+    }
+
+    fn sided_person(side: CourtSide, track_id: u64) -> TrackedDetection {
+        let mut item = person(0.9, CandidateDecision::OnCourt, Some(track_id));
+        item.candidate.side = Some(side);
+        item
+    }
+
+    fn four_player_frame(timestamp_ms: i64) -> FrameTracking {
+        frame(
+            timestamp_ms,
+            vec![
+                sided_person(CourtSide::First, 1),
+                sided_person(CourtSide::First, 2),
+                sided_person(CourtSide::Second, 3),
+                sided_person(CourtSide::Second, 4),
+            ],
+        )
+    }
+
+    #[test]
+    fn four_requires_supporting_frames_and_fraction() {
+        let frames: Vec<FrameTracking> =
+            (0..5).map(|index| four_player_frame(index * 200)).collect();
+        let count = assess_count(&frames, 1_000, config());
+        assert_eq!(count.count, ObservedCount::Four);
+        assert_eq!(count.supporting_frames, 5);
+        assert!((count.quality - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn four_is_unknown_when_the_support_floor_is_not_met() {
+        let mut frames: Vec<FrameTracking> =
+            (0..3).map(|index| four_player_frame(index * 200)).collect();
+        for index in 3..5 {
+            frames.push(frame(
+                index * 200,
+                vec![
+                    sided_person(CourtSide::First, 1),
+                    sided_person(CourtSide::Second, 3),
+                ],
+            ));
+        }
+        let count = assess_count(&frames, 1_000, config());
+        assert_eq!(count.count, ObservedCount::Unknown);
+        assert_eq!(count.supporting_frames, 3);
+        assert!((count.quality - 0.6).abs() < 1e-12);
+        assert!(count.evidence.end_ms > count.evidence.start_ms);
+    }
+
+    #[test]
+    fn config_rejects_floors_and_bounds_below_policy() {
+        let mut config = config();
+        config.min_track_observations = 2;
+        assert!(config.validate().is_err(), "observation floor");
+        config.min_track_observations = 3;
+        config.min_count_fraction = 0.5;
+        assert!(config.validate().is_err(), "count fraction floor");
+    }
 }

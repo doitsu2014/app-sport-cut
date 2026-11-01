@@ -26,8 +26,8 @@ pub use pipeline::analyze_sampled_frames;
 #[cfg(all(target_os = "macos", feature = "macos-tflite-eval"))]
 pub use tflite_detector::TflitePersonDetector;
 pub use tracking::{
-    track_detections, CountAssessment, FrameDetections, FrameTracking, ObservedCount, PlayerGap,
-    TimeSpan, TrackedDetection, TrackingConfig, TrackingResult,
+    track_detections, CountAssessment, FragmentationSummary, FrameDetections, FrameTracking,
+    ObservedCount, PlayerGap, TimeSpan, TrackedDetection, TrackingConfig, TrackingResult,
 };
 
 /// A sampled frame handed to an inference backend.

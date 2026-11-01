@@ -11,7 +11,9 @@ use sportcut_rally::RallySuggestions;
 use sportcut_rally::{SegmentationConfig, SpanKind};
 use sportcut_score::{RallyOutcome, ServingSide, Side};
 use sportcut_storage::{summarize_manifest, ArtifactManifest, ArtifactState};
-use sportcut_vision::{CandidateDecision, CourtCandidateConfig, ObservedCount, TrackingConfig};
+use sportcut_vision::{
+    CandidateDecision, CourtCandidateConfig, FragmentationSummary, ObservedCount, TrackingConfig,
+};
 
 use crate::dto::{
     ArtifactDto, ArtifactManifestDto, ArtifactStateDto, CalibrationSegmentDto, CourtCalibrationDto,
@@ -20,7 +22,7 @@ use crate::dto::{
     OrientationDto, PersonSelectionDto, PlayerCourtSideDto, PlayerGapDto, PlayerObservationDto,
     PlayerTrackFrameDto, PlayerTrackingConfigDto, PlayerTracksDto, RallyActivitySpanDto,
     RallyOutcomeDto, RallySegmentationConfigDto, RallySideDto, RallySuggestionDto,
-    RallySuggestionsDto, ServingSideDto, TrackIntervalDto,
+    RallySuggestionsDto, ServingSideDto, TrackIntervalDto, TrackQualityDto,
 };
 use crate::track_artifact::TrackArtifact;
 
@@ -102,6 +104,7 @@ impl PlayerTracksDto {
                 ObservedCount::Unknown => ObservedPlayerCountDto::Unknown,
             },
             count_quality: review.count.quality,
+            count_supporting_frames: review.count.supporting_frames,
             count_evidence: TrackIntervalDto {
                 start_seconds: review.count.evidence.start_ms as f64 / 1000.0,
                 end_seconds: review.count.evidence.end_ms as f64 / 1000.0,
@@ -135,6 +138,7 @@ impl PlayerTracksDto {
                 })
                 .collect(),
             frames,
+            track_quality: review.fragmentation.as_ref().map(TrackQualityDto::from),
         })
     }
 }
@@ -154,6 +158,18 @@ impl From<&PlayerTrackingConfigDto> for TrackingConfig {
             min_track_observations: config.min_track_observations as usize,
             min_count_frames: config.min_count_frames as usize,
             min_count_fraction: config.min_count_fraction,
+        }
+    }
+}
+
+impl From<&FragmentationSummary> for TrackQualityDto {
+    fn from(summary: &FragmentationSummary) -> Self {
+        Self {
+            raw_detections: summary.raw_detections,
+            on_court_detections: summary.on_court_detections,
+            distinct_tracks: summary.distinct_tracks,
+            top_four_observations: summary.top_four_observations,
+            top_four_share: summary.top_four_share,
         }
     }
 }
