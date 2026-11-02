@@ -3,13 +3,13 @@
 | Field | Value |
 | --- | --- |
 | Document ID | BRD-SPORTCUT-000 |
-| Version | 1.1 |
+| Version | 1.2 |
 | Status | Draft — for approval |
-| Date | 2026-10-30 |
+| Date | 2026-11-02 |
 | Product | Sportcut — offline macOS badminton match analyzer |
 | Owner | Product owner |
 | Contributors | Product, Design, Engineering, QA, Security/Privacy, Legal/Licensing |
-| Source baseline | Commit `62a57c3` (2026-10-30); design system v1.0. Prior verification provenance remains baseline `1541c64` |
+| Source baseline | Commit `62a57c3` (2026-10-30); design system v1.1. Prior verification provenance remains baseline `1541c64` |
 
 This document is the product-level BRD and the shared contract for the nine
 feature BRDs in this folder. It does not restate feature-level functional
@@ -166,7 +166,7 @@ not rounded up.
 
 | # | Area | Status | Evidence and remaining gap |
 | --- | --- | --- | --- |
-| 1 | Workspace and Library | Partial | The v1 in-scope behavior is implemented in `app/lib/src/features/workspace/` and `app/lib/src/features/library/data/match_catalog.dart`: workspace home, v5 catalog migration, three-pane studio, video-rail search, missing-recording state, stage label in the status bar, and next-remaining selection after delete. Remaining, all by decision, so the area is not rounded up: FR-LIB-09 rename/reorder and a cross-workspace library are excluded by §2.2 / Q-8; FR-LIB-25/30 service-owned v6 catalog and custody are deferred to ADR-0001 Phase 4; no widget tests, and stale home tests still assert the removed "No matches yet" screen (project working agreement). |
+| 1 | Workspace and Library | Partial | The v1 in-scope behavior is implemented in `app/lib/src/features/workspace/` and `app/lib/src/features/library/data/match_catalog.dart`: workspace home, v5 catalog migration, three-pane studio, video-rail search, missing-recording state, entry label in the status bar, and next-remaining selection after delete. Remaining, all by decision, so the area is not rounded up: FR-LIB-09 rename/reorder and a cross-workspace library are excluded by §2.2 / Q-8; FR-LIB-25/30 service-owned v6 catalog and custody are deferred to ADR-0001 Phase 4; no widget tests, and stale home tests still assert the removed "No matches yet" screen (project working agreement). |
 | 2 | Import and Media Preparation | Partial | `app/lib/src/features/library/presentation/import_controller.dart`; `core/use-cases/media/tests/media_pipeline.rs` (10 tests) and `offline.rs` (2); baseline `docs/verification/media-pipeline.md`. The import copy reports a byte fraction and both import surfaces show a determinate bar; the rebuild count reads the engine's `not_rebuildable_kinds` and names what another stage must produce; the analysis view uses the design components and local READY / PARTIAL / MISSING artifact badges. Remaining gaps, so the area is not rounded up: no timing evidence for large copies; recording custody and cataloging remain app-owned until ADR-0001 Phase 3–4 moves them into the service. |
 | 3 | Court Calibration | Partial | `core/entities/court/` (20 unit tests), `core/adapters/api/tests/facade.rs`, `app/lib/src/features/calibration/`, `app/lib/src/app/design/components/sc_calibration_overlay.dart`, `app/test/calibration_*_test.dart`. The overlay draws the engine's `CourtGeometryDto` outline and dashed net, orientation re-projects, a rejected court clears the drawing, handles are 24/44 px on tokens, the surface uses the fixed `#050806` stage bed (ADR-0003 D16) with a 52 % scrim, and the transport drops its accent during calibrate. Remaining gaps, so the area is not rounded up: no real-footage accuracy measurement, two screen tests are stale (`FilledButton` lookups), `docs/verification/court-calibration.md` is absent, no automated design/visual test, and the ADR-0001 Phase 3-4 service-owned catalog is deferred. |
 | 4 | Player Tracking | Partial | Implemented in `core/use-cases/vision/` and `app/lib/src/features/tracking/`, macOS-gated with feature `macos-tflite-eval`. Gaps: no vision tests, no tracked reward beyond a manual c1 run, no measured count accuracy, no client tests. |
@@ -174,7 +174,7 @@ not rounded up.
 | 6 | Score and Serving | Partial | `app/lib/src/features/score/`, `app/lib/src/features/editing/domain/score_timeline.dart`, `app/test/score_screen_test.dart`, `app/test/score_timeline_test.dart`, `app/test/editing_repository_test.dart`, baseline `docs/verification/manual-editing-and-export.md`. Gaps: the engine `sportcut-score` has no unit tests; no 2 px serving underline; score figures are 32 px rather than 48–76 px; no L/R keyboard handling; an unscored last rally still shows a server. |
 | 7 | Highlights | Partial | `core/entities/highlight/src/lib.rs`, `app/lib/src/features/highlights/`, `app/test/highlights_screen_test.dart`. Gaps: audio intensity, templates, favourites not started; "keep top 10" hard-coded; no engine unit tests. |
 | 8 | Export | Blocked | `core/use-cases/export/` (13 + 6 tests), `app/lib/src/features/export/`, baseline `docs/verification/manual-editing-and-export.md`. Blocked: dev-only GPL FFmpeg backend, no platform-native renderer, H.264/AAC patent decision open. |
-| 9 | Studio Shell, Jobs, and Settings | Partial | Shell `app/lib/src/features/workspace/presentation/workspace_studio_screen.dart`; jobs `core/use-cases/jobs/` (7 tests) and `core/adapters/api/src/jobs.rs`, baseline `docs/verification/processing-jobs.md`. Gaps: shared timeline dock, search, keyboard, focus mode, responsive collapse, labelled state chips; no studio widget test. |
+| 9 | Studio Shell, Jobs, and Settings | Partial | Shell `app/lib/src/features/workspace/presentation/workspace_studio_screen.dart`; jobs `core/use-cases/jobs/` (7 tests) and `core/adapters/api/src/jobs.rs`, baseline `docs/verification/processing-jobs.md`. Gaps: search, keyboard, focus mode, labelled state chips, and the shared review-surface per-lens behaviour; no studio widget test. |
 
 The file paths in this table describe the baseline commit. ADR-0001 moves the
 catalog and recording custody into the Rust service. The functional status of
@@ -241,7 +241,7 @@ These are product-wide. Feature BRDs refine them; they do not relax them.
 | BR-6 | One click produces one reel | Must | Export renders the selected clips to one file; success names the file, clip count, and runtime; zero clips blocks export with a plain explanation. |
 | BR-7 | Matches are organized in workspaces | Must | A user can create a workspace and import or open matches within it; existing matches migrate to a default workspace. |
 | BR-8 | Design-system fidelity | Must | Tokens are the single source of colour, type, spacing, radius, elevation, and motion; one accent signal per pane; every state is labelled before it is coloured. |
-| BR-9 | Accessibility is a release bar | Must | Body text ≥4.5:1, large text/icons/score/focus ≥3:1 in both themes; visible focus; icon-only controls named; overlay handles ≥44 px; 200% text scaling without clipping. |
+| BR-9 | Accessibility is a release bar | Must | Body text ≥4.5:1, large text/icons/score/focus ≥3:1 in both themes; visible focus; icon-only controls named; overlay handles and controls ≥44 px; timeline segment edges ≥20 px wide inside a 44 px-high track; 200% text scaling without clipping. |
 | BR-10 | Licensing gate | Must | No not-shippable dependency, model, or asset enters a release build; the dependency register is the gating source. |
 | BR-11 | Recoverable, resumable jobs | Must | Long work runs off the UI thread with stage-labelled monotonic progress, cancellation, and checkpoint resume; atomic writes; cancelled output is never shown as final. |
 | BR-12 | macOS focus in v1 | Must | One adaptive macOS application; no mobile or web client in v1. |
@@ -259,15 +259,15 @@ feature BRD may add a stricter local rule but may not weaken these.
 | DS-4 | Label before colour | Must | Every state carries a word or icon; colour reinforces but never carries meaning alone; scores carry L/R text (DESIGN.md §1, §2, §9). |
 | DS-5 | Typography and tabular numerals | Must | Archivo display, IBM Plex Sans body, IBM Plex Mono micro-labels; every score, duration, and timecode uses tabular numerals and is never animated (DESIGN.md §3, §7). |
 | DS-6 | Type floors | Must | Body ≥16 px; sentence text ≥12 px; mono micro-labels ≥10 px; 9 px only in dense chrome/overlays and never below 9 px; shorten copy rather than shrink (DESIGN.md §3, §9). |
-| DS-7 | 4 px grid, radii, three elevations, layout constants | Must | Spacing on the 4 px grid; radii 6/10/14/pill; exactly flat/ring/raised elevations; window 52 px toolbar, 264 px video rail, 320 px feature rail, 30 px status bar, minimum window 1100×720 (DESIGN.md §4, §10). |
+| DS-7 | 4 px grid, radii, three elevations, layout constants | Must | Spacing on the 4 px grid; radii 6/10/14/pill; exactly flat/ring/raised elevations; window 52 px toolbar, responsive video rail and inspector (264/320 px at ≥1200 px, 240/292 px from 1100–1199 px), 30 px status bar, minimum window 1100×720 (DESIGN.md §4, §10). |
 | DS-8 | Complete component state set | Must | Default, hover, focus, active, disabled, loading, empty, error, and success are designed, not left to defaults (DESIGN.md §6). |
 | DS-9 | Visible focus ring | Must | 2 px surface gap plus 2 px accent ring in both themes; no outline removal without an equivalent replacement (DESIGN.md §4). |
 | DS-10 | Scorekeeper voice | Must | Short, factual, verb-first; no exclamation marks or anthropomorphism; errors say what happened and the next action; numbers as `18–16`, `0:42`, `12 clips · 4:38` (DESIGN.md §8). |
 | DS-11 | Motion explains change, and can be removed | Must | 120/180 ms with `cubic-bezier(0.2,0,0,1)`; nothing loops; reduced motion collapses non-essential transitions while layout and feedback still work (DESIGN.md §7). |
 | DS-12 | Anti-patterns are prohibited | Must | No cream/beige grounds, gradients, glass, neon, count-up/confetti, colour-only scoring, second accent per pane, floating cards over the court, or invented metrics (DESIGN.md §9). |
-| DS-13 | Studio shell geometry | Must | Floating macOS window at 1440×900 reference, 14 px radius, 52 px toolbar / flexible workspace / 176 px timeline dock / 30 px status bar; no in-app theme switch or viewport selector (DESIGN.md §10). |
+| DS-13 | Studio shell geometry | Must | Floating macOS window at 1440×900 reference, 14 px radius, 52 px toolbar / 40 px stage strip / flexible workspace / 176 px timeline dock / 30 px status bar; no in-app theme switch or viewport selector (DESIGN.md §10). |
 | DS-14 | Adaptive contract | Must | Rails collapse below 980 px of available width; preview never narrower than 480 px while rails are open; no horizontal scrolling; responsive matrix of the export prototype validated (DESIGN.md §5, §10; DESIGN-HANDOFF). |
-| DS-15 | Accessibility checklist | Must | Contrast floors, visible focus, named icon controls, 44 px hit targets, readable semantics for score/scrubber/transport, `prefers-reduced-motion`, and no clipping at 200% text (USAGE.md checklist; DESIGN.md §2). |
+| DS-15 | Accessibility checklist | Must | Contrast floors, visible focus, named icon controls, 44 px hit targets for handles and controls, 20 px minimum timeline segment edge targets within a 44 px track, readable semantics for score/scrubber/transport, `prefers-reduced-motion`, and no clipping at 200% text (USAGE.md checklist; DESIGN.md §2). |
 
 ## 8. Non-functional requirements
 
@@ -297,7 +297,7 @@ feature BRD may add a stricter local rule but may not weaken these.
 - A release build environment with Flutter, Xcode, and a signing/notarization
   identity for the app and its helper is available.
 - Users accept the semi-automatic model: the engine proposes, they confirm.
-- The design system v1.0 files are the authoritative experience contract.
+- The design system v1.1 files are the authoritative experience contract.
 
 ## 10. Constraints
 
@@ -334,7 +334,7 @@ feature BRD may add a stricter local rule but may not weaken these.
 
 | Dependency | What the product needs | Owner |
 | --- | --- | --- |
-| Design system v1.0 | Tokens, states, voice, accessibility contract | Design lead |
+| Design system v1.1 | Tokens, states, voice, accessibility contract | Design lead |
 | Engine crates (`core/`) | Media, storage, jobs, court, vision, rally, score, highlight, export | Engineering lead |
 | Rust service (`core/adapters/service`) | Engine, catalog, recording custody, jobs, and export in a separate process; media-tool discovery and service-owned inference asset resolution; frozen 17-call engine contract over the protocol | Engineering lead |
 | Service protocol (`core/gateways/protocol`) | Versioned request, response, notification, and error contract | Engineering lead |
@@ -513,6 +513,7 @@ rows map the affected shared requirements to the clauses that now define them.
 | Security/privacy |  | Approve / revise |  |
 | Legal/licensing |  | Approve / revise |  |
 | Revision 1.1 — documentation reconciliation | Engineering lead | Recorded: status, evidence, and explanation cells only; no Must acceptance text changed | 2026-10-30 |
+| Revision 1.2 — shared review-surface layout constants | Engineering lead | DS-7 rail widths made responsive for the supported 1100–1199 px window; design-system references moved to v1.1 | 2026-11-02 |
 
 ---
 

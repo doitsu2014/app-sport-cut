@@ -5,12 +5,12 @@
 | Field | Value |
 | --- | --- |
 | Document ID | BRD-SPORTCUT-006 |
-| Version | 1.0 |
+| Version | 1.1 |
 | Status | Draft — for approval |
-| Date | 2026-10-29 |
+| Date | 2026-11-02 |
 | Owner | Product owner, Score and Serving area |
 | Contributors | Product, Design, Engineering, QA |
-| Source baseline | Commit `1541c64` (2026-10-29); design system v1.0 |
+| Source baseline | Commit `1541c64` (2026-10-29); design system v1.1; shared review surface per BRD 09 v1.2 |
 | Parent BRD | [00-product-context.md](00-product-context.md) |
 | Area ID | SCR |
 
@@ -41,6 +41,14 @@ scoring half of BR-3. It consumes accepted and manually marked rallies from Rall
 Review (05), and it supplies the score context that Highlight Ranking (07) and
 Export (08) read. BO-2 sets the bar: one winner tap per rally, and every
 displayed score derived rather than entered.
+
+Scoring happens on the shared review surface defined by BRD 09 (FR-SHL-46 to
+FR-SHL-48). This feature supplies the scoreboard and serving content of the
+Rally tab and the Review & score lens's score-bug overlay and score-chip
+timeline emphasis. Rally content in the same tab — suggestions, review
+decisions, manual marking, the rally list, and boundaries — belongs to 05. This
+feature defines no separate review layout, preview, transport, timeline, or
+route.
 
 Autonomy level, stated once: the engine proposes a serving side; the user
 confirms every winner. The product never officiates, never calls a fault, and
@@ -83,8 +91,8 @@ is untested and the scoreboard does not yet match the design contract.
 | Score derivation and persistence | Done | Client tests cover derivation, correction, clearance, and stored events; `sportcut-score` has no unit test |
 | One-tap winner | Done | Five widget tests; no test asserts the "loss is not an error" styling |
 | Serving side | Partial | Engine call is correct and pure, but untested; the scoreboard derives "who serves next" from the last scored rally, so an unscored last rally still shows a server |
-| Design conformance | Partial | No 2 px accent underline under the serving label; score figures at 32 px, not 48–76 px |
-| Keyboard and timeline dock | Not started | No L/R key handling; no shared timeline dock |
+| Design conformance | Partial | No 2 px accent underline under the serving label; score figures at 32 px, not 48–76 px; the score bug renders a 64 px stack instead of the compact 28–36 px top-band readout |
+| Keyboard and timeline dock | Partial | The shell-owned 176 px dock renders the score track (FR-SHL-41); L/R key handling, focus retention, and score-chip emphasis remain gaps |
 
 ## 4. Functional requirements
 
@@ -126,7 +134,7 @@ are MoSCoW. "Refuse" means: write nothing and show the named message.
 | FR-SCR-19 | Mark the serving side with a text label and a 2 px accent underline under that label. | Must | The serving side's label carries a 2 px `--accent` underline in both themes; the marker is not carried by colour alone (DESIGN §6, DS-3, DS-4). Current code colours the figure and adds a tennis icon (gap). |
 | FR-SCR-20 | Recompute serving after any winner, removal, or boundary change. | Must | After each change the serving map matches a fresh derivation over the reloaded rallies. |
 | FR-SCR-21 | Keep serving derivation in the engine and out of storage. | Must | Serving sides are computed on demand through a pure facade call; no table, column, or artifact stores them. |
-| FR-SCR-22 | Never set or imply a winner from the serving hint. | Must | Activating the hint, or opening the screen, writes no winner; `status` stays `unscored` until an explicit L/R action. |
+| FR-SCR-22 | Never set or imply a winner from the serving hint. | Must | Activating the hint, or opening the lens, writes no winner; `status` stays `unscored` until an explicit L/R action. |
 
 ### 4.4 Score timeline and context
 
@@ -134,10 +142,10 @@ are MoSCoW. "Refuse" means: write nothing and show the named message.
 | --- | --- | --- | --- |
 | FR-SCR-23 | Show the score as it stood at a clip's position, not the final score. | Must | A clip taken from rally 3 shows the score after rally 3's point, matching the row's "Confirmed · 18–16" line; `ScoreTimeline.atSeconds` supplies it. |
 | FR-SCR-24 | Burn the same score convention into exported clips. | Should | Each exported clip's overlay uses the score at that clip's effective start, and all clips use one convention (00 Q-5, BRD 08). |
-| FR-SCR-25 | Show the last three rallies beside the scoreboard. | Must | The review pane lists the three most recent rallies with their outcome and score; the current view lists all rallies in one scrolling list (gap, DESIGN §6). |
-| FR-SCR-26 | Score from the L and R keys in the review pane. | Must | With the pane focused, pressing L or R confirms the selected rally's winner; the key map is documented in DESIGN §10 and the same action is reachable by pointer (gap). |
+| FR-SCR-25 | Show the last three rallies in the Rally tab session block beneath the scoreboard. | Must | The shared inspector's Rally tab lists the three most recent rallies with their outcome and score beneath the scoreboard, keeping the fixed panel order of FR-SHL-48; the current view lists all rallies in one scrolling list (gap, DESIGN §5.5). |
+| FR-SCR-26 | Score from the L and R keys on the shared review surface. | Must | With a rally selected on any review lens and focus not in a text field, pressing L or R confirms that rally's winner without changing the lens; the key map is documented in DESIGN §10 and the same action is reachable by pointer (FR-SHL-46; gap). |
 | FR-SCR-27 | Return focus to the same winner button after the score re-renders. | Should | After a keyboard or pointer score, focus stays on the action just used so repeated scoring does not require re-targeting (DESIGN §10). Gap. |
-| FR-SCR-28 | Keep the timeline playhead and the score in one shared dock. | Should | A rally segment, its score context, and the playhead render in the shell's 176 px timeline dock; the client still draws this inside feature views (DESIGN §10 client status; shared with BRD 09). |
+| FR-SCR-28 | Keep the timeline playhead and the score in the shell-owned 176 px dock's score track. | Should | A rally segment, its score context, and the playhead render in the shell-owned timeline dock's score track (FR-SHL-41); no per-feature dock or second scrubber exists. |
 
 ### 4.5 Persistence and integrity
 
@@ -149,10 +157,16 @@ are MoSCoW. "Refuse" means: write nothing and show the named message.
 
 ## 5. State coverage
 
+These are content states inside the shared review surface's state matrix
+(09 §4 and DESIGN §5.7); 09 §4 owns precedence: blocking shell state > lens
+content state > job state. The Review & score lens's overlay set and inspector emphasis are
+governed by FR-SHL-47 and FR-SHL-48; this feature contributes content only and
+defines no second preview, transport, or timeline.
+
 | State | Trigger | What the user sees | Evidence |
 | --- | --- | --- | --- |
 | Default | Match opened, no confirmed rally | Scoreboard at 0–0 with side labels; empty-rally sentence | `score_view.dart` |
-| Loading | Edit or serving map in flight | Scoreboard renders before records exist; serving map is empty (gap FR-SCR-08) | Same |
+| Loading | Edit or serving map in flight | A loading treatment or no figures; never 0–0 before records exist (target for FR-SCR-08) | Same |
 | Empty | No rally marked | "No rallies yet. Scrub to a point, mark its start and end, and say who won it." | `score_screen_test.dart` |
 | Empty (serving) | First rally, or previous rally unscored | No serving marker on that rally | `serving_sides_providers.dart` |
 | Error | Write failed, engine call threw | Dismissible banner with the message; previous score retained | `_ProblemBanner`, `editing_providers.dart` |
@@ -167,17 +181,32 @@ are MoSCoW. "Refuse" means: write nothing and show the named message.
   a rally is not an error, so `--danger` (`#B42318` / `#F27B70`) never styles a
   loss. Scores carry L/R or Left/Right text; colour never distinguishes the
   sides alone.
-- **Scoreboard** (DESIGN §6): L and R labels, 48–76 px tabular figures, a serving
-  marker, and the last three rallies. The client uses 32 px Archivo figures
-  (`--text-2xl`) and full side words; the size and the "last three" panel do not
-  yet match.
+- **Scoreboard** (DESIGN §5.2–5.5, §6; 09 §5): the inspector's scoreboard is the
+  single editable ledger, with L and R labels, 48–76 px tabular figures, a
+  serving marker, and the last three rallies beneath it in the Rally tab's
+  session block. The client uses 32 px Archivo figures (`--text-2xl`) and full
+  side words; the size and the "last three" panel do not yet match.
+- **Score bug** (DESIGN §5.2–5.3, §6; FR-SHL-42, FR-SHL-47): the Review & score
+  lens paints a compact 28–36 px read-only score and serving readout in the
+  preview's top band. It is pointer-transparent, never animates the score, and
+  is not a second editor. The inspector ledger and the bug are never both
+  hero-size; `ScScoreBug`'s 64 px stack is drift, not the target.
+- **Lens emphasis** (FR-SHL-48): the Review & score lens opens the Rally tab
+  scrolled to the scoreboard/winner block and pending suggestions, overlaid by
+  the score bug, with scored rallies and score chips emphasised in the shared
+  176 px dock. The tablist order, geometry, and controls do not change.
+- **L/R on the shared surface** (FR-SHL-21, FR-SCR-26): the shortcut is available
+  on every review lens by design. The shared surface makes the same single
+  winner write reachable from Play, Review & score, and Highlights; it adds no
+  second score path and changes no scoring rule.
 - **Serving marker** (DESIGN §6): a 2 px accent underline under the serving
   side's label. The client instead tints the figure with `--accent` and adds a
   14 px icon with a "Serves next" tooltip.
-- **Score band** (DESIGN §4, §6): the scoreboard sits on a recessed surface,
-  `--surface-warm` (`#E8ECE7` / `#182019`), with `--space-4` (16 px) horizontal
-  and `--space-3` (12 px) vertical padding; dividers are hairlines, not cards.
-- **Clip row** (DESIGN §6, §5): the score context on a clip row is the score at
+- **Score band** (DESIGN §2, §6 Scoreboard): the scoreboard sits on a recessed
+  surface, `--surface-warm` (`#E8ECE7` / `#182019`), with `--space-4` (16 px)
+  horizontal and `--space-3` (12 px) vertical padding; dividers are hairlines,
+  not cards.
+- **Clip row** (DESIGN §6 Clip row): the score context on a clip row is the score at
   that clip's position, with the in/out timecodes in mono at `--text-xs` (12 px).
 - **Motion** (DESIGN §7, DS-11): score digits do not animate and never count up;
   a digit changes in place. The client complies.
@@ -209,7 +238,7 @@ commitment and any local requirement.
 | One-tap winner, refusal, unscored row | `app/lib/src/features/score/presentation/score_view.dart`; `app/test/score_screen_test.dart` (5 widget tests) | Same |
 | Serving rule | `core/entities/score/src/lib.rs`, `core/adapters/api/src/facade.rs` (`serving_sides`) | **No engine test**, no facade test; verified by reading the code only |
 | Export score context | `app/lib/src/features/export/presentation/export_providers.dart` (`score.atSeconds`) | `app/test/export_screen_test.dart` covers the scoreboard image |
-| Design conformance | [DESIGN.md §6](../../design-system/DESIGN.md), [tokens.css](../../design-system/tokens.css) | Not audited; §3.3 records the gaps |
+| Design conformance | [DESIGN.md §5.2–5.7, §6, §10](../../design-system/DESIGN.md), [tokens.css](../../design-system/tokens.css); `app/lib/src/features/workspace/presentation/studio/inspector_pane.dart`, `app/lib/src/app/design/components/sc_score_bug.dart` | Not audited; the shared inspector hosts the Rally tab, but the compact top-band score bug, the 2 px serving underline, the hero size, and the last-three panel are gaps (§3.3) |
 
 Statements to hold to: the serving marker is implemented but untested; the 2 px
 underline, the "last three rallies" panel, the L/R keys, and the
@@ -223,8 +252,9 @@ requirements, not done work.
 | Dependency | What this feature needs | Condition to ship |
 | --- | --- | --- |
 | Rally Review (BRD 05) | Rallies with spans, and unscored rallies from acceptance | Required; without rallies the score has no unit |
+| Studio shell (BRD 09) | The shared review surface, the Rally and Clip inspector, and the 176 px timeline dock that host this feature's content (FR-SHL-46 to FR-SHL-48) | Required; 06 defines content, not layout |
 | `sportcut-score` and `sportcut-api` | `serving_sides` as a pure facade call | Internal |
-| Design system v1.0 | Scoreboard size, serving underline, keyboard map | Design lead |
+| Design system v1.1 | Scoreboard size, serving underline, score-bug scale, keyboard map (DESIGN §5.2–5.7, §6, §10) | Design lead |
 | Export (BRD 08) | Composites the score overlay per clip | Required for the scoreboard on a reel |
 
 ### 9.2 Constraints
@@ -244,7 +274,7 @@ requirements, not done work.
 | SCR-R1 | The serving rule regresses with no engine test (00 §3.3 row 6) | Medium | High | Add unit tests for the first rally, an unscored previous rally, and a correction | Engineering lead |
 | SCR-R2 | The scoreboard shows a stale or invented figure during load (FR-SCR-08) | Medium | Medium | Render a loading state until the edit is present; add a widget test | QA lead |
 | SCR-R3 | Displayed score and library summary diverge after an interrupted write (FR-SCR-29) | Low | High | Write the rally and events in one transaction; test a failure injected between them | Engineering lead |
-| SCR-R4 | Design drift: no serving underline, wrong figure size (R-6) | High | Medium | Align the scoreboard to DESIGN §6; add a golden or size assertion | Design lead |
+| SCR-R4 | Design drift: no serving underline, wrong figure size, oversized score bug (R-6) | High | Medium | Align the scoreboard and score bug to DESIGN §5.2–5.3, §5.5, §6; add a golden or size assertion | Design lead |
 
 ### 9.4 Open questions
 
@@ -259,14 +289,20 @@ requirements, not done work.
 
 | Requirement | Shared requirement | Design contract | Owning code | Verification |
 | --- | --- | --- | --- | --- |
-| FR-SCR-01..07 | BR-4, BO-2 | §2 Color rules, §6 Scoreboard | `app/lib/src/features/editing/domain/score_timeline.dart`, `score_event.dart`, `rally.dart` | `app/test/score_timeline_test.dart`, `app/test/editing_repository_test.dart` |
-| FR-SCR-08 | DS-8, NFR-2 | §6 States | `app/lib/src/features/score/presentation/score_view.dart` | Gap |
-| FR-SCR-09..14 | BR-3, BR-4, DS-4, DS-12 | §2, §6, §8 Voice | `score_view.dart`, `editing_providers.dart` | `app/test/score_screen_test.dart` |
-| FR-SCR-15..22 | BR-3, BR-4 | §6 Scoreboard | `core/entities/score/src/lib.rs`, `core/adapters/api/src/facade.rs`, `app/lib/src/features/score/presentation/serving_sides_providers.dart` | Gap: no engine or widget test |
-| FR-SCR-23..28 | BR-5, BR-8, DS-9, DS-15 | §5 Review, §6 Timeline, §10 Keyboard | `score_timeline.dart` (`atSeconds`), `app/lib/src/features/export/presentation/export_providers.dart` | `app/test/export_screen_test.dart`; keyboard and dock: gap |
+| FR-SCR-01..07 | BR-4, BO-2 | §2, §5.2–5.5, §6 Scoreboard | `app/lib/src/features/editing/domain/score_timeline.dart`, `score_event.dart`, `rally.dart` | `app/test/score_timeline_test.dart`, `app/test/editing_repository_test.dart` |
+| FR-SCR-08 | DS-8, NFR-2 | §5.7 States | `app/lib/src/features/score/presentation/score_view.dart` | Gap |
+| FR-SCR-09..14 | BR-3, BR-4, DS-4, DS-12 | §2, §5.5, §6, §8 Voice | `score_view.dart`, `editing_providers.dart` | `app/test/score_screen_test.dart` |
+| FR-SCR-15..22 | BR-3, BR-4 | §6 Scoreboard (serving marker) | `core/entities/score/src/lib.rs`, `core/adapters/api/src/facade.rs`, `app/lib/src/features/score/presentation/serving_sides_providers.dart` | Gap: no engine or widget test |
+| FR-SCR-23..28 | BR-5, BR-8, DS-9, DS-15 | §5.2–5.6, §10 Keyboard; 09 FR-SHL-41, FR-SHL-46 to FR-SHL-48 | `score_timeline.dart` (`atSeconds`), `app/lib/src/features/export/presentation/export_providers.dart` | `app/test/export_screen_test.dart`; keyboard and dock: gap |
 | FR-SCR-29..31 | NFR-3, NFR-4 | — | `app/lib/src/features/editing/data/editing_store.dart`, `editing_repository.dart`, `match_catalog.dart` | `app/test/editing_repository_test.dart` |
 
 ## 11. Approval
+
+Version 1.1 (2026-11-02) aligns scoring with the shared review surface
+(09 FR-SHL-46 to FR-SHL-48): the scoreboard is the inspector ledger, the score
+bug is a compact read-only top-band readout on the Review & score lens, L/R
+scoring works on any lens, and the score track belongs to the shell-owned dock.
+It requires re-approval.
 
 | Role | Name | Decision | Date |
 | --- | --- | --- | --- |

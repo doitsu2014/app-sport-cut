@@ -5,12 +5,12 @@
 | Field | Value |
 | --- | --- |
 | Document ID | BRD-SPORTCUT-005 |
-| Version | 1.0 |
+| Version | 1.1 |
 | Status | Draft — for approval |
-| Date | 2026-10-29 |
+| Date | 2026-11-02 |
 | Owner | Product owner, Rally Review area |
 | Contributors | Product, Design, Engineering, QA |
-| Source baseline | Commit `1541c64` (2026-10-29); design system v1.0 |
+| Source baseline | Commit `1541c64` (2026-10-29); design system v1.1; shared review surface per BRD 09 v1.2 |
 | Parent BRD | [00-product-context.md](00-product-context.md) |
 | Area ID | RAL |
 
@@ -42,6 +42,11 @@ that the Score and Serving BRD (06) confirms winners on. It does not score, rank
 clips, or export. NFR-4 (user-authored data preserved) and R-5 (audio branch
 inactive) are the shared requirements it most depends on.
 
+Review happens inside the shared review surface defined by BRD 09 (FR-SHL-46
+to FR-SHL-48). This feature supplies the rally content of the Rally tab; 06
+supplies the scoreboard, score bug, and score-chip emphasis. It defines no
+separate review layout, preview, transport, timeline, or route.
+
 ## 3. Scope
 
 ### 3.1 In scope
@@ -60,6 +65,9 @@ inactive) are the shared requirements it most depends on.
 - Manual marking from the playhead, with validation and a cancel path.
 - Rally list interactions: seek to a rally, keep or drop it from the reel, and
   remove a rally without deleting the clip made from it.
+- Review within the shared review surface: the Rally tab of the Review & score
+  lens over the one shell-owned preview, transport, and 176 px timeline dock
+  (09 FR-SHL-41, FR-SHL-46 to FR-SHL-48).
 
 ### 3.2 Out of scope
 
@@ -83,7 +91,7 @@ without the evidence named in §8.
 | Suggestion generation | Partial | Thresholds tuned on one clip (`c1`); boundary accuracy unmeasured; audio inactive; no unit test in `sportcut-rally` |
 | Review decisions | Partial | Accept, adjust, and dismiss are implemented and atomic, but no automated test covers decision persistence |
 | Manual marking | Done | Client tests cover the span, the refusal, and the winner tap |
-| Timeline and clip interactions | Partial | No draggable rally scrubber; no user control calls `moveRally`; no shared timeline dock |
+| Timeline and clip interactions | Partial | The shell-owned 176 px dock renders the ruler, rally, and score tracks (FR-SHL-41), with rest on the resting track; boundaries are not draggable and no user control calls `moveRally`; boundary drag inside the dock or preview overlay is the remaining gap |
 | Client test coverage | Not started | No widget test for the rally review panel or `RallyReviewController` |
 
 ## 4. Functional requirements
@@ -95,7 +103,7 @@ are MoSCoW. "Refuse" means: write nothing and show the named message.
 
 | ID | Requirement | Priority | Acceptance criterion |
 | --- | --- | --- | --- |
-| FR-RAL-01 | Start rally analysis as a background job from a match with final tracks and a named calibration. | Must | Selecting Analyze from Review & score returns a job handle; `job_status` reaches `completed`; no network call occurs (BR-1, NFR-1). |
+| FR-RAL-01 | Start rally analysis as a background job from a match with final tracks and a named calibration. | Must | Selecting Analyze from the Rally tab of the Review & score lens (FR-SHL-46) returns a job handle; `job_status` reaches `completed`; no network call occurs (BR-1, NFR-1). |
 | FR-RAL-02 | Refuse analysis when player tracks are missing, naming the missing prerequisite. | Must | On a match with no tracks artifact, the start call returns an error containing "player tracks are unavailable; run player tracking before rally analysis", and no job starts (`core/adapters/api/tests/unanalysed_match.rs`). |
 | FR-RAL-03 | Refuse analysis when the calibration artifact is missing or not final. | Must | A match with non-final or absent calibration returns "court calibration is unavailable; mark the court before rally analysis" (`core/adapters/api/src/facade.rs`). |
 | FR-RAL-04 | Record the exact analysis inputs and derive a deterministic generation identifier. | Must | The stored inputs carry duration, tracks fingerprint, calibration id, audio fingerprint, and config; identical inputs produce the same `generation_id`, and a changed tracks fingerprint or config produces a different one. |
@@ -138,23 +146,29 @@ are MoSCoW. "Refuse" means: write nothing and show the named message.
 
 | ID | Requirement | Priority | Acceptance criterion |
 | --- | --- | --- | --- |
-| FR-RAL-29 | Seek playback to a rally's start when its row is activated. | Must | Activating a rally row seeks the shared player to that rally's start time. |
+| FR-RAL-29 | Seek the shared preview to a rally's start when its row is activated. | Must | Activating a rally row seeks the one shared preview to that rally's start time and marks that rally as selected, without changing the lens or the playback session (FR-SHL-45, FR-SHL-46). |
 | FR-RAL-30 | Toggle a rally in or out of the reel from its row. | Must | The keep action creates one clip carrying the rally's span at the end of the reel order; the same action removes it; the rally and its score are unchanged (`editing_repository_test.dart`). |
 | FR-RAL-31 | Remove a rally while keeping the clip made from it. | Must | Deleting a rally deletes its suggestion decisions and detaches its clip (`rally_id` set null); the clip stays in the reel and score events for other rallies are rewritten. |
 | FR-RAL-32 | Edit an accepted rally's start and end. | Should | A boundary change moves that rally only, keeps its winner and status, and rewrites the score from the corrected position. Repository support exists and is tested; the client exposes no control (gap). |
-| FR-RAL-33 | Draw the rally scrubber with rally and rest segments and draggable boundaries. | Could | Segments render in the DESIGN §6 treatments; boundaries drag with at least a 20 px hit target; timecodes sit above the track. Not implemented (gap). |
+| FR-RAL-33 | Drag a rally boundary inside the shared timeline dock or the preview overlay, on the Review & score lens only. | Could | Boundary edges drag with at least a 20 px hit target, distinct from the 24/44 px corner handles; rally and rest segments stay buttons for seek and select; a drag updates one rally through `moveRally`; no second scrubber or per-feature timeline appears (FR-SHL-41; DESIGN §5.6). Not implemented (gap). |
 
 ## 5. State coverage
+
+These are content states inside the shared review surface's state matrix
+(09 §4 and DESIGN §5.7); 09 §4 owns precedence: blocking shell state > lens
+content state > job state. The Review & score lens's overlay set and inspector emphasis are
+governed by FR-SHL-47 and FR-SHL-48; this feature contributes content only and
+defines no second preview, transport, or timeline.
 
 | State | Trigger | What the user sees | Evidence |
 | --- | --- | --- | --- |
 | Default | Match opened, no suggestion set for current inputs | "Manual marking is available"; Analyze enabled; no candidate list | `rally_review_providers.dart` |
-| Loading | Analysis job running | Stage label plus determinate progress bar and Cancel | `ScoreView` suggestions panel |
+| Loading | Analysis job running | Stage label plus determinate progress bar and Cancel | `RallyPanel` in the shared inspector |
 | Empty (suggestions) | Completed set, nothing pending | "No unreviewed suggestions. You can still mark rallies." | Same |
 | Empty (rallies) | No rally recorded | "No rallies yet. Scrub to a point, mark its start and end, and say who won it." | `score_screen_test.dart` |
 | Error (analysis) | Job failed, or the call threw | Panel text "Rally analysis could not finish." or "Rally analysis is unavailable: …" | `rally_review_providers.dart` |
 | Error (decision) | Accept or dismiss rejected | Inline message; candidate stays pending | Same |
-| Error (overlap) | Candidate overlaps a rally | Row subtitle names the overlap; Accept disabled | `score_view.dart` |
+| Error (overlap) | Candidate overlaps a rally | Row subtitle names the overlap; Accept disabled | `rally_panel.dart` |
 | Success | Candidate accepted | New unscored rally in the list; candidate leaves the panel | Same |
 | Disabled | Analysis unavailable in this build; a write in flight | Analyze disabled; accept, adjust, and dismiss disabled while busy | Same |
 | Cancellation (job) | Cancel pressed | Job reaches cancelled; running state clears | `rallyReviewControllerProvider.cancel` |
@@ -166,19 +180,35 @@ are MoSCoW. "Refuse" means: write nothing and show the named message.
   selection and progress only; every state carries a word (DESIGN §2, DS-3,
   DS-4). The suggestion panel's counts and the per-row overlap note are text,
   not colour alone.
-- **Rally scrubber** (DESIGN §6): rally segments in a 22% accent tint, rest in
-  `--surface-warm` (`#E8ECE7` / `#182019`), playhead in `--fg`
-  (`#101713` / `#EDF2EC`), timecodes above the track in mono at `--text-xs`
-  (12 px). Boundaries draggable with a 20 px minimum target. Not implemented
-  (FR-RAL-33).
-- **Clip row** (DESIGN §6): in/out timecodes, duration, score context,
-  keep/dismiss; kept clips use a check plus a surface ring; dismissed clips drop
-  opacity and stay recoverable until export. The client uses a star with accent
-  fill instead of a check plus ring (gap against §6).
-- **Review composition** (DESIGN §5): footage and transport left, scoreboard and
-  last rallies right, rally timeline spanning underneath. The client draws the
-  timeline inside the feature view, not as the shared dock (DESIGN §10 client
-  status).
+- **Timeline dock** (DESIGN §5.6, FR-SHL-41): one shell-owned 176 px dock on
+  every lens. Rest spans use `--surface-warm` (`#E8ECE7` / `#182019`), unkept
+  rally segments a 22% `--accent` tint, kept segments a 32% `--accent` tint, the
+  selected segment a 2 px `--fg` outline (`#101713` / `#EDF2EC`), and the
+  playhead a 1 px `--accent` line. Timecodes sit above the track in mono at
+  `--text-xs` (12 px). Boundaries drag only under FR-RAL-33, with a 20 px
+  minimum target; segments remain buttons for seek and select. The Review &
+  score lens emphasises scored rallies and score chips; kept and left-out state
+  stays at base weight.
+- **Clip row** (DESIGN §6 Clip row): in/out timecodes, duration, score context,
+  keep/remove; kept clips use a check plus a surface ring; left-out clips drop
+  opacity and stay recoverable until export. "Dismiss" applies to rally
+  suggestions only, never to clips; 07 uses the same keep/remove vocabulary.
+  The client uses a star with accent fill instead of a check plus ring (gap
+  against §6).
+- **Shared review surface** (DESIGN §5.1–5.6; 09 FR-SHL-46 to FR-SHL-48): one
+  shell — toolbar, stage strip, video rail, preview, inspector, timeline dock,
+  and status bar. This feature owns the rally content of the Rally tab in the
+  inspector: suggestions, review decisions, manual marking, the rally
+  list, and rally boundary edits. It supplies the Rally tab's default scroll
+  anchor on Play (the rally list and last rallies). It does not own the score
+  bug, the scoreboard/winner content, or score-chip timeline emphasis; 06 owns
+  those parts of the Review & score lens. It defines no separate review layout,
+  preview, transport, timeline, or route; a lens change never reloads the
+  recording or moves the shell geometry.
+- **Inspector emphasis** (FR-SHL-48): the inspector keeps the same regions and
+  order in every lens (collapsed pipeline summary, Rally|Clip tablist, scrolling
+  body, reel summary). The lens sets only the default tab and scroll anchor, so
+  the Clip tab stays one click away and no control moves or disappears.
 - **Type and shape.** Row titles use `--text-base` (16 px) with tabular numerals
   for spans; radii `--radius-md` 10 px on buttons and rows, `--radius-lg` 14 px
   on panels; spacing on the 4 px grid (`--space-2` 8, `--space-3` 12,
@@ -215,11 +245,15 @@ commitment and any local requirement.
 | Manual marking, validation | `app/test/score_screen_test.dart` (5 widget tests), `app/test/editing_repository_test.dart` (13 tests) | Baseline `docs/verification/manual-editing-and-export.md` |
 | Decision persistence | `app/lib/src/features/editing/data/editing_store.dart`, `match_catalog.dart` migration v4 | **No test.** No case in `editing_repository_test.dart` calls accept or dismiss. |
 | Timeline and clip interactions | `editing_repository_test.dart`: keep, trim, reorder, detach on delete | Baseline `docs/verification/client-track.md` (test inventory) |
+| Shared review surface, lens emphasis | `app/lib/src/features/workspace/presentation/studio/studio_shell.dart`, `inspector_pane.dart`, `stage_strip.dart`, `timeline_dock.dart`; `app/lib/src/features/score/presentation/rally_panel.dart` | The shell renders the stage strip, the 176 px dock, and the stage-aware inspector, and the score bug exists; the per-lens default tab and scroll anchor (FR-SHL-48) and the compact top-band score-bug placement (FR-SHL-47) are gaps |
 | Segmentation accuracy | Eval harness present, Results table empty | Unmeasured (R-1, BO-5) |
 
 Status statements to hold to: acceptance and dismissal are implemented
 atomically but unproven by test; the engine crate has no unit test; boundary
-accuracy has never been measured against labels.
+accuracy has never been measured against labels. FR-SHL-46 to FR-SHL-48 are
+shared-surface requirements: the shell exists, but no feature BRD may claim
+its lens behaviour is Done while the default tab, scroll anchor, and overlay
+placement are unverified.
 
 ## 9. Dependencies, constraints, risks, open questions
 
@@ -230,8 +264,8 @@ accuracy has never been measured against labels.
 | Player tracking (BRD 04) | A final `tracks/player_tracks.json` with coverage intervals and positions | Required; without it only manual marking works |
 | Court calibration (BRD 03) | A final calibration identity for the generation | Required |
 | `sportcut-rally`, `sportcut-storage`, `sportcut-api` | Segmentation, suggestion persistence, the facade calls | Internal |
-| Downstream: Score and Serving (BRD 06) | Hosts this review panel in the score view; a winner change must not disturb review decisions | Internal |
-| Design system v1.0 | Scrubber and clip-row treatments | Design lead |
+| Downstream: Score and Serving (BRD 06) | 09 hosts the shared review surface; 06 supplies score and serving content for the Rally tab, and a winner change must not disturb review decisions | Internal |
+| Design system v1.1 | Shared review surface, timeline dock, and clip-row treatments (DESIGN §5.1–5.6) | Design lead |
 
 ### 9.2 Constraints
 
@@ -256,7 +290,7 @@ accuracy has never been measured against labels.
 
 | ID | Question | Why it matters | Owner |
 | --- | --- | --- | --- |
-| Q-RAL-1 | Is a draggable rally scrubber (FR-RAL-33) v1, or is plus/minus boundary nudge acceptable? | DESIGN §6 specifies drag; the client has no control for `moveRally` | Design lead |
+| Q-RAL-1 | Is boundary drag inside the shared timeline dock (FR-RAL-33) v1, or is plus/minus boundary nudge acceptable? | FR-SHL-41 owns the dock geometry; the client has no control for `moveRally` and no second scrubber may be added | Design lead |
 | Q-RAL-2 | Should the analysis threshold set stay fixed in the client, or become a per-match setting? | Affects reproducibility claims and the settings scope (BRD 09) | Product owner |
 | Q-RAL-3 | How should the heuristic quality value be labelled so it is not read as a probability? | DESIGN §9 forbids invented metrics; the DTO says quality is not confidence | Design lead |
 | Q-RAL-4 | When tracks change, should stale decisions be pruned or kept for provenance? | Affects table growth and NFR-4 wording | Engineering lead |
@@ -265,13 +299,19 @@ accuracy has never been measured against labels.
 
 | Requirement | Shared requirement | Design contract | Owning code | Verification |
 | --- | --- | --- | --- | --- |
-| FR-RAL-01..14 | BR-3, BR-11, NFR-2, NFR-3 | — | `core/entities/rally/src/lib.rs`, `core/gateways/storage/src/rally_suggestions.rs`, `core/adapters/api/src/facade.rs` | `core/adapters/api/tests/unanalysed_match.rs`; baseline `docs/verification/rally-rest-segmentation.md` |
-| FR-RAL-15..24 | BR-3 | §5, §6 Clip row | `app/lib/src/features/rally/presentation/rally_review_providers.dart`, `app/lib/src/features/editing/data/editing_store.dart` | Gap: no test |
-| FR-RAL-25..28 | BR-3, BR-4 | §6 Actions, §8 Voice | `app/lib/src/features/score/presentation/score_view.dart`, `app/lib/src/features/editing/data/editing_repository.dart` | `app/test/score_screen_test.dart` |
-| FR-RAL-29..31 | BR-5 | §6 Timeline, Clip row | `app/lib/src/features/editing/data/editing_store.dart`, `editing_repository.dart` | `app/test/editing_repository_test.dart` |
-| FR-RAL-32..33 | BR-8, DS-3, DS-8 | §6 Rally scrubber | `app/lib/src/features/editing/domain/match_editing.dart` (no UI) | Gap |
+| FR-RAL-01..14 | BR-3, BR-11, NFR-2, NFR-3 | §5.1–5.2; 09 FR-SHL-46 | `core/entities/rally/src/lib.rs`, `core/gateways/storage/src/rally_suggestions.rs`, `core/adapters/api/src/facade.rs` | `core/adapters/api/tests/unanalysed_match.rs`; baseline `docs/verification/rally-rest-segmentation.md` |
+| FR-RAL-15..24 | BR-3 | §5.2–5.5, §6 Clip row; 09 FR-SHL-48 | `app/lib/src/features/rally/presentation/rally_review_providers.dart`, `app/lib/src/features/editing/data/editing_store.dart` | Gap: no test |
+| FR-RAL-25..28 | BR-3, BR-4 | §5.5, §6 Actions, §8 Voice | `app/lib/src/features/score/presentation/score_view.dart`, `app/lib/src/features/editing/data/editing_repository.dart` | `app/test/score_screen_test.dart` |
+| FR-RAL-29..31 | BR-5 | §5.6 Timeline dock, §6 Clip row; 09 FR-SHL-41 | `app/lib/src/features/editing/data/editing_store.dart`, `editing_repository.dart` | `app/test/editing_repository_test.dart` |
+| FR-RAL-32..33 | BR-8, DS-3, DS-8 | §5.6 Timeline dock; 09 FR-SHL-41 | `app/lib/src/features/editing/domain/match_editing.dart` (no UI) | Gap |
 
 ## 11. Approval
+
+Version 1.1 (2026-11-02) aligns this feature with the shared review surface
+(09 FR-SHL-46 to FR-SHL-48): it defines the Review & score lens's overlay,
+inspector emphasis, and timeline emphasis, and it removes the
+separate-review-composition and private-scrubber claims. It requires
+re-approval.
 
 | Role | Name | Decision | Date |
 | --- | --- | --- | --- |
