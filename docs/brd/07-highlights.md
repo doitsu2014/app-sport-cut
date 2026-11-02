@@ -3,14 +3,14 @@
 | Field | Value |
 | --- | --- |
 | Document ID | BRD-SPORTCUT-007 |
-| Version | 1.0 |
+| Version | 1.1 |
 | Status | Draft — for approval |
-| Date | 2026-10-29 |
+| Date | 2026-11-02 |
 | Product | Sportcut — offline macOS badminton match analyzer |
 | Owner | Product owner |
 | Contributors | Product, Design, Engineering, QA |
 | Feature area | HLT (Highlights) |
-| Source baseline | Commit `1541c64` (2026-10-29); design system v1.0 |
+| Source baseline | Commit `1541c64` (2026-10-29); design system v1.1; shared review surface per BRD 09 v1.2 |
 | Product BRD | [00-product-context.md](00-product-context.md) |
 
 This document refines the product BRD for the Highlights feature. Shared
@@ -42,6 +42,11 @@ document states the bar for that proposal and for the user's edits. It adopts
 accessibility fidelity), and [NFR-4](00-product-context.md) (user-authored data
 survives upgrades).
 
+Highlights is a review lens on the shared review surface defined by BRD 09
+(FR-SHL-46 to FR-SHL-48). This feature supplies the Clip tab's content, the
+read-only clip slate over the shared preview, and reel-timeline emphasis; it
+defines no separate review layout, preview, transport, timeline, or route.
+
 ## 2. Scope
 
 ### 2.1 In scope for v1
@@ -54,7 +59,9 @@ survives upgrades).
 - Reordering the reel and persisting the user's order.
 - Keeping the best N left-out rallies in one action.
 - A reel summary of clip count and runtime.
-- The default, loading, empty, error, busy, and success states of the screen.
+- A preview of the selected clip in the shared studio preview with the
+  Highlights clip overlay.
+- The default, loading, empty, error, busy, and success states of the lens.
 
 ### 2.2 Out of scope for v1
 
@@ -67,8 +74,8 @@ Each item requires a change request.
   set exists at baseline.
 - Multi-match reels, cross-match clip selection, or per-player reels.
 - Automatic clip selection without a user decision.
-- Highlight playback inside this feature; the studio's shared preview and the
-  export screen own playback.
+- A separate highlight player or route; the shared preview is the only player
+  and the export sheet owns exported playback.
 
 ### 2.3 Delivery status at baseline
 
@@ -83,7 +90,7 @@ Status follows the product BRD §3.3 and is not rounded up.
 | Trim | Done | `EditingRepository.trimClip`; the trim dialog in `highlights_view.dart`; tests for apply and cancel. |
 | Reorder | Done | `EditingStore.reorderClips`; `app/test/editing_repository_test.dart`, `app/test/highlights_screen_test.dart`. |
 | Keep the best N | Partial | `_keepBest` keeps a literal 10 (`highlights_view.dart`); the label is `Keep top 10`. No test. |
-| Clip row design | Partial | Rows show in/out timecodes, score context, duration, and actions, but no kept check, no surface ring, no lowered opacity for dismissed clips. |
+| Clip row design | Partial | Rows show in/out timecodes, score context, duration, and actions, but no kept check, no surface ring, no lowered opacity for left-out clips. |
 | Orphan clip removal | Not started | A clip detached from a removed rally (`editing_repository_test.dart`, `removing a rally detaches its clip instead of taking it out`) makes `_rallyFor` throw `StateError` when the user removes it. |
 | Feature tests | Partial | Six widget tests cover empty, keep, remove, trim apply, trim cancel, and reorder. No test covers ranking, keep-top-N, busy state, or errors. |
 
@@ -120,7 +127,7 @@ Status follows the product BRD §3.3 and is not rounded up.
 | FR-HLT-20 | Summarize the reel as clip count and runtime. | Must | The summary reads `N clips · m:ss` and the runtime equals the sum of effective clip durations. |
 | FR-HLT-21 | Allow a clip detached from a removed rally to be removed from the reel. | Must | Removing an orphan clip removes it without an error and without affecting any rally. |
 
-### 3.3 Screen behaviour and states
+### 3.3 Lens behaviour and states
 
 | ID | Requirement | Priority | Acceptance criterion |
 | --- | --- | --- | --- |
@@ -129,8 +136,15 @@ Status follows the product BRD §3.3 and is not rounded up.
 | FR-HLT-24 | Disable trim, remove, keep, and keep-best while a write is in flight. | Must | During a write, the controls are disabled and a second activation does not queue a duplicate write. |
 | FR-HLT-25 | Report a failed reel action as a dismissible banner naming what happened. | Must | A rejected keep, trim, remove, or reorder shows a banner with a Dismiss action and leaves the reel unchanged. |
 | FR-HLT-26 | Use singular and plural correctly in summaries and counts. | Must | One clip reads `1 clip`, not `1 clips`. |
+| FR-HLT-27 | Preview the selected clip in the shared studio preview at its effective start. | Must | Selecting a reel row seeks the shared preview to the clip's effective start without reloading the recording; the seek honours trim boundaries, keeps the playback and editing session, and draws the Highlights clip overlay (FR-SHL-47); no separate player or route opens. |
 
 ## 4. State coverage
+
+These are content states inside the shared review surface's state matrix
+(09 §4 and DESIGN §5.7); 09 §4 owns precedence: blocking shell state > lens
+content state > job state. They describe the Highlights lens; its overlay set, default Clip
+tab, and reel-timeline emphasis are governed by FR-SHL-47 and FR-SHL-48, and no
+state may open a second preview, transport, or timeline.
 
 | State | Expected behaviour | Requirement |
 | --- | --- | --- |
@@ -146,18 +160,22 @@ Status follows the product BRD §3.3 and is not rounded up.
 ## 5. Design-contract specifics
 
 The design system is a contract ([DS-1](00-product-context.md) through
-[DS-15](00-product-context.md)). Values come from
+[DS-15](00-product-context.md)); the shared review surface is 09
+FR-SHL-46 to FR-SHL-48. Values come from
 [tokens.css](../../design-system/tokens.css); behaviour comes from
 [DESIGN.md](../../design-system/DESIGN.md).
 
 | Requirement | Design source | Acceptance criterion |
 | --- | --- | --- |
-| Clip rows follow the clip-row composition: in/out timecodes, duration, score context, keep and dismiss actions, a kept check plus surface ring, and lowered opacity for a dismissed clip while it stays recoverable. | DESIGN.md §6 Clip row | A kept clip shows a check and a `--surface` ring with a `--border` hairline; a left-out rally is visibly dimmed and remains selectable. |
-| Reel entries are rows at the list-row height and use the 4 px grid for padding. | DESIGN.md §4, §6 | Row padding is drawn from `--space-*` values on the 4 px grid; a rich row is 64 px. |
+| Highlights renders on the shared review surface: the same toolbar, stage strip, responsive video rail and inspector, preview, and 176 px timeline dock as Play and Review & score (FR-SHL-46). Only the preview overlay (a read-only clip slate), the inspector's default tab and scroll anchor (Clip tab at the selected clip and reel summary), and the timeline emphasis (kept/left-out segments and selected clip) differ in composition; the same controls and shortcuts stay available. | DESIGN.md §5.1–5.6; 09 §5; FR-SHL-46 to FR-SHL-48 | Switching to Highlights does not reload the recording, move the shell geometry, or open a second preview, transport, timeline, or route; the Rally tab remains one click away. |
+| The Highlights clip slate sits in the preview's top band: suggested rank (`#n`), clip index/total, the kept/left-out word, and in-out timecodes. It replaces the score bug on this lens. | DESIGN.md §5.2–5.3, §6; FR-SHL-47 | The slate is pointer-transparent, stays inside the top 20% of the frame at the 480 px preview floor, and never covers the court action area; no score bug renders on Highlights. |
+| The Clip tab is the default on entry, scrolled to the selected clip's detail and the reel summary; the Rally tab stays one click away. Kept segments render at 32% accent and left-out segments at the 22% accent tint (visually muted), with the selected clip outlined. | DESIGN.md §5.5–5.6; FR-SHL-48 | The inspector keeps its regions and order and the dock keeps its tracks and geometry; only the default tab, scroll anchor, and emphasis change, and FR-SHL-45's position, play state, and editing session survive. |
+| Clip rows follow the clip-row composition: in/out timecodes, duration, score context, keep and remove actions, a kept check plus surface ring, and lowered opacity for a left-out clip while it stays recoverable. | DESIGN.md §6 Clip row | A kept clip shows a check and a `--surface` ring with a `--border` hairline; a left-out rally is visibly dimmed and remains selectable. |
+| Reel entries are rows at the list-row height and use the 4 px grid for padding. | DESIGN.md §4, §6 | Row padding is drawn from `--space-*` values on the 4 px grid; a rich row is 56 px and a compact row 44 px. |
 | Timecodes and durations use tabular numerals in IBM Plex Mono; score figures in Archivo are never animated. | DESIGN.md §3, §7; tokens `--text-xs` 12px, `--text-base` 16px | Every timecode and duration sets `FontFeature.tabularFigures()`; no clip number or duration animates. |
 | One accent per pane: the reel's selected/kept state and the primary action share the single `--accent` role; no second green appears in the pane. | DESIGN.md §2, [DS-3](00-product-context.md) | Light `#0E6E45`, dark `#46D08D`; an audit finds at most one accent-coloured element per pane. |
 | Icon-only controls carry a tooltip and an accessible name; a destructive action is never icon-only. | DESIGN.md §6 Actions | Trim and remove expose a tooltip; the remove control names its object in the tooltip. |
-| The trim dialog is 420–520 px wide, left-aligned, with right-aligned Cancel and one confirming action; cancelling names no change. | DESIGN.md §5, §6 Dialog | The dialog uses one of the two stated widths and exactly two actions, Cancel and Trim. |
+| The trim dialog is 420–520 px wide, left-aligned, with right-aligned Cancel and one confirming action; cancelling names no change. | DESIGN.md §6 Dialog | The dialog uses one of the two stated widths and exactly two actions, Cancel and Trim. |
 | Motion explains change: list reorder settles within `--motion-base` 180 ms with `cubic-bezier(0.2,0,0,1)`; nothing loops; reduced motion collapses non-essential transitions. | DESIGN.md §7; tokens `--motion-fast` 120ms, `--motion-base` 180ms | A reorder or dialog transition completes in 180 ms or less; under `prefers-reduced-motion` the reel still reorders and the dialog still opens. |
 | Copy is short, factual, and verb-first, with numbers formatted as `0:10–0:20` and `12 clips · 4:38`. | DESIGN.md §8, [DS-10](00-product-context.md) | No exclamation mark, no anthropomorphic error, and no raw float duration is shown. |
 | Every state carries a word or icon; colour never carries meaning alone. | DESIGN.md §1, §2, [DS-4](00-product-context.md) | Kept and left-out states are distinguishable in grayscale. |
@@ -165,6 +183,8 @@ The design system is a contract ([DS-1](00-product-context.md) through
 Known drift at baseline, recorded rather than waived:
 
 - The clip row is a Material `ListTile` with a drag handle and two icon buttons; no kept check, no surface ring, no dimmed left-out state (DESIGN.md §6).
+- The studio opens the Rally tab for every review lens; the Highlights lens must default to the Clip tab (FR-SHL-48), and the clip slate is not drawn over the shared preview yet (FR-SHL-47). Both are target behaviour, recorded as gaps.
+- The shared dock renders reel segments, but the kept 32% accent and the selected-clip outline are not yet verified in the Highlights lens (FR-SHL-41, FR-SHL-48).
 - The summary renders `1 clips · 0:10`; the design format is `N clips · m:ss` with correct number agreement (DESIGN.md §8).
 - The trim dialog is not pinned to the 520 px settings width or its elevation (DESIGN.md §4, §5).
 - No reduced-motion audit is recorded for this feature.
@@ -203,12 +223,14 @@ constraints.
 | Ranking unavailable | None; the provider's value is read with `?? {}` | Gap |
 | Orphan clip removal | None; `_rallyFor` throws `StateError` | Gap |
 | Busy state | None | Gap |
+| Shared review surface and lens emphasis | `app/lib/src/features/workspace/presentation/studio/studio_shell.dart`, `inspector_pane.dart`, `timeline_dock.dart`; `app/lib/src/features/highlights/presentation/clip_inspector_panel.dart` | The shared shell, dock, and Clip panel exist; the Clip-default scroll anchor, the clip slate, and reel emphasis are not implemented (gap) |
 
 ### 7.2 Gaps in evidence
 
 - `core/entities/highlight/` has no test module or `dev-dependencies`, and no facade test invokes `rank_highlights`; the formula is verified only by reading the source.
 - No recorded evaluation compares the suggested order with human-judged best rallies. The accuracy harness scores player count and rally boundaries only, and its Results table is empty at baseline.
 - The widget tests never override `sportcutEngineProvider`, so ranking fails inside them and is swallowed; they prove the reel works with no ranking, not that ranking works.
+- No test or recording proves the Highlights lens defaults to Clip, seeks the shared preview on row selection (FR-HLT-27), or draws the clip slate; the studio currently opens Rally and the preview is unadorned (FR-SHL-46 to FR-SHL-48).
 
 ## 8. Dependencies, constraints, risks, and open questions
 
@@ -239,7 +261,8 @@ constraints.
 | `sportcut-api` facade | `rank_highlights` DTO call, no file access | Engineering lead |
 | `EditingRepository` / `EditingStore` | Clip persistence, trim, order, foreign keys | Engineering lead |
 | `ScoreTimeline` | Score at a rally and the confirmed gap | Engineering lead |
-| Design system v1.0 | Clip-row composition, states, voice, motion | Design lead |
+| Studio shell (BRD 09) | The shared review surface, Clip tab, and 176 px timeline dock that host this feature's content (FR-SHL-46 to FR-SHL-48) | Engineering lead |
+| Design system v1.1 | Clip-row composition, clip slate, states, voice, motion (DESIGN.md §5.1–5.6) | Design lead |
 
 ### 8.4 Risks
 
@@ -268,21 +291,27 @@ unverified accuracy claims.
 
 | Business requirement | Functional requirements | Design contract | Owning code | Verification |
 | --- | --- | --- | --- | --- |
-| [BR-5](00-product-context.md) Highlights are useful and editable | FR-HLT-01…FR-HLT-25 | DESIGN.md §5, §6, §8 | `core/entities/highlight/src/lib.rs`; `app/lib/src/features/highlights/`; `app/lib/src/features/editing/data/editing_repository.dart` | `app/test/highlights_screen_test.dart`; `app/test/editing_repository_test.dart` |
+| [BR-5](00-product-context.md) Highlights are useful and editable | FR-HLT-01…FR-HLT-27 | DESIGN.md §5.1–5.6, §6, §8 | `core/entities/highlight/src/lib.rs`; `app/lib/src/features/highlights/`; `app/lib/src/features/editing/data/editing_repository.dart` | `app/test/highlights_screen_test.dart`; `app/test/editing_repository_test.dart` |
+| [BR-8](00-product-context.md) Design fidelity and the shared review surface | Section 5 rows; FR-HLT-26; 09 FR-SHL-46 to FR-SHL-48 | DESIGN.md §2, §3, §4, §5.1–5.6, §6, §7, §8 | `highlights_view.dart`, `clip_inspector_panel.dart`, `studio_shell.dart`, `timeline_dock.dart` | Design audit; no shared-surface or clip-preview test — not recorded |
 | [BR-3](00-product-context.md) User-confirmed results | FR-HLT-10…FR-HLT-13, FR-HLT-19 | DESIGN.md §6 Clip row | `editing_repository.dart` (`keepClip`) | Same tests; ranking never selects a clip |
-| [BR-8](00-product-context.md) Design fidelity | Section 5 rows; FR-HLT-26 | DESIGN.md §2, §3, §4, §6, §7, §8 | `highlights_view.dart` | Design audit — not recorded |
 | [BR-9](00-product-context.md) Accessibility | Section 5 focus, contrast, and hit-target rows | DESIGN.md §2, §4; USAGE.md checklist | `highlights_view.dart` | Accessibility checklist — not recorded |
 | [NFR-4](00-product-context.md) Data integrity | FR-HLT-17, FR-HLT-18, NFR-HLT-4 | — | `editing_store.dart` (`highlight_clips`, `order_index`) | `editing_repository_test.dart`, order and settings tests |
 
-Code index: `highlights_view.dart`, `highlight_ranking_providers.dart`,
-`highlights_screen.dart`, `highlight_clip.dart`, `match_edit.dart`,
-`editing_repository.dart`, `core/entities/highlight/src/lib.rs`, and
-`facade.rs` (`rank_highlights`). Prior evidence at baseline:
+Code index: `highlights_view.dart`, `clip_inspector_panel.dart`,
+`highlight_ranking_providers.dart`, `highlights_screen.dart`,
+`highlight_clip.dart`, `match_edit.dart`, `editing_repository.dart`,
+`studio_shell.dart`, `timeline_dock.dart`, `core/entities/highlight/src/lib.rs`,
+and `facade.rs` (`rank_highlights`). Prior evidence at baseline:
 `docs/verification/manual-editing-and-export.md`,
 `docs/verification/accuracy-evaluation.md`, `docs/architecture.md` (step 7),
 `docs/data-storage-models.md` (`highlight_clips`; ranks not persisted).
 
 ## 10. Approval
+
+Version 1.1 (2026-11-02) aligns Highlights with the shared review surface
+(09 FR-SHL-46 to FR-SHL-48): the feature is a review lens over one preview,
+inspector, and timeline dock, the Clip tab is its default, and FR-HLT-27 adds
+shared-preview clip auditioning. It requires re-approval.
 
 | Role | Name | Decision | Date |
 | --- | --- | --- | --- |
