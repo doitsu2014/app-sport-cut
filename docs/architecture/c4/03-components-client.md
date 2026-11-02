@@ -28,8 +28,10 @@ later phase lands inside its folder instead of spreading across the app.
 
 | Component | Path | Responsibility |
 | --- | --- | --- |
-| App shell | `app/lib/src/app` (`di.dart`, `router.dart`) | Startup, dependency injection, named routes. |
+| Bootstrap | `app/lib/main.dart` | Initializes the binding, ensures a service target, initializes the engine, installs the Riverpod overrides, and runs the shell. |
+| App shell | `app/lib/src/app` (`di.dart`, `router.dart`) | Dependency injection, named routes, and the theme entry point. |
 | Design system | `app/lib/src/app/design` | Tokens, metrics, typography, colour, and shared components. |
+| ServiceSupervisor | `bridge/service_supervisor.dart` | Starts the embedded helper in a packaged build, reuses a running one, and hands the endpoint and token to the engine. |
 | SportcutEngine | `bridge/sportcut_engine.dart` | Typed engine API. The only place the app knows the service exists. |
 | ServiceConnection | `bridge/protocol_client.dart` | Unix socket, length-prefixed framing, request correlation, `service.hello` handshake. |
 | Models | `bridge/models.dart` | Typed DTOs mirrored from the protocol. |
@@ -41,6 +43,14 @@ later phase lands inside its folder instead of spreading across the app.
   never hard-codes a protocol method. Every feature that reaches the engine has
   its own edge to `SportcutEngine`; `editing` works on already-loaded data and
   has none.
+- **Bootstrap is the composition root.** `main.dart` asks the supervisor for a
+  target, initializes the engine with it, and only then runs the shell.
+- **Development and packaged launches meet at the same contract.** With
+  `SPORTCUT_ENDPOINT` or `SPORTCUT_STATE_ROOT` set, the supervisor returns the
+  environment target and launches nothing. Without them, it starts
+  `Contents/Helpers/SportcutService` against
+  `Application Support/Sportcut/state`, reuses a helper that already answers,
+  and stops the one it started. Both paths end at `SportcutEngine.initialize`.
 - **Everything renders through the design system.** Feature code takes its
   colours, spacing, type, and motion from tokens and shared components; it does
   not carry raw hex values or ad-hoc pixel constants (DS-1). The diagram draws
@@ -57,4 +67,7 @@ later phase lands inside its folder instead of spreading across the app.
 The client sends protocol methods and decodes results; it computes no media,
 geometry, or score rules. The wire contract is [protocol.md](../protocol.md);
 the methods are defined once in `core/gateways/protocol` and mirrored in the
-bridge.
+bridge. The component view shows the `SportcutService` container so the bridge
+has a visible endpoint: `ServiceConnection` crosses the process boundary, and
+`ServiceSupervisor` is the only other component that touches the service
+process.

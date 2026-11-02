@@ -21,13 +21,13 @@ question; read the one that matches yours.
 
 ### [c4/](c4/README.md) — the C4 model
 
-Four levels, each a page with a generated diagram: system context, containers,
-components of the service and of the client. The model is
-`c4/workspace.dsl`, a Structurizr workspace; the SVGs in `c4/generated/` are
-rendered from it by Structurizr and PlantUML (pinned Docker images) through
-`tools/generate-c4-diagrams.sh`, and `tools/check-c4-model.sh` fails when the
-model and the code drift apart. Read this first if you are new to the codebase.
-The code level (L4) is deliberately omitted in favour of the layering set below.
+Four levels across five diagrams: system context, containers, components of the
+service and of the client, and a generated code view of the Rust module graph.
+The model is `c4/workspace.dsl`, a Structurizr workspace; the L1–L3 SVGs in
+`c4/generated/` are rendered from it by Structurizr and PlantUML (pinned Docker
+images), and the L4 SVG is generated from the Rust source by the same script.
+`tools/check-c4-model.sh` fails when the model and the code drift apart. Read
+this first if you are new to the codebase.
 
 ### [layering.md](layering.md) — engine design
 

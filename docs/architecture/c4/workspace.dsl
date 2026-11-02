@@ -13,7 +13,7 @@ workspace "Sportcut" "Turns one badminton recording into a highlight video on th
 
             # --- L2: containers and data stores --------------------------------
 
-            app = container "Flutter client" "Library, studio, playback, and the protocol client. Links no Rust." "Dart 3 · Riverpod · app/" {
+            app = container "Flutter client" "Library, studio, playback, the protocol client, and the packaged helper supervisor. Links no Rust." "Dart 3 · Riverpod · Flutter macOS · app/" {
                 tags "App"
 
                 group "Feature folders" {
@@ -70,6 +70,11 @@ workspace "Sportcut" "Turns one badminton recording into a highlight video on th
                 }
 
                 group "Bridge" {
+                    supervisor = component "ServiceSupervisor" "Starts the embedded helper, reuses a running one, and hands the endpoint and token to the engine. Development runs bypass it." "app/lib/src/bridge/service_supervisor.dart" {
+                        properties {
+                            "path" "app/lib/src/bridge/service_supervisor.dart"
+                        }
+                    }
                     sportcutEngine = component "SportcutEngine" "Typed engine API. The only place the app knows the service exists." "app/lib/src/bridge/sportcut_engine.dart" {
                         properties {
                             "path" "app/lib/src/bridge/sportcut_engine.dart"
@@ -96,7 +101,12 @@ workspace "Sportcut" "Turns one badminton recording into a highlight video on th
                 }
 
                 group "App shell" {
-                    shell = component "App shell" "Startup, dependency injection, routing." "app/lib/src/app · di/router" {
+                    bootstrap = component "Bootstrap" "Initializes the Flutter binding, ensures a service target, initializes the engine, and installs the Riverpod overrides." "app/lib/main.dart" {
+                        properties {
+                            "path" "app/lib/main.dart"
+                        }
+                    }
+                    shell = component "App shell" "Dependency injection, named routes, and the theme entry point." "app/lib/src/app · di/router" {
                         properties {
                             "path" "app/lib/src/app/di.dart"
                         }
@@ -104,11 +114,11 @@ workspace "Sportcut" "Turns one badminton recording into a highlight video on th
                 }
             }
 
-            service = container "SportcutService" "Background process. Owns media processing, analysis, jobs, the catalog, and export." "Rust · core/adapters/service" {
+            service = container "SportcutService" "Background process, launched by the app or tools/run-service.sh. Owns media processing, analysis, jobs, the catalog, and export." "Rust · separate process · core/adapters/service" {
                 tags "Service"
 
                 group "Adapters" {
-                    serviceHost = component "Service host" "Process host: Unix socket, peer UID, single-instance lock, job loop, cancellation." "sportcut-service · core/adapters/service" {
+                    serviceHost = component "Service host" "The composition root crate: binds the socket, owns the lifecycle, and wires the host modules to the facade." "sportcut-service · core/adapters/service" {
                         properties {
                             "crate" "sportcut-service"
                         }
@@ -116,6 +126,74 @@ workspace "Sportcut" "Turns one badminton recording into a highlight video on th
                     api = component "Engine facade" "The library the host calls. Orchestrates the use cases." "sportcut-api · core/adapters/api" {
                         properties {
                             "crate" "sportcut-api"
+                        }
+                    }
+                }
+
+                group "Host modules" {
+                    entrypoint = component "Process entry" "Parses the launch, binds the endpoint, runs the server, and maps the exit code." "core/adapters/service/src/main.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/main.rs"
+                        }
+                    }
+                    launchConfig = component "Launch configuration" "Parses the launcher flags without a CLI crate; owns media-tool and inference-asset resolution." "core/adapters/service/src/config.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/config.rs"
+                        }
+                    }
+                    lifecycle = component "Listener and lifecycle" "Connection registry and the idle, parent-gone, running-job, and shutdown state machine." "core/adapters/service/src/server.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/server.rs"
+                        }
+                    }
+                    transport = component "Socket transport" "One thread per connection: length-prefixed frames, handshake gate, request classification, response writing." "core/adapters/service/src/rpc.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/rpc.rs"
+                        }
+                    }
+                    dispatcher = component "Dispatcher" "Single request entry point; routes lifecycle and engine methods and answers shutdown." "core/adapters/service/src/methods.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/methods.rs"
+                        }
+                    }
+                    engineMethods = component "Engine methods" "The 17 engine.* handlers: validate, resolve the match directory, call the facade, convert DTOs." "core/adapters/service/src/engine.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/engine.rs"
+                        }
+                    }
+                    security = component "Security helpers" "Token generation and constant-time comparison; 0700/0600 modes; the 103-byte sun_path guard." "core/adapters/service/src/security.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/security.rs"
+                        }
+                    }
+                    pathGuard = component "Path guard" "Canonicalizes caller paths and confines each to the root its operation owns, resolving symlinks." "core/adapters/service/src/paths.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/paths.rs"
+                        }
+                    }
+                    idempotency = component "Idempotency" "clientRequestId deduplication: a bounded in-memory window plus a durable map for job starts." "core/adapters/service/src/idempotency.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/idempotency.rs"
+                        }
+                    }
+                    stateLayout = component "State-root layout" "Derives and creates run/, logs/, matches/, recordings/, inbox/, and the rest of the state root." "core/adapters/service/src/state_root.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/state_root.rs"
+                        }
+                    }
+                    serviceLog = component "Service log" "JSON lines in logs/service.log; 10 MiB rotation; never records tokens or file contents." "core/adapters/service/src/logging.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/logging.rs"
+                        }
+                    }
+                    protocolErrors = component "Protocol errors" "Stable codes, data.kind, retryability, and user-safe messages." "core/adapters/service/src/error.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/error.rs"
+                        }
+                    }
+                    osGlue = component "OS glue" "Peer UID, exclusive flock, and parent liveness through safe nix wrappers; the documented seam if unsafe is ever needed." "core/adapters/service/src/os_glue.rs" {
+                        properties {
+                            "path" "core/adapters/service/src/os_glue.rs"
                         }
                     }
                 }
@@ -199,7 +277,7 @@ workspace "Sportcut" "Turns one badminton recording into a highlight video on th
                 }
             }
 
-            state = container "State root" "Catalog (schema v6 target), recordings in custody, artifacts, run/ and logs/." "SQLite + files" {
+            state = container "State root" "Catalog (schema v6 target), recordings in custody, artifacts, and run/, logs/, inbox/. A development run uses a temporary root; a packaged launch uses Application Support." "SQLite + files · <state-root>/" {
                 tags "Database"
             }
 
@@ -238,17 +316,21 @@ workspace "Sportcut" "Turns one badminton recording into a highlight video on th
 
         app -> service "Sends protocol methods" "JSON-RPC over a Unix socket · Protocol v1"
 
+        app -> service "Launches the embedded helper and waits for its socket" "Process launch · packaged build"
+
+        app -> recordings "Picks the file and passes its path to the service; never writes the original" "macOS file picker"
+
         app -> avfoundation "Plays the recording and the proxy" "macOS framework"
 
         app -> clientCatalog "Reads and writes its own v5 catalog" "SQLite"
 
-        service -> state "Owns the catalog, recording custody, jobs, and artifacts" "SQLite + filesystem"
+        service -> state "Owns the catalog, recording custody, jobs, artifacts, logs, and the socket and token" "SQLite + filesystem"
 
         service -> recordings "Copies the selected file into custody; never modifies the original" "filesystem"
 
         service -> ffmpeg "Resolves the binaries; media and export run them" "CLI"
 
-        service -> tflite "Runs player tracking when macos-tflite-eval is on" "C API"
+        service -> tflite "Resolves the runtime and model from the bundle or flags, then runs player tracking when macos-tflite-eval is on" "C API"
 
         # --- L3 service: compile-time dependencies ------------------------------
         # These mirror the path dependencies in core/Cargo.toml. Edges to
@@ -302,7 +384,60 @@ workspace "Sportcut" "Turns one badminton recording into a highlight video on th
 
         vision -> tflite "Loads the runtime and the person model" "C API"
 
+        # --- L3 service: host modules -------------------------------------------
+        # Runtime structure inside sportcut-service, not compile-time crate
+        # edges. The crate edges above are checked against cargo metadata; these
+        # show how one process is put together.
+
+        entrypoint -> launchConfig "Parses the launch"
+
+        entrypoint -> lifecycle "Binds the endpoint and runs the server"
+
+        launchConfig -> ffmpeg "Resolves the binaries before a worker starts" "CLI"
+
+        launchConfig -> tflite "Resolves the bundled runtime and model" "C API"
+
+        lifecycle -> stateLayout "Prepares the state-root directories"
+
+        lifecycle -> transport "Accepts a connection and starts its thread"
+
+        lifecycle -> security "Applies private modes and writes the token"
+
+        lifecycle -> osGlue "Checks the peer UID, holds the flock, and watches the parent"
+
+        lifecycle -> serviceLog "Records lifecycle transitions"
+
+        transport -> dispatcher "Hands each request to"
+
+        dispatcher -> idempotency "Deduplicates mutations by clientRequestId"
+
+        dispatcher -> security "Compares the handshake token in constant time"
+
+        dispatcher -> engineMethods "Routes engine.*"
+
+        dispatcher -> protocolErrors "Builds protocol errors"
+
+        dispatcher -> wireProtocol "Reads method names and capabilities"
+
+        engineMethods -> api "Calls the facade"
+
+        engineMethods -> pathGuard "Confines the resolved match directory"
+
+        stateLayout -> state "Creates run/, logs/, matches/, recordings/, and inbox/"
+
+        serviceLog -> state "Writes logs/service.log"
+
         # --- L3 client ----------------------------------------------------------
+
+        bootstrap -> supervisor "Ensures a service target before the first frame"
+
+        bootstrap -> sportcutEngine "Initializes the typed engine"
+
+        bootstrap -> shell "Runs the app shell"
+
+        supervisor -> sportcutEngine "Resolves the development target from the environment"
+
+        supervisor -> service "Launches the embedded helper and stops it on exit" "Process launch · packaged build"
 
         analysis -> sportcutEngine "Calls the typed engine API"
 
@@ -323,6 +458,8 @@ workspace "Sportcut" "Turns one badminton recording into a highlight video on th
         workspaceFeature -> sportcutEngine "Calls the typed engine API"
 
         sportcutEngine -> serviceConnection "Sends protocol methods"
+
+        serviceConnection -> service "Sends framed JSON-RPC requests" "Unix socket · Protocol v1"
 
         sportcutEngine -> models "Decodes results into typed models"
 
@@ -355,6 +492,7 @@ workspace "Sportcut" "Turns one badminton recording into a highlight video on th
         component app "l3-components-client" {
             include *
             include clientCatalog
+            include service
             autolayout
         }
     }

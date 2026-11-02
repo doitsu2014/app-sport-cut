@@ -5,8 +5,9 @@
 # The workspace DSL is hand-reviewed, so it can drift in two directions: it can
 # name a crate, file, or feature folder that no longer exists, and the code can
 # grow a crate, dependency, or feature the model never learned about. Both fail
-# this check. It also verifies that every view has a committed diagram and that
-# the pages link to files that are really there.
+# this check. It also verifies that every view has a committed diagram, that the
+# generated L4 code diagram is present, and that the pages link to files that
+# are really there.
 #
 # Usage:
 #   tools/check-c4-model.sh
@@ -173,11 +174,22 @@ generated = sorted(
     for name in os.listdir(os.path.join(c4_dir, "generated"))
     if name.endswith(".svg")
 ) if os.path.isdir(os.path.join(c4_dir, "generated")) else []
+
+# The L4 code view is generated from the Rust module graph, not declared as a
+# Structurizr view (the DSL has no code level). It is still part of the set.
+extra_diagrams = {"l4-code"}
+for diagram in sorted(extra_diagrams):
+    if diagram not in generated:
+        fail(
+            f"generated diagram '{diagram}.svg' is missing "
+            "(run tools/generate-c4-diagrams.sh)"
+        )
+
 for view in views:
     if view not in generated:
         fail(f"view '{view}' has no generated diagram (run tools/generate-c4-diagrams.sh)")
 for diagram in generated:
-    if diagram not in views:
+    if diagram not in views and diagram not in extra_diagrams:
         fail(f"generated diagram '{diagram}.svg' matches no view")
 
 # The service component view models the path dependencies among the crates,
