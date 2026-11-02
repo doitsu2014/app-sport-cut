@@ -117,8 +117,12 @@ class ScCalibrationOverlay extends StatefulWidget {
   final ValueChanged<int> onSelect;
 
   /// Called while a corner is dragged, with its index and the pointer's
-  /// clamped normalised position inside [box].
-  final void Function(int index, Offset normalizedPosition) onDrag;
+  /// normalised delta inside [box].
+  ///
+  /// It is a delta, not a position: the handle moves under the pointer, so a
+  /// position reconstructed from the widget's own placement would count that
+  /// movement twice and the handle would drift away from the cursor.
+  final void Function(int index, Offset normalizedDelta) onDrag;
 
   /// The engine's projected outline and net, or null when nothing has been
   /// projected yet (an uncalibrated match or a rejected court).
@@ -245,8 +249,12 @@ class ScCourtHandle extends StatefulWidget {
   final ValueChanged<int> onSelect;
 
   /// Called while the handle is dragged, with its index and the pointer's
-  /// clamped normalised position inside [box].
-  final void Function(int index, Offset normalizedPosition) onDrag;
+  /// normalised delta inside [box].
+  ///
+  /// It is a delta, not a position: the handle moves under the pointer, so a
+  /// position reconstructed from the widget's own placement would count that
+  /// movement twice and the handle would drift away from the cursor.
+  final void Function(int index, Offset normalizedDelta) onDrag;
 
   @override
   State<ScCourtHandle> createState() => _ScCourtHandleState();
@@ -267,13 +275,13 @@ class _ScCourtHandleState extends State<ScCourtHandle> {
   }
 
   void _handlePanUpdate(DragUpdateDetails details) {
-    final Offset local = details.localPosition + _origin;
+    final Size box = widget.box;
+    if (box.isEmpty || details.delta == Offset.zero) {
+      return;
+    }
     widget.onDrag(
       widget.index,
-      Offset(
-        (local.dx / widget.box.width).clamp(0.0, 1.0).toDouble(),
-        (local.dy / widget.box.height).clamp(0.0, 1.0).toDouble(),
-      ),
+      Offset(details.delta.dx / box.width, details.delta.dy / box.height),
     );
   }
 
