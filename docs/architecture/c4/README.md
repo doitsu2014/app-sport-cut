@@ -1,19 +1,20 @@
 # C4 model
 
 Sportcut's architecture as a [Structurizr](https://structurizr.com) workspace:
-one model, four views, each answering a different question. Every diagram is
-rendered from the same `workspace.dsl`, so the pictures cannot disagree with
-each other.
+one model, five diagrams across the four C4 levels. The L1–L3 diagrams are
+rendered from the same `workspace.dsl`, so they cannot disagree with each
+other; the L4 view is generated from the Rust source, so it cannot drift from
+the code.
 
 ## Read in this order
 
 | Level | Page | Diagram | Answers |
 | --- | --- | --- | --- |
-| L1 | [01-system-context.md](01-system-context.md) | [l1-system-context.svg](generated/l1-system-context.svg) | Who uses Sportcut, and what it touches outside its own boundary? |
+| L1 | [01-system-context.md](01-system-context.md) | [l1-system-context.svg](generated/l1-system-context.svg) | Who uses Sportcut, and what does it touch outside its own boundary? |
 | L2 | [02-containers.md](02-containers.md) | [l2-containers.svg](generated/l2-containers.svg) | What runs where, and who owns the data? |
 | L3 | [03-components-service.md](03-components-service.md) | [l3-components-service.svg](generated/l3-components-service.svg) | Which crates make up the service, and how do they depend on each other? |
 | L3 | [03-components-client.md](03-components-client.md) | [l3-components-client.svg](generated/l3-components-client.svg) | How is the Flutter client organised, and where does it reach the engine? |
-| L4 | [04-code.md](04-code.md) | — (deliberately omitted) | Why there is no code-level C4 view here. |
+| L4 | [04-code.md](04-code.md) | [l4-code.svg](generated/l4-code.svg) | How is the Rust engine wired module by module, and which crates does the code cross? |
 
 The SVGs open in any browser, render inline on GitHub, and need no network: the
 renderer embeds its fonts and styles.
@@ -28,7 +29,10 @@ renderer embeds its fonts and styles.
 | «Person», «External», «Database» | Structurizr tags. They shape the icon and colour; the text always wins. |
 
 One arrow is one direction. The service component view is dense by design: its
-arrows are the compile-time dependencies between crates.
+arrows are the compile-time dependencies between crates. The code view is a
+different notation: packages are crates nested under their layer, boxes are
+source modules, solid arrows are `use crate::` references inside a crate, and
+dashed arrows are `use sportcut_*` references between crates.
 
 ## The workspace
 
@@ -36,7 +40,11 @@ arrows are the compile-time dependencies between crates.
 
 - every element (name, C4 type, technology, one-sentence responsibility);
 - every declared relationship (from, to, verb, mechanism);
-- every view (which elements appear, in which group).
+- every L1–L3 view (which elements appear, in which group).
+
+The L4 view is generated from the Rust source instead, because Structurizr has
+no code level (see [04-code.md](04-code.md)). It is not part of the Structurizr
+workspace; open the SVG or the page directly.
 
 It does not hold protocol method tables, database schemas, or sequence flows.
 Those live in [protocol.md](../protocol.md),
@@ -54,7 +62,7 @@ Two properties bind the model to the repository:
 
 ```bash
 tools/generate-c4-diagrams.sh --pull    # once per machine: fetch the pinned images
-tools/generate-c4-diagrams.sh           # rewrite generated/*.svg
+tools/generate-c4-diagrams.sh           # rewrite generated/*.svg (L1–L4)
 tools/generate-c4-diagrams.sh --check   # fail if the committed SVGs are stale
 tools/check-c4-model.sh                 # fail if the workspace drifted from the code
 ```
@@ -77,19 +85,21 @@ not a silent drift. After the first `--pull`, generation is offline.
 - the component view's crate relationships match `cargo metadata` in both
   directions — no missing dependency, no invented one;
 - every view has a committed diagram and no diagram matches a missing view;
+- the generated L4 code diagram is present;
 - every relative link in these pages resolves.
 
-Run both commands whenever the crate graph, a container, or a feature folder
-changes, and commit the regenerated SVGs.
+Run both commands whenever the crate graph, a container, a module, or a feature
+folder changes, and commit the regenerated SVGs.
 
-## Why there is no L4
+## Why L4 is generated, not modelled
 
-A code-level view already exists and is enforced:
-[layering.md](../layering.md) states the rule,
-[layering-diagram.html](../layering-diagram.html) is generated from `cargo
-metadata`, and `tools/check-layering.sh` fails the build on an outward
-dependency. A second L4 in the workspace would either duplicate that or drift
-from it. [04-code.md](04-code.md) records the decision.
+Structurizr has no code level: it models systems, containers, and components.
+The L4 view is therefore generated from `cargo metadata` and the Rust source by
+the same script that renders the other diagrams. A hand-maintained class diagram
+would either duplicate [layering.md](../layering.md) and
+[layering-diagram.html](../layering-diagram.html) or drift from the code; a
+generated module graph cannot drift. [04-code.md](04-code.md) explains the
+notation and its scope.
 
 ## How this set relates to the others
 

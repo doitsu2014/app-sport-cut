@@ -12,7 +12,7 @@ dependency.
 
 | Layer | Component | Crate | Responsibility |
 | --- | --- | --- | --- |
-| Adapter | Service host | `sportcut-service` | Unix socket, peer UID, single-instance lock, request loop, job loop, cancellation, checkpoint resume. |
+| Adapter | Service host | `sportcut-service` | Composition root: binds the socket, owns the lifecycle, and wires the host modules to the facade. |
 | Adapter | Engine facade | `sportcut-api` | The library the host calls; orchestrates the use cases. |
 | Gateway | Wire contract | `sportcut-protocol` | Method names, DTOs, error codes, framing, version negotiation. No dependency on anything else. |
 | Gateway | Storage adapter | `sportcut-storage` | Catalog, artifacts, recording store; implements the ports declared by the use cases. |
@@ -30,8 +30,41 @@ dependency.
 `core/drivers/cli` (`sportcut-cli`) is a developer entry point, not part of the
 shipped service. It is drawn at the bottom and its edges are omitted.
 
+## Host modules
+
+The `sportcut-service` crate is one process, not one blob. These modules are its
+internals; their arrows are runtime calls, not compile-time dependencies.
+
+| Module | Path | Responsibility |
+| --- | --- | --- |
+| Process entry | `src/main.rs` | Parses the launch, binds the endpoint, runs the server, maps the exit code. |
+| Launch configuration | `src/config.rs` | Parses the launcher flags without a CLI crate; owns media-tool and inference-asset resolution. |
+| Listener and lifecycle | `src/server.rs` | Connection registry and the idle, parent-gone, running-job, and shutdown state machine. |
+| Socket transport | `src/rpc.rs` | One thread per connection: length-prefixed frames, handshake gate, request classification, response writing. |
+| Dispatcher | `src/methods.rs` | Single request entry point; routes lifecycle and engine methods and answers shutdown. |
+| Engine methods | `src/engine.rs` | The 17 `engine.*` handlers: validate, resolve the match directory, call the facade, convert DTOs. |
+| Security helpers | `src/security.rs` | Token generation and constant-time comparison; `0700`/`0600` modes; the 103-byte `sun_path` guard. |
+| Path guard | `src/paths.rs` | Canonicalizes caller paths and confines each to the root its operation owns. |
+| Idempotency | `src/idempotency.rs` | `clientRequestId` deduplication: a bounded in-memory window plus a durable map for job starts. |
+| State-root layout | `src/state_root.rs` | Derives and creates `run/`, `logs/`, `matches/`, `recordings/`, `inbox/`. |
+| Service log | `src/logging.rs` | JSON lines in `logs/service.log`; 10 MiB rotation; never records tokens or file contents. |
+| Protocol errors | `src/error.rs` | Stable codes, `data.kind`, retryability, and user-safe messages. |
+| OS glue | `src/os_glue.rs` | Peer UID, exclusive `flock`, and parent liveness through safe `nix` wrappers. |
+
+The request path is **transport → dispatcher → engine methods → facade**; the
+lifecycle path is **entrypoint → listener → transport**, with security and OS
+glue on the edges. Keeping the two paths separate is why the transport knows no
+methods and the handlers know no framing.
+
+The module graph inside and across these crates, down to one box per source
+file, is the generated [L4 code view](04-code.md).
+
 ## What the arrows mean
 
+- **Two kinds of arrow.** Arrows between crates are compile-time path
+  dependencies and are checked against `cargo metadata` in both directions.
+  Arrows among the host modules are runtime calls inside one process; they are
+  reviewed, not machine-checked.
 - **Outer may depend on inner, never the reverse.** Adapters → gateways and use
   cases → entities. The rule and its enforcement are in
   [layering.md](../layering.md) and `tools/check-layering.sh`.
@@ -48,9 +81,10 @@ shipped service. It is drawn at the bottom and its edges are omitted.
   it wires the facade to the socket. This is the single exception recorded in
   ADR-0002.
 
-The picture is dense by design; it is the dependency set, not a summary.
-`docs/architecture/layering-diagram.html` remains the authoritative edge audit
-because it classifies every edge as inward, violation, or declared.
+The picture is dense by design; it is the dependency set and the host call
+graph, not a summary. `docs/architecture/layering-diagram.html` remains the
+authoritative edge audit because it classifies every edge as inward, violation,
+or declared.
 
 ## External tools
 

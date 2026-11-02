@@ -4,21 +4,25 @@
 
 Two processes and the data they own. The Flutter client draws the product; the
 Rust service does the work. They share no memory and link no library: the only
-path between them is the protocol on a Unix socket.
+path between them is the protocol on a Unix socket. A development run starts the
+service separately; a packaged app launches the helper embedded at
+`Contents/Helpers/SportcutService` and reuses it on later launches.
 
 ## Containers and data stores
 
 | Container | Technology | Responsibility | Code |
 | --- | --- | --- | --- |
-| Flutter client | Dart 3, Riverpod, Flutter macOS | Library, studio, playback, and the protocol client. Links no Rust. | `app/` |
-| SportcutService | Rust, separate process | Media processing, analysis, jobs, catalog, export. One heavy job at a time. | `core/adapters/service` |
-| State root | SQLite + files | Catalog, recordings in custody, artifacts, jobs, logs, socket and token. | `<state-root>/` at runtime |
+| Flutter client | Dart 3, Riverpod, Flutter macOS | Library, studio, playback, protocol client, and the packaged helper supervisor. Links no Rust. | `app/` |
+| SportcutService | Rust, separate process | Media processing, analysis, jobs, catalog, export. Launched by the app or `tools/run-service.sh`. One heavy job at a time. | `core/adapters/service` |
+| State root | SQLite + files | Catalog, recordings in custody, artifacts, logs, socket, and token. A development run uses a temporary or chosen root; a packaged launch uses `Application Support/Sportcut/state`. | `<state-root>/` at runtime |
 | Client v5 catalog | SQLite, interim | The app's own catalog and recording copy until ADR-0001 Phase 4 retires them. | `app/lib/src/features/library/data/match_catalog.dart` |
 
 `ffmpeg`/`ffprobe`, the TFLite runtime with the person model, and AVFoundation
 are outside the system boundary: the service invokes the first two, the client
 uses the third. `ffmpeg` is required at runtime; the inference assets are
-optional and only player tracking needs them.
+optional and only player tracking needs them. In a packaged app the helper
+resolves the TFLite runtime and model from the bundle; a development launch may
+pass explicit flags or use the same resolution.
 
 ## Relationships
 
@@ -26,12 +30,14 @@ optional and only player tracking needs them.
 | --- | --- | --- |
 | Editor → Flutter client | Imports, marks, confirms, exports | Desktop UI |
 | Flutter client → SportcutService | Sends protocol methods | JSON-RPC framing over a Unix socket, Sportcut Service Protocol v1 |
+| Flutter client → SportcutService | Launches the embedded helper and waits for its socket | Process launch, packaged build only |
+| Flutter client → Recording files | Picks the file and passes its path; never writes the original | macOS file picker |
 | Flutter client → AVFoundation | Plays the recording and the proxy | macOS framework |
 | Flutter client → Client v5 catalog | Reads and writes its own catalog | SQLite, **interim** |
-| SportcutService → State root | Owns the catalog, custody, jobs, artifacts | SQLite and filesystem |
+| SportcutService → State root | Owns the catalog, custody, jobs, artifacts, logs, socket, and token | SQLite and filesystem |
 | SportcutService → Recording files | Copies the selected file into custody | Filesystem read; the original is never written |
 | SportcutService → ffmpeg/ffprobe | Resolves the binaries; media and export run them | Child process |
-| SportcutService → TFLite | Runs player tracking when enabled | C API, optional per build |
+| SportcutService → TFLite | Resolves the runtime and model, then runs player tracking | C API, optional per build |
 
 ## Trust boundary
 
@@ -46,6 +52,9 @@ optional and only player tracking needs them.
 - The service accepts `--ffmpeg`, `--ffprobe`, `--tflite-library`, and
   `--person-model`; absent inference flags resolve bundle files, then the
   environment.
+- A packaged app launches one embedded helper and reuses it; the service exits
+  after 120 s with no connections and no running job, and sooner after the
+  parent app disappears when idle.
 
 The process model, lifecycle, and failure handling are in
 [background-service.md](../background-service.md). The wire contract is
