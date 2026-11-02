@@ -73,24 +73,19 @@ class _CalibrationOverlayHostState
     });
   }
 
-  /// Move the handle to the pointer's normalised position.
+  /// Move the handle by the pointer's normalised delta.
   ///
-  /// The controller takes an offset rather than a position, so the pointer is
-  /// compared with the corner as the controller currently holds it. Reading
-  /// the state here rather than from the last build keeps the drag exact even
-  /// when several pointer updates arrive between two frames.
-  void _drag(int index, Offset position) {
-    final corners = ref.read(calibrationControllerProvider).corners;
-    if (index < 0 || index >= corners.length) {
-      return;
-    }
-    final corner = corners[index];
+  /// The handle follows the pointer, so each pan update is applied as a
+  /// relative step. The overlay reports the pointer's movement rather than a
+  /// position, which avoids reconstructing a point from a widget that has
+  /// already moved and thereby counting that movement twice.
+  void _drag(int index, Offset delta) {
     if (!_dragging) {
       setState(() => _dragging = true);
     }
     ref
         .read(calibrationControllerProvider.notifier)
-        .nudgeCorner(index, position.dx - corner.x, position.dy - corner.y);
+        .nudgeCorner(index, delta.dx, delta.dy);
   }
 
   /// Clear the active handle and ask the engine to project the court.
