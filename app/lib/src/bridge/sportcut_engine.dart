@@ -212,7 +212,10 @@ class SportcutEngine {
           'engine.import.start',
           <String, dynamic>{
             'matchId': matchId,
-            'matchDir': matchDir,
+            // Protocol §5: a release service resolves the match directory
+            // itself and rejects a client-supplied one. The development
+            // affordance is kept for checkouts pointed at an explicit root.
+            if (!kReleaseMode) 'matchDir': matchDir,
             'originalPath': originalPath,
             'samplingRate': samplingRate,
           },
@@ -436,10 +439,13 @@ class SportcutEngine {
   /// reads the application's database. Follow the returned job with [jobStatus]
   /// and read the match manifest once it reaches a terminal state.
   Future<JobHandleDto> startExport(ExportRequestDto request) => _guard(() async {
-        final result = await _connection.call(
-          'engine.export.start',
-          request.toJson(),
-        );
+        final params = request.toJson();
+        // Same protocol rule as imports: a release service resolves the match
+        // directory from matchId and rejects a client-supplied one.
+        if (kReleaseMode) {
+          params.remove('matchDir');
+        }
+        final result = await _connection.call('engine.export.start', params);
         return JobHandleDto.fromJson(_requireObject(result, 'engine.export.start'));
       });
 
