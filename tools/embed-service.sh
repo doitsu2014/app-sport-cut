@@ -8,9 +8,9 @@
 #   tools/build-service.sh
 #   tools/embed-service.sh /path/to/Sportcut.app
 #
-# When CODESIGN_IDENTITY is set, the helper is signed in place. When it is not
-# set, the script copies the helper, prints the exact codesign command to run,
-# and exits 0 so packaging can continue without a signing identity.
+# When CODESIGN_IDENTITY is set, the helper is signed in place with that
+# identity. When it is not set, the copy is ad-hoc signed so Xcode accepts it as
+# nested code and the app can still be built and launched locally.
 #
 # Usage:
 #   CODESIGN_IDENTITY="Developer ID Application: ..." tools/embed-service.sh <app-bundle>
@@ -81,12 +81,10 @@ if [ -n "${CODESIGN_IDENTITY:-}" ]; then
   codesign --verify --strict --verbose=2 "${HELPER}"
   echo "==> signed and verified ${HELPER}"
 else
-  cat <<EOF
-
-CODESIGN_IDENTITY is not set; the helper was copied but not signed.
-Run this exact command before packaging:
-
-  codesign --force --options runtime --timestamp --sign "<identity>" "${HELPER}"
-
-EOF
+  # A lipo-combined binary keeps only a linker signature, which Xcode refuses
+  # as nested code. Ad-hoc sign the copy so the app can be signed and launched
+  # without a Developer ID; packaging re-signs it with the real identity.
+  codesign --force --sign - "${HELPER}"
+  codesign --verify --strict "${HELPER}"
+  echo "==> ad-hoc signed ${HELPER}"
 fi

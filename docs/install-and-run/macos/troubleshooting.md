@@ -136,8 +136,8 @@ library.
 
 ### `toolchain_unavailable` — ffmpeg or ffprobe
 
-Both binaries are required. Install them together, or point the engine at a
-specific pair:
+In a development run, both binaries are required. Install them together, or
+point the engine at a specific pair:
 
 ```bash
 export SPORTCUT_FFMPEG=/usr/local/bin/ffmpeg
@@ -145,19 +145,25 @@ export SPORTCUT_FFPROBE=/usr/local/bin/ffprobe
 ```
 
 The service accepts `--ffmpeg` and `--ffprobe` instead. The packaged app passes
-`/opt/homebrew/bin` or `/usr/local/bin` when present.
+its own `Contents/Helpers/ffmpeg` and `Contents/Helpers/ffprobe`, so this error
+in an installed app means the bundle was damaged or the helper was replaced;
+reinstall from the DMG.
 
 ### Player tracking reports unsupported
 
 Check `service.health` first — it reports whether inference is *usable*, not
-whether a file exists. The two causes:
+whether a file exists. The causes:
 
 - the service was built without the runtime feature: rebuild without
   `SPORTCUT_MACOS_TFLITE_EVAL=0`;
 - the runtime or model is missing, or the model fingerprint does not match the
   supported one: fetch and embed the assets
   (`tools/fetch-inference-assets.sh`), or set `SPORTCUT_TFLITE_LIBRARY` and
-  `SPORTCUT_PERSON_MODEL`.
+  `SPORTCUT_PERSON_MODEL`;
+- the Mac is Intel: the bundled TFLite runtime is an arm64 build, so the
+  supervisor does not pass it and tracking is unavailable;
+- the Mac runs macOS 12–14: the bundled runtime has a 15.0 deployment target, so
+  the supervisor does not pass it either. Every other engine stage works.
 
 The service ignores client-supplied inference paths by design; sending
 `runtimePath` or `modelPath` is rejected.

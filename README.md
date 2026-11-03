@@ -43,6 +43,10 @@ tools/preflight.sh --profile engine # only what the engine needs
     the license-affecting build configuration matters. `tools/preflight.sh`
     reads it and flags GPL components, which are not shippable in a proprietary
     build (see [docs/brd/00-product-context.md](docs/brd/00-product-context.md)).
+  - The release DMG does not use this install. `tools/build-media-toolchain.sh`
+    builds a pinned, LGPL-only, universal ffmpeg/ffprobe and
+    `tools/package-macos.sh` embeds it, so the installed app has no media
+    toolchain dependency.
 
 **Client track (macOS, requires a toolchain install).**
 
@@ -107,10 +111,11 @@ for what remains of the migration.
 `--tflite-library`/`--person-model` automatically when `third_party/inference`
 holds both assets.
 
-`ffmpeg` and `ffprobe` are still required at runtime for probe, proxy, audio,
-frames, and export, whether the service runs from the checkout or a signed
-bundle. Only the inference assets are optional: without them the service reports
-`vision.available: false` in `service.health` and player tracking is unavailable.
+`ffmpeg` and `ffprobe` are required at runtime when the service runs from a
+checkout. The packaged app is self-contained: it embeds its own ffmpeg/ffprobe,
+the service helper, the TFLite runtime, and the model. Only the inference assets
+are optional: without them the service reports `vision.available: false` in
+`service.health` and player tracking is unavailable.
 
 If the Flutter SDK is not on `PATH`, export `SPORTCUT_FLUTTER_BIN` first (see
 the prerequisites above).

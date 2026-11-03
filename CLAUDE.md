@@ -26,7 +26,7 @@ fully automatic officiating — the reasoning is in
 | Native engine | Rust workspace, edition 2021, `rust-version = 1.80` |
 | Engine host | `core/adapters/service` background service over a Unix socket + JSON-RPC (ADR-0001) |
 | Language boundary | Sportcut Service Protocol v1 over a Unix socket. No FFI, no generated bindings, no Rust in the app |
-| Media processing | `ffmpeg` / `ffprobe` behind the `MediaToolchain` abstraction; service-owned and required at runtime |
+| Media processing | `ffmpeg` / `ffprobe` behind the `MediaToolchain` abstraction; service-owned and bundled with the packaged app |
 | Client catalog | Target: service-owned SQLite (schema v6 adopting v5). The client still owns its local v5 catalog until Phase 4 |
 
 ## Repository map
@@ -57,10 +57,14 @@ tools/generate-layering-diagram.sh    # regenerate docs/architecture/layering-di
 cd app && flutter analyze             # client static analysis
 
 # Service host (ADR-0001)
-tools/build-service.sh                # core/target/release/sportcut-service
+tools/build-service.sh                # universal core/target/release/sportcut-service
 tools/run-service.sh                  # dev service on a temporary state root
 tools/embed-service.sh <app>          # copy/sign Contents/Helpers/SportcutService
 tools/check-no-rust-in-app.sh         # blocking: no Rust/FFI in the app
+
+# Packaging (self-contained DMG)
+tools/build-media-toolchain.sh        # LGPL, universal ffmpeg/ffprobe for the bundle
+tools/package-macos.sh                # dist/Sportcut.dmg (signs; notarises with NOTARY_PROFILE)
 
 # Inference assets
 tools/fetch-inference-assets.sh       # download and verify TFLite runtime + model
@@ -70,15 +74,24 @@ tools/run-macos.sh                    # dev run of the legacy client on macOS
 ```
 
 The service owns media-tool discovery and inference asset resolution. On macOS,
-`tools/build-service.sh` enables the `macos-tflite-eval` feature by default; set
-`SPORTCUT_MACOS_TFLITE_EVAL=0` to omit it, and the service then runs everything
-except player tracking. The service accepts `--ffmpeg`, `--ffprobe`,
-`--tflite-library`, and `--person-model`; when the inference flags are absent it
-resolves the bundle files (`Contents/Frameworks/libtensorflowlite_c.dylib`,
+`tools/build-service.sh` builds both `arm64` and `x86_64` and combines them with
+`lipo` (set `SPORTCUT_SERVICE_ARCHS=native` for a host-only build), and enables
+the `macos-tflite-eval` feature by default; set `SPORTCUT_MACOS_TFLITE_EVAL=0`
+to omit it, and the service then runs everything except player tracking. The
+service accepts `--ffmpeg`, `--ffprobe`, `--tflite-library`, and
+`--person-model`; when the inference flags are absent it resolves the bundle
+files (`Contents/Frameworks/libtensorflowlite_c.dylib`,
 `Contents/Resources/model.tflite`) and then `SPORTCUT_TFLITE_LIBRARY` /
 `SPORTCUT_PERSON_MODEL`. The service protocol never accepts client-supplied
 inference paths: `engine.tracking.start` rejects `runtimePath` and `modelPath`,
-and the client never sends them. `ffmpeg`/`ffprobe` remain required at runtime.
+and the client never sends them.
+
+The packaged app is self-contained: `tools/package-macos.sh` embeds the
+service helper, the LGPL ffmpeg/ffprobe built by `tools/build-media-toolchain.sh`,
+the TFLite runtime, and the model. The supervisor prefers the bundled tools and
+falls back to Homebrew/PATH only for development runs; nothing outside the
+bundle is a runtime dependency. The bundled TFLite runtime is arm64-only with a
+macOS 15.0 deployment target, so tracking is Apple Silicon on macOS 15+ only.
 
 If Flutter is not on `PATH`, set `SPORTCUT_FLUTTER_BIN` to the directory
 containing the `flutter` executable before running any client-track command.

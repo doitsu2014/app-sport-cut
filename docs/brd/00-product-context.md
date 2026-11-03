@@ -316,13 +316,14 @@ feature BRD may add a stricter local rule but may not weaken these.
   the service protocol never accepts client-supplied `runtimePath` or
   `modelPath`, and `engine.tracking.start` rejects them. The legacy Flutter FFI
   path retains those parameters until the Phase 2 cutover.
-  `ffmpeg`/`ffprobe` remain required at runtime; the inference assets are
-  optional and their absence only disables player tracking.
+  The media toolchain is bundled with the packaged app; the inference assets
+  are embedded too, and their absence only disables player tracking.
 - The client and service communicate only over the documented local protocol;
   the service is a separate signed process, not a linked library.
 - Match-directory layout and schema versions are stable.
 - `tokens.css` is the single source of design values.
-- Development FFmpeg is GPL-configured and not shippable.
+- Development FFmpeg is GPL-configured and not shippable; the packaged app uses
+  the LGPL build produced by `tools/build-media-toolchain.sh`.
 - The Rust service executable ships with the app and the protocol has an
   independent major/minor version; FFI (`flutter_rust_bridge`, `dart:ffi`,
   `libsportcut_api.dylib`) is retired by ADR-0001.
@@ -346,7 +347,7 @@ feature BRD may add a stricter local rule but may not weaken these.
 
 | Dependency | Use | Release condition |
 | --- | --- | --- |
-| FFmpeg / ffprobe | Probe, proxy, audio, frames, render; service-owned tools required at runtime | LGPL build or platform-native replacement; GPL build is dev-only |
+| FFmpeg / ffprobe | Probe, proxy, audio, frames, render; service-owned tools bundled with the packaged app | **Shippable as bundled:** FFmpeg 9.0.2 built LGPL-only (`--disable-gpl`, `--disable-nonfree`, `--disable-version3`), static, universal, no external libraries, by `tools/build-media-toolchain.sh`; the DMG carries `COPYING.LGPLv2.1`, `LICENSE.md`, the build notice, and the matching source tarball. A GPL Homebrew build remains dev-only. H.264/AAC patent licensing is still open (R-4) |
 | TensorFlow Lite C runtime | macOS person detection; path resolved by the service, not the client | Apache-2.0 notice; pinned by SHA-256 |
 | EfficientDet-Lite0 int8 weights | Person detection; path resolved by the service, not the client | Weight redistribution verdict reconciled; pinned |
 | Flutter packages (Riverpod, file_picker, video_player, share_plus, path_provider) | Client runtime; `sqflite` retained through the Phase 4 rollback and shadow read, removed at Phase 5 | Recorded shippable in the register |

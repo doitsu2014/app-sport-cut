@@ -13,8 +13,8 @@ deployment modes, and they use different commands and different data roots.
 
 ## Mode 1 — production: DMG to install
 
-One command builds a release app with the service, model, and TFLite runtime
-embedded, signs it, and writes a DMG:
+One command builds a release app with the service, a license-clean ffmpeg, the
+model, and the TFLite runtime embedded, signs it, and writes a DMG:
 
 ```bash
 tools/package-macos.sh
@@ -22,17 +22,19 @@ tools/package-macos.sh
 ```
 
 Install by opening the DMG and dragging `sportcut.app` to **Applications**.
-The packaged app starts its own helper on first launch:
+There is nothing else to install. The packaged app starts its own helper on
+first launch:
 
 - state and match directories: `~/Library/Application Support/com.sportcut.sportcut/state/`
 - catalog: `~/Library/Application Support/com.sportcut.sportcut/sportcut.db`
 - service log: `~/Library/Application Support/com.sportcut.sportcut/state/logs/service.log`
-- `ffmpeg` / `ffprobe` are required at runtime and are discovered at
-  `/opt/homebrew/bin`, `/usr/local/bin`, then `PATH`
+- `ffmpeg` / `ffprobe` are embedded at `Contents/Helpers/`; the system
+  toolchain is only used by development runs
 
-This is a **personal build**: ad-hoc signed unless `CODESIGN_IDENTITY` is set,
-unsandboxed, and using the ffmpeg installed on the Mac (a GPL build is fine
-locally but is not shippable). Details and the distributable path:
+The build is self-contained and universal. It is ad-hoc signed unless
+`CODESIGN_IDENTITY` is set; set `NOTARY_PROFILE` as well to sign, notarise, and
+staple the DMG so Gatekeeper accepts a plain double-click. Player tracking is
+Apple Silicon only because the bundled TFLite runtime is arm64. Details:
 [packaging.md](packaging.md).
 
 ## Mode 2 — local development: debug service + app
@@ -73,11 +75,12 @@ The app reads the endpoint and token from `SPORTCUT_STATE_ROOT` (the layout
 | Xcode | macOS client, codesigning | App Store |
 | Rust 1.80+ | the engine and service | [rustup.rs](https://rustup.rs) |
 | Flutter SDK (Dart 3) | the client | `brew install --cask flutter` |
-| ffmpeg + ffprobe | media pipeline, at runtime | `brew install ffmpeg` |
+| ffmpeg + ffprobe | media pipeline; bundled into the release app | `brew install ffmpeg` for development only |
 | jq | `tools/check-layering.sh` | `brew install jq` |
 
 `tools/preflight.sh --profile macos` reports every missing component with its
-fix. `--profile engine` skips Flutter and Xcode.
+fix. `--profile engine` skips Flutter and Xcode. Packaging builds its own
+LGPL ffmpeg, so a release machine does not need Homebrew's.
 
 ## Two things that bite first-time setups
 
