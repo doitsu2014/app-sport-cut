@@ -127,9 +127,22 @@ class AnalysisState {
     ];
   }
 
+  /// Artifact kinds the prepare job produces.
+  ///
+  /// These decide whether a match has ever been prepared. Other artifacts, such
+  /// as court calibration, may exist first: marking the court before preparing
+  /// must not hide the prepare action.
+  static const Set<String> _preparedKinds = <String>{
+    'proxy',
+    'analysis_audio',
+    'frames',
+  };
+
   /// Whether the match has never had analysis files produced.
   bool get unprepared =>
-      loaded && (manifest?.artifacts ?? const <ArtifactDto>[]).isEmpty;
+      loaded &&
+      !(manifest?.artifacts ?? const <ArtifactDto>[])
+          .any((artifact) => _preparedKinds.contains(artifact.kind));
 
   /// Whether a job is running for this match.
   bool runningFor(String matchId) => running && runningMatchId == matchId;
