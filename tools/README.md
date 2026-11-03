@@ -43,8 +43,10 @@ Phase 0-1 scripts are:
 
 | Script | Purpose |
 | --- | --- |
-| `build-service.sh` | Builds `sportcut-service` in release and prints the artifact path. On macOS it enables the `macos-tflite-eval` feature by default; set `SPORTCUT_MACOS_TFLITE_EVAL=0` to omit it. |
-| `embed-service.sh <app-bundle>` | Copies the service to `Contents/Helpers/SportcutService`, sets mode `0755`, and signs it when `CODESIGN_IDENTITY` is set; otherwise prints the exact `codesign` command and exits 0. Warns when the inference assets are missing. |
+| `build-service.sh` | Builds `sportcut-service` in release for `arm64` and `x86_64`, combines the slices with `lipo`, and prints the artifact path. On macOS it enables the `macos-tflite-eval` feature by default; set `SPORTCUT_MACOS_TFLITE_EVAL=0` to omit it and `SPORTCUT_SERVICE_ARCHS=native` to build only the host slice. |
+| `build-media-toolchain.sh` | Builds the shippable, universal ffmpeg/ffprobe from pinned FFmpeg source: LGPL-only, static, no external libraries, with the pipeline's native codecs and filters. Caches in `third_party/media-toolchain`; `--force` rebuilds. |
+| `package-macos.sh` | Builds the service, media toolchain, and release client, embeds them plus the inference assets, signs everything, and writes `dist/Sportcut.dmg`. Adds notarisation and stapling when `CODESIGN_IDENTITY` and `NOTARY_PROFILE` are set. |
+| `embed-service.sh <app-bundle>` | Copies the service to `Contents/Helpers/SportcutService`, sets mode `0755`, and signs it: with `CODESIGN_IDENTITY` when set, otherwise ad-hoc so Xcode accepts it as nested code. Warns when the inference assets are missing. |
 | `fetch-inference-assets.sh` | Downloads the TFLite C runtime and EfficientDet-Lite0 weights into `third_party/inference`, verifying each SHA-256. Build-time only; nothing downloads at runtime. |
 | `embed-inference-assets.sh <app-bundle>` | Copies the fetched runtime to `Contents/Frameworks` and the model to `Contents/Resources`. |
 | `run-service.sh` | Builds and runs the service in development with a temporary or explicit state root, and prints the endpoint and token path. Uses the same Darwin-gated `macos-tflite-eval` selection as `build-service.sh`, verifies the built artifact reports it, and passes `--tflite-library`/`--person-model` when `third_party/inference` holds both assets, plus `--ffmpeg`/`--ffprobe` from `SPORTCUT_FFMPEG`/`SPORTCUT_FFPROBE`. |

@@ -83,7 +83,9 @@ class ServiceSupervisor {
     final contents = p.dirname(p.dirname(Platform.resolvedExecutable));
     final runtime = p.join(contents, 'Frameworks', 'libtensorflowlite_c.dylib');
     final model = p.join(contents, 'Resources', 'model.tflite');
-    if (File(runtime).existsSync() && File(model).existsSync()) {
+    if (_supportsBundledInference &&
+        File(runtime).existsSync() &&
+        File(model).existsSync()) {
       arguments.addAll(<String>[
         '--tflite-library',
         runtime,
@@ -161,9 +163,15 @@ class ServiceSupervisor {
 
   /// Find a media tool a Finder-launched app can reach.
   ///
-  /// A GUI process gets a minimal PATH, so the usual Homebrew locations are
-  /// checked explicitly before falling back to the environment's PATH.
+  /// The packaged app carries its own LGPL ffmpeg/ffprobe, so the bundle wins.
+  /// A checkout that starts the helper itself can still use the system tools;
+  /// those are checked next, and a GUI process's minimal PATH last.
   static String? _findTool(String name) {
+    final contents = p.dirname(p.dirname(Platform.resolvedExecutable));
+    final bundled = p.join(contents, 'Helpers', name);
+    if (File(bundled).existsSync()) {
+      return bundled;
+    }
     for (final candidate in <String>[
       '/opt/homebrew/bin/$name',
       '/usr/local/bin/$name',
@@ -184,5 +192,34 @@ class ServiceSupervisor {
       }
     }
     return null;
+  }
+
+  /// The packaged TFLite runtime is an Apple Silicon build whose minimum macOS
+  /// is 15.0; handing it to an Intel launch or an older macOS would make the
+  /// service advertise tracking and then fail when the interpreter loads. The
+  /// rest of the engine is universal and works from macOS 12.
+  static bool get _supportsBundledInference {
+    if (!_runsOnAppleSilicon) {
+      return false;
+    }
+    try {
+      final result = Process.runSync('sw_vers', <String>['-productVersion']);
+      final major = result.stdout.toString().trim().split('.').first;
+      return (int.tryParse(major) ?? 0) >= 15;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool get _runsOnAppleSilicon {
+    if (Platform.operatingSystem != 'macos') {
+      return false;
+    }
+    try {
+      final result = Process.runSync('uname', <String>['-m']);
+      return result.stdout.toString().trim() == 'arm64';
+    } on Object {
+      return false;
+    }
   }
 }

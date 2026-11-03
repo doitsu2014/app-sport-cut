@@ -340,9 +340,9 @@ re-read `engine.job.status`; it must not assume a missed update.
 {
   "toolchain": {
     "available": true,
-    "ffmpeg": "/.../MediaTools/ffmpeg",
-    "ffprobe": "/.../MediaTools/ffprobe",
-    "version": "ffmpeg version 7.1"
+    "ffmpeg": "/.../Contents/Helpers/ffmpeg",
+    "ffprobe": "/.../Contents/Helpers/ffprobe",
+    "version": "ffmpeg version 9.0.2"
   },
   "vision": {
     "available": false,

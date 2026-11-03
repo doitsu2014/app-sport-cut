@@ -745,9 +745,12 @@ crash/relaunch. Until then it remains a fallback and Q-1 stays open.
 
 ### 9.4 Media toolchain and inference asset packaging
 
-- `ffmpeg` and `ffprobe` are separate executables inside the helper's resources
-  or the app bundle's `Contents/Resources/MediaTools`, signed and notarized with
-  the app.
+- `ffmpeg` and `ffprobe` are separate executables at `Contents/Helpers/ffmpeg`
+  and `Contents/Helpers/ffprobe`, signed and notarized with the app. They are a
+  license-clean, static, universal LGPL build produced by
+  `tools/build-media-toolchain.sh`; the DMG carries its license texts and the
+  matching source tarball. The installed app therefore has no media-toolchain
+  dependency on the host Mac.
 - The launcher passes them with `--ffmpeg` and `--ffprobe`. When a flag is
   absent the media pipeline honors `SPORTCUT_FFMPEG`/`SPORTCUT_FFPROBE` when
   set, then falls back to `PATH` discovery; both are development shapes only. A
@@ -755,21 +758,23 @@ crash/relaunch. Until then it remains a fallback and Q-1 stays open.
   developer or user environment. The service owns this discovery and publishes
   an explicitly passed tool path to the media use case
   (`sportcut-media`, `core/use-cases/media`).
-- `ffmpeg` and `ffprobe` are required at runtime. The inference assets are
-  optional: a bundle without them still imports, analyses, and exports, and
-  `service.health` reports `vision.available: false` (with `assetsPresent`
-  distinguishing absent assets from a present but unsupported model) and an
-  actionable `detail`.
+- `ffmpeg` and `ffprobe` are required at runtime and are bundled; the inference
+  assets are optional: a bundle without them still imports, analyses, and
+  exports, and `service.health` reports `vision.available: false` (with
+  `assetsPresent` distinguishing absent assets from a present but unsupported
+  model) and an actionable `detail`.
 - The inference runtime and person model are packaged in the bundle
   (`Contents/Frameworks/libtensorflowlite_c.dylib` and
   `Contents/Resources/model.tflite`) and are resolved by the service, not the
   client. Resolution precedence is `--tflite-library`/`--person-model`, then the
   bundle files, then `SPORTCUT_TFLITE_LIBRARY`/`SPORTCUT_PERSON_MODEL`.
   `tools/embed-inference-assets.sh` copies the fetched assets into those
-  locations.
-- The dev GPL build remains non-shippable (BRD R-2). The helper architecture
-  does not change that licensing decision; it only changes where the tool is
-  launched from.
+  locations. The upstream macOS runtime is arm64-only with a macOS 15.0
+  deployment target, so the supervisor passes these flags only on Apple Silicon
+  running macOS 15 or later; an Intel Mac or an older macOS keeps every
+  non-tracking stage.
+- The dev Homebrew GPL build remains non-shippable (BRD R-2) and is only what a
+  checkout discovers. The packaged app uses the LGPL bundle instead.
 - A sandboxed child process may need its own inheritance entitlement; sign the
   media tools with the same Team ID and verify them at launch.
 

@@ -64,8 +64,8 @@ taken from the same directory, because the Flutter SDK bundles it.
 
 ### ffmpeg and ffprobe
 
-Required at runtime by the media pipeline. Both are needed; one without the
-other is reported as missing.
+The engine shells out to ffmpeg/ffprobe for probe, proxy, audio, frames, and
+export. For development, install a pair:
 
 ```bash
 brew install ffmpeg
@@ -81,14 +81,21 @@ export SPORTCUT_FFPROBE=/usr/local/bin/ffprobe
 The service accepts `--ffmpeg` and `--ffprobe` instead; `tools/run-service.sh`
 passes the environment variables through when they are set.
 
+You do **not** need Homebrew's ffmpeg to build the DMG or to run the installed
+app. `tools/build-media-toolchain.sh` compiles a pinned, LGPL-only, universal
+ffmpeg/ffprobe from source into `third_party/media-toolchain/`, and
+`tools/package-macos.sh` embeds it. That build needs `clang`, `make`, `lipo`,
+`tar`, and network access for the source download, all provided by Xcode plus
+the toolchain install.
+
 #### Licensing
 
 GPL FFmpeg is **not shippable**. Homebrew's default build is fine for local
 development, and `tools/preflight.sh --strict-license` will fail on it so this
-cannot be discovered at release time. A release needs an LGPL build. The
-licensing register in
-[`docs/brd/00-product-context.md`](../../brd/00-product-context.md) is the
-authority on what may ship.
+cannot be discovered at release time. The packaged app uses the LGPL build from
+`tools/build-media-toolchain.sh`; its exact configuration is printed by
+`ffmpeg -version` and recorded in the licensing register in
+[`docs/brd/00-product-context.md`](../../brd/00-product-context.md).
 
 ### jq
 
@@ -116,8 +123,12 @@ command-line tools.
 | `SPORTCUT_PERSON_MODEL` | Explicit person-detection model, when not in the app bundle |
 | `SPORTCUT_INFERENCE_DIR` | Where `tools/fetch-inference-assets.sh` places assets (default `third_party/inference`) |
 | `SPORTCUT_MACOS_TFLITE_EVAL` | `0` builds the service without the local macOS TFLite runtime |
+| `SPORTCUT_SERVICE_ARCHS` | Slices for the service build (default `arm64 x86_64`; `native` builds only the host) |
+| `SPORTCUT_MEDIA_TOOLCHAIN_DIR` | Where `tools/build-media-toolchain.sh` places ffmpeg/ffprobe |
+| `SPORTCUT_MEDIA_TOOLCHAIN_ARCHS` | Slices for the bundled media toolchain (default `arm64 x86_64`) |
 | `CARGO_TARGET_DIR` | Share or relocate Cargo's target directory |
-| `CODESIGN_IDENTITY` | Signing identity for `tools/embed-service.sh` |
+| `CODESIGN_IDENTITY` | Signing identity for packaging and embedding |
+| `NOTARY_PROFILE` | `notarytool` keychain profile; enables notarisation in `tools/package-macos.sh` |
 
 ## What each track actually needs
 
@@ -125,8 +136,8 @@ command-line tools.
 | --- | --- | --- | --- | --- | --- |
 | Engine (`cargo build`, `tools/verify-engine.sh`) | yes | no | no | for media tests | for layering |
 | Background service | yes | no | no | yes, at runtime | — |
-| Flutter client | yes | yes | yes | yes | — |
-| Release packaging | yes | yes | yes | yes (LGPL) | — |
+| Flutter client | yes | yes | yes | yes, for development | — |
+| Release packaging | yes (with `rustup`) | yes | yes | built from source into the bundle | — |
 
 The engine track is deliberately buildable without the client toolchain. If a
 change makes Flutter or Xcode necessary to build `core/`, that is a defect, not

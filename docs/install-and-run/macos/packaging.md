@@ -1,11 +1,13 @@
 # macOS — production packaging and install (DMG)
 
 This is the deployment path for installing Sportcut on a Mac: build a release
-bundle with the background service, model, and TFLite runtime embedded, sign it,
-and write a DMG.
+bundle with the background service, media toolchain, model, and TFLite runtime
+embedded, sign it, and write a DMG. The installed app has no runtime
+dependency on Homebrew or anything else outside the bundle.
 
-It produces a **personal build**, not a distributable release. The limitations
-are listed at the end; the architecture behind the helper is in
+The build is **self-contained**. It is ad-hoc signed unless a Developer ID is
+supplied, and notarisation runs when a `notarytool` profile is named. The
+remaining limits are listed at the end; the architecture behind the helper is in
 [background-service.md §9](../../architecture/background-service.md#9-sandbox-packaging-signing-and-notarization).
 
 ## 1. Before you package
@@ -14,17 +16,20 @@ are listed at the end; the architecture behind the helper is in
 tools/preflight.sh --profile macos
 ```
 
-Required:
+Required on the build machine:
 
 - Xcode (a full installation, not Command Line Tools).
-- Rust 1.80+ with `cargo`.
+- Rust 1.80+ with `cargo` and `rustup` (the universal helper needs the second
+  Rust standard library, which `tools/build-service.sh` installs on demand).
 - Flutter with Dart 3.
-- `ffmpeg` and `ffprobe` installed on the Mac. They are **runtime**
-  requirements: the packaged app does not bundle them.
-- Inference assets in `third_party/inference/`
-  (`libtensorflowlite_c.dylib`, `model.tflite`). Fetch them with
-  `tools/fetch-inference-assets.sh`; without them the build still works but
-  player tracking is unavailable.
+- `clang`, `make`, `lipo`, and `tar`. They come with the Xcode toolchain.
+- Network access at build time: `tools/build-media-toolchain.sh` downloads the
+  pinned FFmpeg source, and `tools/fetch-inference-assets.sh` downloads the
+  TFLite assets if they are not already in `third_party/inference/`.
+
+You do **not** need `ffmpeg` installed on the build machine or on the Mac that
+installs the app. The packaging script builds a license-clean, universal
+ffmpeg/ffprobe from source and embeds it.
 
 If Flutter is not on `PATH`, set `SPORTCUT_FLUTTER_BIN` to the directory that
 contains the `flutter` executable.
@@ -38,19 +43,32 @@ tools/package-macos.sh
 
 The script runs these steps:
 
-1. `tools/build-service.sh` — release `sportcut-service`, with
-   `macos-tflite-eval` enabled by default on macOS.
-2. `flutter build macos --release` — the client bundle.
-3. `tools/embed-service.sh` — the helper at
-   `Contents/Helpers/SportcutService`.
-4. `tools/embed-inference-assets.sh` — the runtime at
-   `Contents/Frameworks/libtensorflowlite_c.dylib`, the model at
-   `Contents/Resources/model.tflite`.
-5. Codesign, then `hdiutil` to write `dist/Sportcut.dmg`.
+1. `tools/build-service.sh` — release `sportcut-service` for `arm64` and
+   `x86_64`, combined with `lipo`, with `macos-tflite-eval` enabled by default
+   on macOS.
+2. `tools/build-media-toolchain.sh` — FFmpeg 9.0.2 built LGPL-only, static,
+   universal, with the native `mpeg4`/`aac` encoders and the pipeline's
+   decoders and filters. The first run compiles it; later runs reuse
+   `third_party/media-toolchain/`.
+3. `tools/fetch-inference-assets.sh` when the TFLite runtime and model are not
+   already present.
+4. `flutter build macos --release` — the universal client bundle.
+5. Embedding:
+   - `Contents/Helpers/SportcutService` — the service helper;
+   - `Contents/Helpers/ffmpeg` and `Contents/Helpers/ffprobe` — the media
+     toolchain;
+   - `Contents/Frameworks/libtensorflowlite_c.dylib` — the TFLite runtime;
+   - `Contents/Resources/model.tflite` — the model;
+   - `Contents/Resources/licenses/` — FFmpeg's LGPL and license texts.
+6. Codesign the nested binaries, then the outer app.
+7. `hdiutil` to write `dist/Sportcut.dmg`. The DMG also carries
+   `Licenses/ffmpeg-9.0.2.tar.xz`, its license texts, and
+   `build-media-toolchain.sh` — the corresponding source and build recipe
+   required by the LGPL for a static build.
 
-`dist/` is build output and is git-ignored.
+`dist/` and `third_party/` are build output and are git-ignored.
 
-### Signing
+### Signing and notarisation
 
 By default the build is **ad-hoc signed**:
 
@@ -59,19 +77,32 @@ tools/package-macos.sh
 ```
 
 The app carries `app/macos/Runner/Release.entitlements` (file-picker access; the
-sandbox is off for this personal build), the helper and inference dylib are
-signed, then the outer app is signed. Ad-hoc signing deliberately omits the
-hardened runtime so the helper can load the ad-hoc dylib.
+sandbox is off for this build), every nested executable and dylib is signed, and
+then the outer app is signed. Ad-hoc signing deliberately omits the hardened
+runtime so the helper can load the ad-hoc dylib.
 
-With a Developer ID identity, all three are signed with a real identity:
+With a Developer ID identity, everything is signed with a real identity:
 
 ```bash
 CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
   tools/package-macos.sh
 ```
 
-That is a prerequisite for notarisation, but notarisation is not implemented in
-this build.
+To produce a build Gatekeeper accepts without a right-click, create a notary
+profile once and pass it:
+
+```bash
+xcrun notarytool store-credentials sportcut-notary \
+  --apple-id "you@example.com" --team-id TEAMID \
+  --password "app-specific-password"
+
+CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+  NOTARY_PROFILE=sportcut-notary tools/package-macos.sh
+```
+
+The script signs the DMG, submits it with `notarytool --wait`, staples the
+ticket, and validates it. Notarisation requires network access and an Apple
+Developer account; it is skipped when `NOTARY_PROFILE` is unset.
 
 ### If the release build fails on Xcode modules
 
@@ -96,8 +127,18 @@ The debug build is unaffected because it can reuse already-compiled pods.
 
 1. Open `dist/Sportcut.dmg`.
 2. Drag `sportcut.app` to **Applications**.
-3. First launch: right-click the app → **Open**. The build is ad-hoc signed, so
-   Gatekeeper will not accept a double-click the first time.
+3. Launch it. A signed and notarised build opens normally. An ad-hoc build
+   needs right-click → **Open** the first time, or **System Settings → Privacy &
+   Security → Open Anyway** if macOS does not offer the context menu. If the
+   copy was downloaded, macOS may attach a quarantine flag; clearing it is the
+   same consent:
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/sportcut.app
+   ```
+
+There is nothing else to install: ffmpeg, ffprobe, the service helper, the
+TFLite runtime, and the model all live inside the bundle.
 
 ## 4. What the installed app does
 
@@ -110,11 +151,16 @@ Contents/Helpers/SportcutService
   --state-root  ~/Library/Application Support/com.sportcut.sportcut/state
   --endpoint    …/state/run/s.sock
   --token-file  …/state/run/token
-  --ffmpeg      /opt/homebrew/bin/ffmpeg      (or /usr/local/bin, then PATH)
-  --ffprobe     /opt/homebrew/bin/ffprobe
+  --ffmpeg      Contents/Helpers/ffmpeg
+  --ffprobe     Contents/Helpers/ffprobe
   --tflite-library Contents/Frameworks/libtensorflowlite_c.dylib
   --person-model   Contents/Resources/model.tflite
 ```
+
+The bundled media tools win; a development run that starts the helper without
+them still falls back to Homebrew or `PATH`. The inference arguments are only
+passed on Apple Silicon running macOS 15 or later, because the bundled TFLite
+runtime is an arm64 build with a 15.0 deployment target.
 
 A running helper is reused on the next launch; a normal quit asks it to stop.
 The helper also has a hard 20-second start deadline and reports failure with the
@@ -143,6 +189,16 @@ client's match paths are aligned to that layout, and its recordings root is
 `<state-root>/recordings`, which the service may read directly.
 
 ## 5. Verify the install
+
+- The bundle is self-contained and universal:
+
+  ```bash
+  APP=/Volumes/Sportcut/sportcut.app
+  lipo -archs "$APP/Contents/Helpers/ffmpeg"        # x86_64 arm64
+  lipo -archs "$APP/Contents/Helpers/SportcutService"
+  codesign --verify --deep --strict "$APP"
+  "$APP/Contents/Helpers/ffmpeg" -hide_banner -version   # no --enable-gpl
+  ```
 
 - `flutter analyze` is clean and `tools/verify-engine.sh` passes on the source
   you packaged.
@@ -180,21 +236,26 @@ That removes the catalog, match artifacts, service recordings, and logs.
 
 ## 7. Limits of this build
 
-This is a **personal, local build**:
-
-- Ad-hoc signed unless `CODESIGN_IDENTITY` was set; no notarisation.
+- Ad-hoc signed unless `CODESIGN_IDENTITY` was set, and not notarised unless
+  `NOTARY_PROFILE` was set as well. Without both, Gatekeeper asks for a
+  right-click on first launch.
 - The app is **unsandboxed** so it can launch the helper and read the
   service-owned recording store.
-- It uses the Mac's installed ffmpeg/ffprobe. The Homebrew ffmpeg is GPL
-  (`--enable-gpl`), fine locally but **not shippable**.
+- The bundled media toolchain is FFmpeg's LGPL configuration. It has no GPL
+  components and carries no external dylib paths, but it is not the
+  platform-native renderer named in the export roadmap; H.264/AAC patent
+  licensing remains a legal decision (R-4 in the product context).
+- The bundled TFLite runtime is an **Apple Silicon build with a macOS 15.0
+  deployment target**; player tracking is unavailable on Intel Macs and on
+  macOS 12–14. Probe, proxy, audio, frames, export, and every non-tracking
+  engine stage run on both slices from macOS 12.
 - It does not supervise the helper as a launchd-managed process; a force-quit
   can leave the helper running, and the next launch reuses it.
-- It has no updater, installer package, or App Store packaging.
+- It has no updater or App Store packaging.
 
-A distributable release needs ADR-0001 Phase 6 work: a supervised helper
-(launchd or XPC), a sandbox and entitlement design, a licensed media toolchain,
-Developer ID signing plus notarisation, and an update path. The distribution
-matrix is in
+A fully distributable release still needs ADR-0001 Phase 6 work: a supervised
+helper (launchd or XPC), a sandbox and entitlement design, and an update path.
+The distribution matrix is in
 [background-service.md §9.5](../../architecture/background-service.md#95-distribution-matrix).
 
 ## See also

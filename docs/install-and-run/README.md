@@ -25,10 +25,12 @@ There are two different things, and they have different instructions:
 The client reaches the engine over the service protocol. It links no Rust and
 carries no generated bindings; the FFI path is gone.
 
-- **Installed app:** the release bundle contains the helper and inference
-  assets, and the app starts and supervises the helper itself against a state
-  root under Application Support. `tools/package-macos.sh` produces a personal
-  DMG; see [macos/packaging.md](macos/packaging.md).
+- **Installed app:** the release bundle contains the helper, a license-clean
+  LGPL ffmpeg/ffprobe, and the inference assets, and the app starts and
+  supervises the helper itself against a state root under Application Support.
+  Nothing outside the bundle is required at runtime. `tools/package-macos.sh`
+  produces a self-contained DMG, optionally signed and notarised; see
+  [macos/packaging.md](macos/packaging.md).
 - **From a checkout:** the service is started separately with
   `tools/run-service.sh`, and the client connects over the Unix socket; see
   [macos/desktop-app.md](macos/desktop-app.md).
